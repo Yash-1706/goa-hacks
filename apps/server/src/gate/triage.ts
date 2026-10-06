@@ -47,6 +47,13 @@ const CUES: Array<{ re: RegExp; boost: Partial<Record<Category, number>> }> = [
   { re: /\b(argon2|bloom filter|generator|topological|throttle|requestanimationframe|async await|promises|hash the)\b/i, boost: { code: 0.35 } },
   { re: /^(how many|how much|how long|how do|where did we|is the|are we|which|who|what's the)\b/i, boost: { question: 0.3 } },
   { re: /\b(was that my phone|hold on|one sec|sorry what|can you hear|testing|someone('s| is) at the door|do you want|bye)\b/i, boost: { aside: 0.5 } },
+  { re: /\bwe (should|need to|have to|must|gotta)\b/i, boost: { action: 0.25 } }, // ("I should / I need to" is covered above)
+  // engineering vocabulary with NO communicative verb: "the webhook sender needs a retry budget" is work on a component,
+  // not a message to someone (the word "sender" alone used to drag it into the communication class)
+  {
+    re: /^(?!.*\b(e-?mail|message|ping|dm|text|write to|tell|let .{1,20} know|follow up|reply|owe|notify|forward|loop in|ask|send (an )?update|draft (a )?note)\b).*\b(webhook|endpoint|queue|consumer|worker|handler|sender|scheduler|cache|schema|migration|retry|retries|pagination|rate limit(ing)?|batch(es)?)\b/i,
+    boost: { action: 0.2, communication: -0.5 },
+  },
 ];
 
 export class Triager {
@@ -80,6 +87,7 @@ export class Triager {
       if (!cue.re.test(text)) continue;
       for (const [c, b] of Object.entries(cue.boost) as Array<[Category, number]>) score[c] += b * Math.max(0.4, topSim + 0.4);
     }
+    for (const c of CATEGORIES) if (score[c] < 0) score[c] = 0; // a negative cue can cancel a class, never invert it
     // structural overlays
     if (features.disfluentOnly || features.contentWordCount === 0) score.aside += 1;
     if (features.isQuestion && features.contentWordCount >= 3) score.question += 0.12;

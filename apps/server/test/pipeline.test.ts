@@ -101,6 +101,27 @@ describe("fragment → structure (problem statement examples)", () => {
     expect(app.ctx.store.thoughts.has(t.id)).toBe(false);
   });
 
+  it("engineering to-dos that merely mention a sender / queue / endpoint are work items, not messages to someone", async () => {
+    app = await makeApp();
+    const lines = [
+      "we should add a retry budget to the webhook sender",
+      "the webhook sender needs a retry budget",
+      "Need to add pagination to the orders endpoint",
+      "I think we should migrate the queue consumer to batches",
+    ];
+    for (const [i, line] of lines.entries()) {
+      await app.say(line, { session: `s${i}`, gapMs: 9000 });
+      await app.settle();
+    }
+    const cats = app.thoughts().map((t) => t.category);
+    expect(cats).toHaveLength(lines.length);
+    expect(cats.every((c) => c === "action"), cats.join(",")).toBe(true);
+    // ...while a genuine message about the same component still is one
+    await app.say("tell Dev the webhook sender is retrying too often", { session: "m", gapMs: 9000 });
+    await app.settle();
+    expect(app.thoughts().some((t) => t.category === "communication")).toBe(true);
+  });
+
   it("a real recall question stays ephemeral (30 minutes) and is never promoted", async () => {
     app = await makeApp();
     await app.say("What was that idea I had about caching last Tuesday while I was walking?");

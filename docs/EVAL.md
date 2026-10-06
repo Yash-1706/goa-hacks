@@ -1,6 +1,6 @@
 # Evaluation report
 
-Generated 2026-10-06T16:29:05.811Z · cortex: **offline mock (heuristics + local triage)** · embeddings: MiniLM (local) · node v25.2.1 · AMD Ryzen 5 6600H with Radeon Graphics         
+Generated 2026-10-06T18:08:18.318Z · cortex: **offline mock (heuristics + local triage)** · embeddings: MiniLM (local) · node v25.2.1 · AMD Ryzen 5 6600H with Radeon Graphics         
 
 > **Mock mode**: this measures the offline fallback path. Run `pnpm eval --live` with an `ANTHROPIC_API_KEY` for the real model numbers.
 
@@ -47,7 +47,7 @@ Misclassified:
 - h-ide02: expected idea, got communication ("Email the team")
 - h-ide06: expected idea, got code ("A heatmap of when the errors happen…")
 
-**63 unseen threads · accuracy 88.9% · macro-F1 88.7% · artifact-kind accuracy 76.2%** (target macro-F1 ≥ 85%)
+**63 unseen threads · accuracy 88.9% · macro-F1 88.7% · artifact-kind accuracy 74.6%** (target macro-F1 ≥ 85%)
 
 ## 1b. Intent classification: dev set (includes the problem statement's verbatim examples)
 
@@ -107,7 +107,7 @@ Confusion matrix (rows = expected, columns = predicted):
 |---|---:|---:|
 | intent macro-F1 (held-out, 63 unseen threads) | 88.7% | ≥ 85% |
 | intent macro-F1 (dev set, seen wording) | 100.0% | regression gate |
-| artifact-kind accuracy | 76.2% | |
+| artifact-kind accuracy | 74.6% | |
 | pause phrase recall / precision | 100.0% / 100.0% | ≥ 95% / 100% |
 | reference resolution | 100.0% | ≥ 80% |
 | Recall@3 | 100.0% | ≥ 80% |
