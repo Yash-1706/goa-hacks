@@ -1,9 +1,46 @@
 import type { Artifact, Category, CortexResult, EntityType } from "@synapse/shared";
 import type { Triager } from "../gate/triage";
 import type { Embedder } from "../memory/embeddings";
-import { chronoRange } from "../recall/time";
+import { chronoRange, startOfDay } from "../recall/time";
 import { fold, normalizeText, quickTitle, textFeatures } from "../text";
+import { localIso } from "./prompts";
 import type { Candidate, CortexBackend, CortexInput, CortexOutput, CortexFragment } from "./types";
+
+/** An explicit retraction ("scratch that"). Everything else that corrects a thought REVISES it. */
+const RETRACT = /^(?:(?:ok(?:ay)?|so|yeah|no)[,.\s]+)?(?:scratch that|undo that|never ?mind(?: that| the last(?: one)?)?|forget (?:that|it)(?: one)?|delete that|cancel that|ignore that|take that back)\b/i;
+const NEW_WEEKDAY = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
+
+/** Apply a spoken revision ("actually make it Friday", "make it high priority") to the previous card's artifact. */
+function reviseArtifact(old: Artifact | undefined, text: string, input: CortexInput): { artifact: Artifact | undefined; change: { from: string; to: string } | null } {
+  if (!old) return { artifact: old, change: null };
+  if (old.kind === "calendar_event") {
+    const wd = text.match(NEW_WEEKDAY)?.[1];
+    const oldStart = old.start_iso ? Date.parse(old.start_iso) : NaN;
+    const ref = Number.isFinite(oldStart) ? oldStart : input.now;
+    const r = chronoRange(text, ref, input.timezone, undefined, { future: true });
+    if (!r && !wd) return { artifact: old, change: null };
+    let start_iso = old.start_iso;
+    let end_iso = old.end_iso;
+    if (r && Number.isFinite(oldStart)) {
+      // new day, same time of day and duration
+      const timeOfDay = oldStart - startOfDay(oldStart, input.timezone);
+      const start = startOfDay(r.from, input.timezone) + timeOfDay;
+      const dur = old.end_iso && Number.isFinite(Date.parse(old.end_iso)) ? Date.parse(old.end_iso) - oldStart : 30 * 60_000;
+      start_iso = localIso(start, input.timezone);
+      end_iso = localIso(start + dur, input.timezone);
+    }
+    const to = wd ?? r?.matched ?? "";
+    return {
+      artifact: { ...old, start_iso, end_iso, time_expression: old.time_expression ? old.time_expression.replace(NEW_WEEKDAY, to) : to, is_reschedule: true },
+      change: { from: old.time_expression ?? "", to },
+    };
+  }
+  if (old.kind === "ticket") {
+    const p = text.match(/\b(low|medium|high|urgent)\b/i)?.[1]?.toLowerCase() as "low" | "medium" | "high" | "urgent" | undefined;
+    if (p && p !== old.priority) return { artifact: { ...old, priority: p }, change: { from: old.priority, to: p } };
+  }
+  return { artifact: old, change: null };
+}
 
 /* ============================================================================
  * Mock cortex (TRD §6.9a): deterministic, offline, no keys. Used when LLM_MODE=mock,
@@ -184,10 +221,17 @@ function artifactFor(category: Category, ctx: {
       };
     }
     case "scheduling": {
-      const r = chronoRange(text, input.now, input.timezone);
+      const r = chronoRange(text, input.now, input.timezone, undefined, { future: true });
       const wd = text.match(WEEKDAY)?.[1];
       const conflict = /\b(clash(?:es)?|conflict|overlap(?:s)?|double booked)\b/i.test(text);
-      return { kind: "calendar_event", title, start_iso: null, end_iso: null, time_expression: r?.matched ?? wd ?? null, attendees: [], is_reschedule: conflict || /\b(reschedule|move|push)\b/i.test(text) };
+      // a concrete instant only when a time of day was actually said ("Thursday at 3pm"); conflicts stay open
+      const start = !conflict && r?.point ? r.point : null;
+      return {
+        kind: "calendar_event", title,
+        start_iso: start ? localIso(start, input.timezone) : null,
+        end_iso: start ? localIso(start + 30 * 60_000, input.timezone) : null,
+        time_expression: r?.matched ?? wd ?? null, attendees: [], is_reschedule: conflict || /\b(reschedule|move|push)\b/i.test(text),
+      };
     }
     case "code": {
       const t = text.toLowerCase();
@@ -291,6 +335,13 @@ export class MockCortex implements CortexBackend {
     if (input.lastCard && (feat.startsWithRepairCue || tri.probs.correction > 0.25)) category = "correction";
     if (category === "decision" && !feat.hasRepairCue && !/\b(jwt|oauth|vs|or|instead|rather|go(?:ing)? with|decid)/i.test(text)) category = "idea";
 
+    // a correction that is not an explicit retraction REVISES the previous card instead of deleting it
+    if (category === "correction" && input.lastCard && !RETRACT.test(cleanClause(text))) {
+      const revised = this.revise(input, text, t0);
+      if (revised) return revised;
+      category = "aside"; // a correction we cannot interpret must never be destructive
+    }
+
     const repairs = category === "correction" ? [] : extractRepairs(input.fragments);
     const entities = findEntities(text, input);
     const references = resolveReferences(text, input, category);
@@ -340,6 +391,33 @@ export class MockCortex implements CortexBackend {
       salience_cues: cues,
       concern_key: concern,
       artifact,
+    };
+    return { result, source: "mock", model: "heuristic", ms: performance.now() - t0, redactions: 0 };
+  }
+
+  /** "Actually make it Friday": the previous thought, corrected. Never destructive. */
+  private revise(input: CortexInput, text: string, t0: number): CortexOutput | null {
+    const last = input.lastCard;
+    if (!last) return null;
+    const prev = last.result;
+    const { artifact, change } = reviseArtifact(prev.artifact as Artifact | undefined, text, input);
+    if (!change) return null; // nothing we understand to change: leave the thought untouched (treated as an aside)
+    const prevTitle = (prev.title as string | undefined) ?? "Revised thought";
+    const title = NEW_WEEKDAY.test(prevTitle) && change.to ? prevTitle.replace(NEW_WEEKDAY, change.to[0]!.toUpperCase() + change.to.slice(1)) : prevTitle;
+    const result: CortexResult = {
+      thread_relation: "correction_of_previous",
+      category: prev.category,
+      confidence: 0.75,
+      title: title.slice(0, 80),
+      intent: `${(prev.intent as string | undefined) ?? prevTitle} (revised: ${change.from ? `${change.from} → ` : ""}${change.to})`.slice(0, 280),
+      why: `Revises ${last.ref}: "${cleanClause(text)}".`,
+      references: [{ mention: "it", resolved_id: last.ref, label: prevTitle, confidence: 0.85 }],
+      repairs: change.from ? [{ rejected: change.from, chosen: change.to }] : [],
+      open_questions: [],
+      entities: findEntities(`${prevTitle} ${text}`, input),
+      salience_cues: [],
+      concern_key: null,
+      artifact: artifact ?? { kind: "none" },
     };
     return { result, source: "mock", model: "heuristic", ms: performance.now() - t0, redactions: 0 };
   }

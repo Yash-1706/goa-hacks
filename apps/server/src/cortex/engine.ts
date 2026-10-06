@@ -833,7 +833,9 @@ export class CortexEngine {
       return;
     }
 
-    const retraction = r.artifact.kind === "none" || r.category === "correction";
+    // Only an explicit `correction` verdict retracts. A revision comes back as the FULL corrected card in the
+    // target's own category (even when that card has no artifact, e.g. a question), and must never delete it.
+    const retraction = r.category === "correction";
     if (retraction) {
       const title = target.title;
       const report = store.deleteThought(target.id);
@@ -897,6 +899,13 @@ export class CortexEngine {
     th.closedAt = clock.now();
     if (this.open.get(th.dev.id) === th) this.open.delete(th.dev.id);
     this.recentClosed.set(th.dev.id, th);
+    // a finished thread is only needed briefly (late continuation, a correction); then drop its buffers
+    const evict = setTimeout(() => {
+      if (!th.closed || th.inflight) return;
+      if (this.byThought.get(th.thoughtId) === th) this.byThought.delete(th.thoughtId);
+      if (this.recentClosed.get(th.dev.id) === th) this.recentClosed.delete(th.dev.id);
+    }, 120_000);
+    evict.unref?.();
     const t = store.getThought(th.thoughtId);
     if (!t) return;
 

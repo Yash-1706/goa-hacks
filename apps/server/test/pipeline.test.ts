@@ -193,6 +193,39 @@ describe("privacy controls", () => {
   });
 });
 
+describe("corrections are safe", () => {
+  it("'actually make it Friday' REVISES the call (same time of day) instead of deleting it", async () => {
+    app = await makeApp({}, "2026-10-06T10:00:00+05:30"); // a Tuesday
+    await app.say("Set up a call with the vendor on Thursday at 3pm");
+    await app.settle();
+    const before = app.thoughts()[0]!;
+    const a0 = before.artifact!.payload as { kind: string; start_iso: string | null; time_expression: string | null };
+    expect(a0.kind).toBe("calendar_event");
+    expect(a0.start_iso).toBe("2026-10-08T15:00:00+05:30");
+
+    await app.say("Actually make it Friday", { gapMs: 1500 });
+    await app.settle();
+    const ts = app.thoughts();
+    expect(ts).toHaveLength(1); // revised in place, not deleted, not duplicated
+    expect(ts[0]!.id).toBe(before.id);
+    const a1 = ts[0]!.artifact!.payload as { start_iso: string | null; end_iso: string | null; time_expression: string | null };
+    expect(a1.start_iso).toBe("2026-10-09T15:00:00+05:30");
+    expect(a1.end_iso).toBe("2026-10-09T15:30:00+05:30");
+    expect(a1.time_expression?.toLowerCase()).toContain("friday");
+    expect(ts[0]!.fragments.length).toBe(2); // the correction joins the thought's trail
+    expect(app.sent.some((m) => m.type === "thought.remove" && m.reason === "retracted")).toBe(false);
+  });
+
+  it("a correction nobody can interpret leaves the previous thought alone", async () => {
+    app = await makeApp();
+    await app.say("Note to self, rotate the staging keys on Friday");
+    await app.settle();
+    await app.say("Actually, hmm, I mean, whatever", { gapMs: 1500 });
+    await app.settle();
+    expect(app.thoughts().some((t) => /rotate/i.test(t.title))).toBe(true);
+  });
+});
+
 describe("proactivity", () => {
   it("three calendar-clash mutters in ten minutes → one reschedule suggestion with concrete slots", async () => {
     app = await makeApp({ RECURRING_N: "3" }, "2026-10-06T10:00:00+05:30");

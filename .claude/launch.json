@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "synapse-api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@synapse/server", "start"],
+      "port": 8787
+    },
+    {
+      "name": "synapse-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@synapse/web", "dev"],
+      "port": 5173
+    }
+  ]
+}

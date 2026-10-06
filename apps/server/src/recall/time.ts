@@ -11,6 +11,8 @@ export interface TimeRange {
   label: string;
   /** the exact words matched, so callers can strip them from a search query */
   matched: string;
+  /** the concrete instant when the words named a time of day ("Thursday at 3pm"); otherwise undefined */
+  point?: number;
 }
 
 const HOUR = 3600_000;
@@ -44,7 +46,11 @@ function partOfDay(text: string): { from: number; to: number; name: string } | n
   return null;
 }
 
-export function chronoRange(text: string, now: number, tz: string, hackathonStart?: number): TimeRange | null {
+/**
+ * `opts.future`: a bare weekday means the NEXT one (scheduling: "call the vendor on Thursday").
+ * The default resolves to the closest one, which for recall ("what I said Tuesday") is usually past.
+ */
+export function chronoRange(text: string, now: number, tz: string, hackathonStart?: number, opts: { future?: boolean } = {}): TimeRange | null {
   const t = text.toLowerCase();
   const today = startOfDay(now, tz);
 
@@ -74,7 +80,7 @@ export function chronoRange(text: string, now: number, tz: string, hackathonStar
 
   // ---- everything else: chrono
   const off = tzOffsetMinutes(now, tz);
-  const results = chrono.parse(text, { instant: new Date(now), timezone: off }, { forwardDate: false });
+  const results = chrono.parse(text, { instant: new Date(now), timezone: off }, { forwardDate: opts.future ?? false });
   const r = results.find((x) => x.start.isCertain("day") || x.start.isCertain("weekday") || x.start.isCertain("month") || x.start.isCertain("hour"));
   if (!r) return null;
 
@@ -86,7 +92,7 @@ export function chronoRange(text: string, now: number, tz: string, hackathonStar
   }
   if (r.start.isCertain("hour")) {
     const end = r.end?.date().getTime() ?? start;
-    return { from: start - HOUR, to: Math.max(end, start) + HOUR, label: r.text, matched: r.text };
+    return { from: start - HOUR, to: Math.max(end, start) + HOUR, label: r.text, matched: r.text, point: start };
   }
   if (r.end) return { from: dayStart, to: startOfDay(r.end.date().getTime(), tz) + DAY, label: r.text, matched: r.text };
   return { from: dayStart, to: dayStart + DAY, label: r.text, matched: r.text };

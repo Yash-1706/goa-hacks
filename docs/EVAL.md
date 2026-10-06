@@ -1,6 +1,6 @@
 # Evaluation report
 
-Generated 2026-10-06T15:28:32.471Z · cortex: **offline mock (heuristics + local triage)** · embeddings: MiniLM (local) · node v25.2.1 · AMD Ryzen 5 6600H with Radeon Graphics         
+Generated 2026-10-06T15:43:43.568Z · cortex: **offline mock (heuristics + local triage)** · embeddings: MiniLM (local) · node v25.2.1 · AMD Ryzen 5 6600H with Radeon Graphics         
 
 > **Mock mode**: this measures the offline fallback path. Run `pnpm eval --live` with an `ANTHROPIC_API_KEY` for the real model numbers.
 
@@ -93,7 +93,7 @@ Confusion matrix (rows = expected, columns = predicted):
 
 ## 4. Recall (vague, time/place-constrained questions)
 
-- Recall@3 on 10 vague queries over 12 remembered thoughts: 10/10 = 100.0%
+- Recall@3 on 10 vague queries over 11 remembered thoughts: 10/10 = 100.0%
 
 ## 5. Robustness to nonsense (2-minute ramble)
 
