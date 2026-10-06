@@ -33,7 +33,7 @@ Everything else (the whole pipeline, memory, recall, proactivity, privacy contro
 
 | Deliverable | Where | State |
 |---|---|---|
-| Live monologue demo | `docs/DEMO_SCRIPT.md` + `pnpm replay scripts/s1_bug.json` (and s2…s9) | ✅ scripted and replayable keyless · 🔶 with a real voice |
+| Live monologue demo | `docs/DEMO_SCRIPT.md` + `pnpm replay scripts/replay/s1_bug.json` (and s2…s9) | ✅ scripted and replayable keyless · 🔶 with a real voice |
 | Knowledge-graph visualisation (5+ sessions) | `/graph` screen, `pnpm seed` (8 sessions) | __GRAPH_STATE__ |
 | 1-page privacy whitepaper | `docs/PRIVACY_WHITEPAPER.md` | ✅ every claim cross-checked against code and tests |
 | Recall demo | `/recall` screen; the recall beat in `docs/DEMO_SCRIPT.md` → "The 3 minutes" | ✅ typed and spoken-question paths · 🔶 spoken answer (TTS) on a real device |

@@ -35,7 +35,9 @@ async function playIntoServer(): Promise<void> {
 
 async function runLocal(): Promise<void> {
   console.log(`▶ ${script.name}\n  (no server at ${url}: running in-process, mock cortex)\n  ${script.description ?? ""}\n`);
-  const { ctx, stop } = await ephemeralApp({ THREAD_CLOSE_MS: String(Math.max(150, Math.round(6000 / speed))), SUGGESTION_MIN_GAP_S: "0" });
+  // No timer-based thread closing in a compressed replay: at high --speed the close timer raced the arrivals and split
+  // thoughts that a human-paced run keeps together. Threads end by stitching decisions, `endThread` steps and finalizeAll().
+  const { ctx, stop } = await ephemeralApp({ THREAD_CLOSE_MS: "600000", SUGGESTION_MIN_GAP_S: "0" });
   ctx.proactive.start();
   await runReplay(ctx, script, { speed, settle: true });
   await ctx.engine.finalizeAll();
