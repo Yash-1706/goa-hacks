@@ -1,0 +1,178 @@
+<!doctype html>
+<!--
+  Browser smoke test for the REAL microphone pipeline without a microphone:
+  a synthetic "speaker" (formant synthesizer -> MediaStreamAudioDestinationNode) stands in for getUserMedia, everything else is
+  the production code path: AudioContext, vad-web (Silero v5, wasm), the patched processFrame, the capture core, the Wispr
+  streamer over a real WebSocket to scripts/fake-wispr.mjs.
+
+  Dev only. With the normal dev server running (pnpm dev:web) open  /scripts/vad-smoke.html  and click "start";
+  results land in window.__smoke and in the page. Start the fake first:  node apps/web/scripts/fake-wispr.mjs
+  Query params: mode=mock (no key: typed-input fallback) | eco=1 | clips=<startSec>:<durSec>:<rms>,... | stopAfter=<ms> | fake=<http base>
+  Not part of the production build (Vite only builds index.html).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VAD smoke</title>
+    <style>
+      body { font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; background: #0b0d12; color: #d6d9e0; padding: 16px; }
+      button { font: inherit; padding: 8px 14px; background: #2b3a67; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+      pre { white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <button id="go">start</button>
+    <pre id="out">idle</pre>
+    <script type="module">
+      import { createMicEngineFactory } from "/src/audio/engine.ts";
+      import { createMicVadDriver } from "/src/audio/vad-driver.ts";
+
+      const params = new URLSearchParams(location.search);
+      const FAKE = params.get("fake") || "http://127.0.0.1:8799";
+      const WS = FAKE.replace(/^http/, "ws") + "/api/v1/dash/client_ws";
+      const REST = FAKE + "/api/v1/dash/client_api";
+      const mode = params.get("mode") || "client"; // client | mock
+      const eco = params.get("eco") === "1";
+      // clips=<startSec>:<durationSec>:<rms>,...   (speech clips on the synthetic timeline)
+      const clipSpec = params.get("clips") || "3.0:2.4:0.08,7.4:1.6:0.06";
+      const stopAfterMs = Number(params.get("stopAfter") || 13000);
+
+      const events = [];
+      const probs = [];
+      window.__smoke = { events, probs, done: false, error: null, frames: 0, speechStarts: 0, speechEnds: 0, misfires: 0 };
+      const out = document.getElementById("out");
+      const log = (...a) => {
+        const line = `${(performance.now() / 1000).toFixed(2)}s ${a.join(" ")}`;
+        events.push(line);
+        out.textContent = events.slice(-40).join("\n");
+      };
+
+      /* ---- a small Klatt-style formant synthesizer: robotic but speech-shaped (voiced source -> 3 resonators) ---- */
+      function resonator(f, bw, sr) {
+        const C = -Math.exp((-2 * Math.PI * bw) / sr);
+        const B = 2 * Math.exp((-Math.PI * bw) / sr) * Math.cos((2 * Math.PI * f) / sr);
+        const A = 1 - B - C;
+        return { A, B, C, y1: 0, y2: 0 };
+      }
+      const VOWELS = { a: [730, 1090, 2440], i: [270, 2290, 3010], u: [300, 870, 2240], e: [530, 1840, 2480], o: [570, 840, 2410] };
+      function renderSpeech(sr, seconds, { level = 0.08, f0 = 125, syllableHz = 3.6, seq = "aeiouaoie" } = {}) {
+        const n = Math.floor(sr * seconds);
+        const out = new Float32Array(n);
+        const r1 = resonator(730, 90, sr), r2 = resonator(1090, 110, sr), r3 = resonator(2440, 160, sr);
+        let phase = 0;
+        let rng = 12345;
+        const rnd = () => ((rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0) / 4294967296) - 0.5;
+        const syl = sr / syllableHz;
+        for (let i = 0; i < n; i++) {
+          const k = Math.floor(i / syl);
+          const v = VOWELS[seq[k % seq.length]];
+          const pos = (i % syl) / syl; // 0..1 within the syllable
+          // formants glide toward the vowel target in the first 25 % of the syllable
+          const g = Math.min(1, pos / 0.25);
+          const prev = VOWELS[seq[(k + seq.length - 1) % seq.length]];
+          const F = [0, 1, 2].map((j) => prev[j] + (v[j] - prev[j]) * g);
+          for (const [r, f, bw] of [[r1, F[0], 90], [r2, F[1], 110], [r3, F[2], 160]]) {
+            r.C = -Math.exp((-2 * Math.PI * bw) / sr);
+            r.B = 2 * Math.exp((-Math.PI * bw) / sr) * Math.cos((2 * Math.PI * f) / sr);
+            r.A = 1 - r.B - r.C;
+          }
+          // voiced source: pulse train with a falling pitch contour and jitter
+          const f0n = f0 * (1.15 - 0.3 * (i / n)) * (1 + 0.02 * rnd());
+          phase += f0n / sr;
+          let src = 0;
+          if (phase >= 1) { phase -= 1; src = 1; }
+          src = src * 1.0 + 0.04 * rnd(); // + aspiration
+          const env = Math.sin(Math.PI * Math.min(1, pos * 1.15)) ** 0.7; // syllable amplitude envelope
+          let y = src;
+          for (const r of [r1, r2, r3]) {
+            const o = r.A * y + r.B * r.y1 + r.C * r.y2;
+            r.y2 = r.y1; r.y1 = o; y = o;
+          }
+          out[i] = y * env;
+        }
+        // normalise to the requested RMS
+        let s = 0;
+        for (let i = 0; i < n; i++) s += out[i] * out[i];
+        const rms = Math.sqrt(s / n) || 1;
+        const gain = level / rms;
+        for (let i = 0; i < n; i++) out[i] = Math.max(-1, Math.min(1, out[i] * gain));
+        return out;
+      }
+
+      document.getElementById("go").onclick = async () => {
+        try {
+          const ac = new AudioContext();
+          await ac.resume();
+          const dest = ac.createMediaStreamDestination();
+          window.__smoke.stream = dest.stream;
+          const sr = ac.sampleRate;
+          // default timeline (seconds after start): 3.0 silence (noise-floor calibration), 2.4 speech, 2.0 silence, 1.6 speech, 3.0 silence
+          const clips = clipSpec.split(",").map((c) => {
+            const [at, secs, level] = c.split(":").map(Number);
+            return { at, secs, level };
+          });
+          const t0 = ac.currentTime + 0.3;
+          for (const c of clips) {
+            const data = renderSpeech(sr, c.secs, { level: c.level });
+            const buf = ac.createBuffer(1, data.length, sr);
+            buf.copyToChannel(data, 0);
+            const src = ac.createBufferSource();
+            src.buffer = buf;
+            src.connect(dest);
+            src.start(t0 + c.at);
+          }
+          log("synthetic speaker armed; sample rate", sr);
+
+          const tokenInfo = () =>
+            mode === "mock"
+              ? { mode: "mock" }
+              : { mode: "client", token: "fake.jwt." + Math.random().toString(36).slice(2), expiresAt: Date.now() + 900000, wsUrl: WS, restUrl: REST };
+
+          const engine = createMicEngineFactory({
+            getUserMedia: async () => dest.stream,
+            createVad: (cfg, handlers) =>
+              createMicVadDriver(cfg, {
+                ...handlers,
+                onFrame: (f) => { window.__smoke.frames++; return handlers.onFrame(f); },
+                onProbs: (f, p) => { probs.push(Math.round(p * 100) / 100); handlers.onProbs(f, p); },
+                onSpeechStart: () => { window.__smoke.speechStarts++; log("VAD speech start"); handlers.onSpeechStart(); },
+                onSpeechEnd: () => { window.__smoke.speechEnds++; log("VAD speech end"); handlers.onSpeechEnd(); },
+                onMisfire: () => { window.__smoke.misfires++; log("VAD misfire"); handlers.onMisfire(); },
+              }),
+          })({
+            deviceId: "smoke-dev",
+            sessionId: "smoke-session",
+            deviceKind: "desk",
+            onFragment: (f) => log("FRAGMENT", JSON.stringify({ text: f.text, transport: f.transport, whisper: f.whisper, dur: f.durationMs, pause: f.pauseBeforeMs, rms: f.rmsMean })),
+            onSpeaking: (s, at) => log("speaking", s),
+            onState: (s, d) => log("STATE", s, d ?? ""),
+            onLevel: () => undefined,
+            onFailed: (id, r) => log("FAILED", r),
+            onPause: (via, ms) => log("PAUSE", via, ms + "ms"),
+            onStats: (s) => log("stats", JSON.stringify(s)),
+            requestWisprToken: async () => tokenInfo(),
+            getWisprContext: () => ({ dictionary: ["OAuth2", "cart-service"], conversation: [], language: ["en"], userFirstName: "Rio" }),
+            getActivity: () => "desk",
+            getMode: () => (eco ? "eco" : "normal"),
+            onDiagnostic: (d) => log("diag", JSON.stringify(d)),
+          });
+          window.__engine = engine;
+          await engine.start();
+          log("engine started:", engine.state);
+          setTimeout(async () => {
+            window.__smoke.finalState = engine.state;
+            window.__smoke.trackStates = dest.stream.getAudioTracks().map((t) => t.readyState);
+            await engine.stop();
+            log("engine stopped:", engine.state);
+            window.__smoke.done = true;
+          }, stopAfterMs);
+        } catch (e) {
+          window.__smoke.error = String(e && e.stack ? e.stack : e);
+          log("ERROR", window.__smoke.error);
+          window.__smoke.done = true;
+        }
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Synapse">
+  <defs>
+    <radialGradient id="bg" cx="28%" cy="18%" r="95%">
+      <stop offset="0" stop-color="#241b45"/>
+      <stop offset="0.55" stop-color="#101323"/>
+      <stop offset="1" stop-color="#0b0d12"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#8b5cf6" stop-opacity=".6"/>
+      <stop offset="0.6" stop-color="#22d3ee" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb" cx="36%" cy="30%" r="82%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".95"/>
+      <stop offset="0.16" stop-color="#d8ccff"/>
+      <stop offset="0.5" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="210" fill="url(#halo)"/>
+  <circle cx="256" cy="256" r="178" fill="none" stroke="#8b5cf6" stroke-opacity=".28" stroke-width="4"/>
+  <circle cx="256" cy="256" r="148" fill="none" stroke="#22d3ee" stroke-opacity=".38" stroke-width="5"/>
+  <circle cx="256" cy="256" r="112" fill="url(#orb)"/>
+</svg>

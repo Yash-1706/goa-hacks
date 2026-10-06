@@ -1,13 +1,12 @@
 @import "tailwindcss";
-
-html,
-body,
-#root {
-  height: 100%;
-}
-body {
-  margin: 0;
-  background: #0b0d12;
-  color: #e7e9ee;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
+@import "./styles/base.css";
+@import "./styles/orb.css";
+@import "./styles/shell.css";
+@import "./styles/desk.css";
+@import "./styles/cards.css";
+@import "./styles/screens.css";
+@import "./styles/recall.css";
+@import "./styles/pocket.css";
+@import "./styles/graph.css";
+@import "./styles/lab.css";
+@import "./styles/outbox.css";
