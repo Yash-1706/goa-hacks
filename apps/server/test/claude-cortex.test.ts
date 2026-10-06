@@ -104,20 +104,21 @@ describe("ClaudeCortex against a faithful Messages-API fake", () => {
   });
 
   it("degrades on rate limit, refusal, truncation and malformed output", async () => {
+    // generous cortex timeout: the 429 case includes the SDK's own retry backoff, and a loaded machine must not turn "rate_limit" into "timeout"
     reset({ kind: "status", status: 429, type: "rate_limit_error", message: "slow down" });
-    expect((await make().analyze(await baseInput("x y z"))).degraded).toBe("rate_limit");
+    expect((await make(12_000).analyze(await baseInput("x y z"))).degraded).toBe("rate_limit");
 
     reset({ kind: "ok", json: canned, stopReason: "refusal" });
-    expect((await make().analyze(await baseInput("x y z"))).degraded).toBe("refusal");
+    expect((await make(12_000).analyze(await baseInput("x y z"))).degraded).toBe("refusal");
 
     reset({ kind: "ok", json: canned, stopReason: "max_tokens" });
-    expect((await make().analyze(await baseInput("x y z"))).degraded).toBe("max_tokens");
+    expect((await make(12_000).analyze(await baseInput("x y z"))).degraded).toBe("max_tokens");
 
     reset({ kind: "garbage", text: "this is not json" });
-    expect((await make().analyze(await baseInput("x y z"))).degraded).toBe("bad_json");
+    expect((await make(12_000).analyze(await baseInput("x y z"))).degraded).toBe("bad_json");
 
     reset({ kind: "ok", json: { ...canned, category: "not-a-category" } });
-    expect((await make().analyze(await baseInput("x y z"))).degraded).toBe("schema_invalid");
+    expect((await make(12_000).analyze(await baseInput("x y z"))).degraded).toBe("schema_invalid");
   });
 
   it("times out instead of stalling the pipeline", async () => {

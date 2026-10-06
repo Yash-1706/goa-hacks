@@ -36,7 +36,10 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
     ok: true,
     uptimeS: Math.round(process.uptime()),
     modes: { wispr: cfg.wispr.mode, llm: privacy.localOnly ? "local-only" : cfg.llm.mode, embeddings: ctx.embedder.mode, kek: ctx.vault.kekSource },
+    llmProvider: cfg.llm.provider,
     models: { fast: cfg.llm.fast, deep: cfg.llm.deep, embed: ctx.embedder.name },
+    // free-tier bookkeeping (counters and pacing state only, never content); null unless the provider is groq
+    groq: ctx.groq ? ctx.groq.stats() : null,
     paused: privacy.isPaused(),
     memory: store.stats(),
   }));

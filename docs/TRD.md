@@ -363,6 +363,11 @@ continue if s ≥ 0.45
 - Keep one SDK client (HTTP keep-alive) and pre-warm the connection and cache at boot.
 - Error handling: typed SDK errors (`RateLimitError`, `APIConnectionError`, …), check `stop_reason` (`refusal`, `max_tokens`) before using the output, and keep the provisional card on failure.
 
+> **As built: a second provider (Groq).** `LLM_PROVIDER=auto|anthropic|groq` (auto: Anthropic key → Claude, else Groq key → Groq, else mock; `LLM_MODE=mock` and `LOCAL_ONLY` always win; Claude stays the default and its code is untouched). The Groq path exists so the live paths can be exercised on a free key: `llm/groq-client.ts` (fetch + SSE, pacing), `llm/groq.ts` (`GroqCortex`, a `CortexBackend`), `llm/deep.ts` (the same `DeepLlm` surface over Groq), `cortex/prompts-lite.ts` (the compact prompt).
+> - **Why a different prompt.** The free tier meters 8,000 tokens per minute *per model*, admits a call only while the remaining budget covers its prompt plus `max_completion_tokens`, and rejects a prompt over 8,000 outright (HTTP 413); 1,000 requests per day. The 8.5k-token Claude prompt can never be sent. The lite contract is about 2k tokens (rules, category precedence, every artifact's fields, the privacy prohibitions, two worked examples chosen from `EXAMPLES`), so a call costs about 2.4k tokens (prompt) plus 0.1–0.4k (answer): roughly 2.5 live calls per minute per model. Output is `json_object` validated with the zod schema; omitted *empty* fields get local defaults, anything else wrong gets exactly one repair round, then the local cortex answers.
+> - **Pacing.** One token bucket per model (`GROQ_TPM`, default 7,000, refilled continuously like the server's), reserved at prompt-estimate + allowance and settled against real usage; a call waits at most `GROQ_MAX_WAIT_MS` (2 s) and otherwise degrades (`paced`) instead of earning a 429; a 429 is never retried (`retry-after` cool-down), auth failure switches the path off for 60 s, a dead connection for 4 s, `GROQ_MAX_REQUESTS_PER_DAY` caps the day locally; the response headers correct the bucket when the key is shared. FAST and DEEP use different models on purpose: independent budgets, so a capture burst that empties the hot path's minute does not starve recall answers. `/api/health` → `groq` exposes the counters (never content).
+> - **Defaults, from a live comparison** (18 mixed inputs per model, all 13 categories incl. a stitched thread, a correction, a revision and a recall query; same prompt): `qwen/qwen3.8-27b` 17/18 categories, 18/18 artifact kinds, p50 0.95 s; `openai/gpt-oss-120b` 14/18, 1.27 s; `openai/gpt-oss-20b` 13/18, 1.05 s (JSON valid 18/18 for all). So FAST = Qwen; DEEP = gpt-oss-120b at `reasoning_effort` medium. Measured behaviours that shaped the code: JSON modes arrive as one chunk (progressive cards need `GROQ_OUTPUT_MODE=text`), strict `json_schema` costs ~1.5k prompt tokens on gpt-oss, there is no prompt caching on this tier, and a small model needs the calendar (`<days>`) to resolve "Monday". Full numbers: `docs/EVAL.groq.md`, `docs/LATENCY.groq.md`, README → Groq notes.
+
 ### 6.6 Intent engine: prompt contract
 **System (static, cached):**
 1. Role: *"You are the cortex of a private second brain. You receive fragments of one person's spontaneous speech, already transcribed and lightly auto-edited by Wispr Flow. Infer what they meant. Never invent tasks they didn't express. When in doubt, abstain."*
@@ -857,9 +862,20 @@ WISPR_WARMUP_INTERVAL_S=120
 
 # --- Claude (load the claude-api skill before touching llm/)
 LLM_MODE=mock                      # live | mock
+LLM_PROVIDER=auto                  # auto | anthropic | groq (auto: Anthropic key, else Groq key, else mock)
 ANTHROPIC_API_KEY=
 MODEL_FAST=claude-haiku-4-5
 MODEL_DEEP=claude-opus-5-5
+
+# --- Groq (alternative live provider, free tier; see the as-built note under §6.5)
+GROQ_API_KEY=
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_MODEL_FAST=qwen/qwen3.8-27b
+GROQ_MODEL_DEEP=openai/gpt-oss-120b
+GROQ_OUTPUT_MODE=auto              # auto | json_object | json_schema | text
+GROQ_TPM=7000                      # tokens per minute to pace to (the plan allows 8,000)
+GROQ_MAX_WAIT_MS=2000              # longest a call queues for that budget before degrading to the local cortex
+GROQ_MAX_REQUESTS_PER_DAY=900      # local safety cap (the plan allows 1,000); 0 = none
 
 # --- Memory & privacy
 SYNAPSE_PASSPHRASE=                # optional; else OS keychain / keyfile
@@ -890,6 +906,7 @@ JIRA_PROJECT_KEY=
 ## 17. Testing strategy
 - **Unit (vitest):** stitcher scoring, triage kNN, the pause-phrase fuzzy matcher (incl. Hinglish), redaction patterns, crypto (round-trip, AAD binding, shredded key → decrypt fails), salience formula, TTL sweep (fake clock), the recall constraint parser (chrono, relaxation), detector windows (fake clock), the autonomy policy table, audit chain verification, PCM16 encoding and WAV header.
 - **Pipeline:** `POST /dev/inject` sequences → assert thought grouping, categories (mock LLM is deterministic), cards and suggestions.
+- **Provider fakes:** `test/fake-anthropic.ts` (Messages API SSE) and `test/fake-groq.ts` (OpenAI-style chat completions: reasoning + one-chunk and token-by-token streams, 400/401/413/429/5xx bodies and headers as measured, and Groq's real admission rule with one token bucket per model) drive `claude-cortex`, `groq-cortex`, `groq-deep`, `groq-app` and `local-only` tests without a key; time is injected, so pacing and cool-down windows cost no real time.
 - **Replays:** `scripts/replay/s1_bug.json … s9_crossdevice.json` (PRD scenarios), `bench.json`, `nonsense_2min.json`, plus `pnpm replay <file> [--speed 2]`.
 - **Seed (dev only):** `pnpm seed` creates ≥ 5 backdated sessions (desk, walking, vehicle; varied topics with cross-links) for the graph and recall during development.
 - **Privacy scans:** a test asserts no file under `DATA_DIR` contains known plaintext probes after inject + promote + expire, and that no `.wav`, `.pcm` or `.webm` files exist anywhere under the repo.

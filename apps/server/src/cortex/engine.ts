@@ -103,8 +103,8 @@ export class CortexEngine {
     return Boolean(this.byThought.get(thoughtId)?.inflight);
   }
 
-  /** Resolve once every queued fragment is processed and no analysis is running (tests, seeding, replays). */
-  async idle(timeoutMs = 20_000): Promise<void> {
+  /** Resolve once every queued fragment is processed and no analysis is running (tests, seeding, replays). A model call may also queue for the provider's token budget (Groq's free tier), which the default allows for. */
+  async idle(timeoutMs = 20_000 + (this.d.cfg.llm.provider === "groq" ? this.d.cfg.llm.groq.maxWaitMs : 0)): Promise<void> {
     const t0 = Date.now();
     for (;;) {
       await Promise.allSettled([...this.queues.values()]);

@@ -111,6 +111,8 @@ export interface SpeakOptions {
   device?: "desk" | "pocket";
   activity?: Activity;
   whisper?: boolean;
+  /** awaited before each fragment is handed to the engine (a measurement waits here for a cool-down to end instead of racing through it) */
+  beforeFragment?: () => Promise<void>;
 }
 
 /**
@@ -134,6 +136,7 @@ export async function speak(ctx: AppCtx, o: SpeakOptions): Promise<{ ids: string
     vt = end;
     const id = `${o.sessionId}-${Math.random().toString(36).slice(2, 8)}`;
     ids.push(id);
+    await o.beforeFragment?.();
     await ctx.engine.handleFragment(dev, {
       type: "fragment.final",
       fragmentId: id,

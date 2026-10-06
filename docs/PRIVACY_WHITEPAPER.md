@@ -9,9 +9,11 @@
 | Data | Goes to | Never goes to | How it is limited |
 |---|---|---|---|
 | **Audio** | **Wispr Flow only**, streamed from the browser with a short-lived (15 min) client token; only while VAD hears speech | our server, disk, any log | audio is held in RAM until Wispr's final text arrives, then zero-filled; no audio write path exists |
-| **Transcript text** | Claude (Anthropic API) for structuring/recall, **after redaction** | anyone else | emails, phone numbers, cards, IDs, API keys and spoken credentials ("the password is…") become placeholders locally and are restored locally; optional person-name pseudonyms; `LOCAL_ONLY` sends nothing |
+| **Transcript text** | **the one configured LLM provider**: Claude (Anthropic API) by default, or Groq when only a Groq key is set (`LLM_PROVIDER`), for structuring/recall, **after redaction** | anyone else, and never to a second provider in the same run | emails, phone numbers, cards, IDs, API keys and spoken credentials ("the password is…") become placeholders locally and are restored locally; optional person-name pseudonyms (the speaker's and teammates' names in the prompt header too); `LOCAL_ONLY` sends nothing |
 | **Context for Wispr** | Wispr (`dictionary_context` ≤150 terms, last ≤6 redacted fragments) | `screenshot`, page text, HTML are never sent | enforced and unit-tested |
 | **Stored memory** | local SQLite on the laptop | cloud | AES-256-GCM per field; keys in the OS credential store (or a passphrase) |
+
+*Provider terms differ.* Retention, logging and training terms are the provider's and depend on its plan: Anthropic offers zero-data-retention and a BAA by agreement; Groq's free tier is a developer convenience whose terms are not assumed to be zero-retention here. The audit trail records which model received each call (`groq:<model>` for Groq), never what it received. For material that must not reach a third party, use `LOCAL_ONLY` (nothing is sent) or a provider you hold an agreement with.
 
 *Honest limit:* transcription is Wispr's cloud service. "Local-first" here means everything **except** speech-to-text and the (redacted) LLM calls runs on your machine.
 

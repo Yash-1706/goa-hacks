@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import type { Activity, FragmentFinal, ServerMessage, SuggestionView, ThoughtView } from "@synapse/shared";
-import { createApp, type AppCtx } from "../src/app";
+import { createApp, type AppCtx, type AppOptions } from "../src/app";
 import { FakeClock } from "../src/clock";
 import { loadConfig } from "../src/config";
 import { modelEmbedder } from "./helpers";
@@ -31,7 +31,7 @@ export interface SayOpts {
 }
 
 /** A fully wired app (in-memory DB, real MiniLM embeddings, mock cortex) on a controllable clock. */
-export async function makeApp(env: Record<string, string> = {}, start = "2026-10-06T10:00:00+05:30", dbFile = ":memory:", kek: Buffer = randomBytes(32)): Promise<TestApp> {
+export async function makeApp(env: Record<string, string> = {}, start = "2026-10-06T10:00:00+05:30", dbFile = ":memory:", kek: Buffer = randomBytes(32), extra: Partial<AppOptions> = {}): Promise<TestApp> {
   const clock = new FakeClock(Date.parse(start));
   const cfg = loadConfig({
     DATA_DIR: path.join(os.tmpdir(), `synapse-test-${randomBytes(4).toString("hex")}`),
@@ -42,7 +42,7 @@ export async function makeApp(env: Record<string, string> = {}, start = "2026-10
     SUGGESTION_MIN_GAP_S: "0",
     ...env,
   });
-  const { ctx, stop } = await createApp(cfg, { dbFile, clock, embedder: await modelEmbedder(), kek, quiet: true });
+  const { ctx, stop } = await createApp(cfg, { dbFile, clock, embedder: await modelEmbedder(), kek, quiet: true, ...extra });
   const sent: ServerMessage[] = [];
   const orig = ctx.hub.broadcast.bind(ctx.hub);
   ctx.hub.broadcast = (m: ServerMessage) => {

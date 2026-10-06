@@ -3,17 +3,18 @@ import { log } from "../log";
 /* ============================================================================
  * Groq client: an OpenAI-compatible /chat/completions caller built for the FREE tier.
  *
- * The free tier is tight (measured on the key this was built with): 8,000 tokens per minute across prompt + completion,
- * 1,000 requests per day, and a request whose prompt alone exceeds the minute budget is rejected outright (HTTP 413).
- * So this client does three things the Anthropic path never needed:
- *   1. PACES itself with a token bucket (default 7,000 tokens/min, refilled continuously like the server's). A call reserves
- *      its estimated tokens, waits briefly for the budget (bounded), and otherwise fails fast with kind "paced" so the caller
- *      can degrade to the local cortex instead of earning a 429. The reservation is settled against the real usage afterwards,
- *      and the server's own `x-ratelimit-remaining-tokens` header is used to correct the bucket when the key is shared.
+ * The free tier is tight (measured on the key this was built with): 8,000 tokens per minute across prompt + completion and
+ * 1,000 requests per day, both metered PER MODEL, and a request whose prompt alone exceeds the minute budget is rejected outright
+ * (HTTP 413). So this client does three things the Anthropic path never needed:
+ *   1. PACES itself with a token bucket per model (default 7,000 tokens/min, refilled continuously like the server's). A call reserves
+ *      its estimated prompt plus the whole max_completion_tokens allowance (Groq refuses a request with a 429 when fewer tokens
+ *      than that remain), waits briefly for the budget (bounded), and otherwise fails fast with kind "paced" so the caller can
+ *      degrade to the local cortex instead of earning a 429. The reservation is settled against the real usage afterwards, and
+ *      the server's own `x-ratelimit-remaining-tokens` header corrects the bucket when the key is shared.
  *   2. COUNTS requests (a local per-UTC-day safety cap, plus the server's remaining-requests header) so a long eval cannot
  *      burn the daily quota.
  *   3. NEVER retries on its own: a 429 starts a cool-down that honours `retry-after`; an auth failure disables the client for
- *      60 s. Callers decide about repair retries.
+ *      60 s; a dead connection or a timeout skips the cloud for 4 s. Callers decide about repair retries.
  * Privacy: nothing here logs prompts or completions, and error messages carry only the HTTP status and Groq's error code
  * (never the response text, which can echo the model's output, and never the API key).
  * ========================================================================== */
@@ -40,6 +41,8 @@ export class GroqError extends Error {
     readonly status?: number,
     /** the server's `retry-after`, when it sent one */
     readonly retryAfterMs?: number,
+    /** the numbers of a tokens-per-minute refusal ("Limit 8000, Used 6014, Requested 3109"): counters only, never content */
+    readonly limits?: { limit: number; used: number; requested: number },
   ) {
     super(message);
     this.name = "GroqError";
@@ -71,8 +74,10 @@ export interface GroqCallOpts {
   /** aborts the whole call (connect + generation); default 15 s */
   timeoutMs?: number;
   signal?: AbortSignal;
-  /** the budget is reserved and the request is about to leave this machine (the audit hook: refused calls are not "sent") */
-  onSend?: () => void;
+  /** the budget is reserved and the request is about to leave this machine (the audit hook: refused calls are not "sent"); gets how long the call queued for the budget */
+  onSend?: (queuedMs: number) => void;
+  /** longest this call may queue for the token budget (default: the client's maxWaitMs) */
+  maxWaitMs?: number;
 }
 
 export interface GroqUsage {
@@ -88,6 +93,8 @@ export interface GroqResult {
   usage: GroqUsage;
   /** whole call, ms */
   ms: number;
+  /** time spent waiting for the token budget before the request was sent, ms (not part of `ms`) */
+  queuedMs: number;
   /** request sent to response headers, ms */
   firstByteMs: number;
   /** request sent to the first content delta, ms (streaming only) */
@@ -106,6 +113,11 @@ export interface GroqTrace {
   usage?: GroqUsage;
   finishReason?: string | null;
   streamed: boolean;
+  /** x-ratelimit-remaining-tokens after the call, the pacing bucket as this client believes it, and a refusal's own numbers */
+  remainingTokens?: number | null;
+  bucketTokens?: number;
+  retryAfterMs?: number;
+  limits?: { limit: number; used: number; requested: number };
 }
 
 export interface GroqStats {
@@ -117,8 +129,10 @@ export interface GroqStats {
   remainingRequestsLastSeen: number | null;
   limitTokens: number | null;
   tpmBudget: number;
-  /** tokens currently available in the pacing bucket */
+  /** tokens available in the pacing bucket of the model used last (every model has its own minute budget on Groq) */
   bucketTokens: number;
+  /** the same, and the last remaining-tokens reading, for every model this client has called */
+  models: Record<string, { bucketTokens: number; remainingTokensLastSeen: number | null }>;
   /** calls refused by the local pacer or the daily cap */
   paced: number;
   /** HTTP 429s received */
@@ -146,6 +160,8 @@ export interface GroqClientOpts {
 export const DEFAULT_GROQ_BASE = "https://api.groq.com/openai/v1";
 const CHARS_PER_TOKEN = 3.3; // measured: 3.4 to 3.9 for this prompt family; the low end keeps the estimate on the safe side
 const AUTH_DISABLE_MS = 60_000;
+/** after a dead socket or a timeout, skip the cloud for a moment so each new fragment is not held for a whole timeout on a flaky network */
+const NETWORK_COOL_MS = 4_000;
 
 /** Rough token count for pacing (the settled usage replaces it). */
 export function estimateTokens(text: string): number {
@@ -212,16 +228,10 @@ export class TokenBucket {
     this.tokens = Math.min(this.capacity, this.tokens + n);
   }
 
-  /** Never believe we have more than the server says (a shared key, another process). */
+  /** Never believe we have more than the server says (a shared key, another process, a 429's retry-after). */
   clampTo(n: number): void {
     this.refill();
     if (n < this.tokens) this.tokens = n;
-  }
-
-  /** The server refused: assume the bucket is empty now. */
-  empty(): void {
-    this.refill();
-    this.tokens = Math.min(this.tokens, 0);
   }
 }
 
@@ -288,7 +298,9 @@ const dayOf = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
 export class GroqClient {
   private readonly baseUrl: string;
-  private readonly bucket: TokenBucket;
+  private readonly buckets = new Map<string, TokenBucket>();
+  private readonly remainingBy = new Map<string, number>();
+  private lastModel = "";
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly maxWaitMs: number;
@@ -305,10 +317,9 @@ export class GroqClient {
   private lastStatus: number | null = null;
   private authUntil = 0;
   private coolUntil = 0;
-  /** running average of completion tokens (reservation sizing) */
-  private completionAvg = 0;
-  /** serialises budget decisions so queued callers are served in order and never double-spend */
-  private gate: Promise<unknown> = Promise.resolve();
+  private coolReason: "rate_limit" | "network" = "rate_limit";
+  /** per bucket: serialises budget decisions so callers of one model are served in order and never double-spend, while a deep call waiting for ITS budget cannot hold up the hot path's */
+  private gates = new WeakMap<TokenBucket, Promise<unknown>>();
   private warned = new Set<string>();
 
   constructor(private opts: GroqClientOpts) {
@@ -316,7 +327,6 @@ export class GroqClient {
     this.now = opts.now ?? Date.now;
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.tpm = Math.max(500, opts.tpm ?? 7000);
-    this.bucket = new TokenBucket(this.tpm, this.tpm, this.now);
     this.maxWaitMs = Math.max(0, opts.maxWaitMs ?? 2000);
     this.maxPerDay = Math.max(0, opts.maxRequestsPerDay ?? 900);
     this.day = dayOf(this.now());
@@ -332,10 +342,10 @@ export class GroqClient {
   }
 
   /** why the client is refusing calls right now, if it is */
-  get disabledReason(): "auth" | "rate_limit" | null {
+  get disabledReason(): "auth" | "rate_limit" | "network" | null {
     const t = this.now();
     if (this.authUntil > t) return "auth";
-    if (this.coolUntil > t) return "rate_limit";
+    if (this.coolUntil > t) return this.coolReason;
     return null;
   }
 
@@ -349,12 +359,25 @@ export class GroqClient {
       remainingRequestsLastSeen: this.remainingRequests,
       limitTokens: this.limitTokens,
       tpmBudget: this.tpm,
-      bucketTokens: Math.round(this.bucket.available()),
+      bucketTokens: this.lastModel ? Math.round(this.bucketOf(this.lastModel).available()) : this.tpm,
+      models: Object.fromEntries([...this.buckets].map(([m, b]) => [m, { bucketTokens: Math.round(b.available()), remainingTokensLastSeen: this.remainingBy.get(m) ?? null }])),
       paced: this.paced,
       rateLimited: this.rateLimited,
       lastStatus: this.lastStatus,
       disabledUntil: this.disabledUntil,
     };
+  }
+
+  /** GET /models: opens the connection and checks the key. Costs no tokens, is not counted as a request, never throws. */
+  async ping(timeoutMs = 3000): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/models`, { headers: { authorization: `Bearer ${this.opts.apiKey}` }, signal: AbortSignal.timeout(timeoutMs) });
+      await res.arrayBuffer().catch(() => undefined);
+      if (res.status === 401 || res.status === 403) this.afterError(new GroqError("auth", `Groq HTTP ${res.status}`, res.status));
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 
   private rollDay(): void {
@@ -371,37 +394,52 @@ export class GroqClient {
     log.warn("groq", msg);
   }
 
-  /** Reserve `need` tokens, waiting at most `maxWaitMs` from `startedAt` for the budget. FIFO. */
-  private reserve(need: number, startedAt: number): Promise<void> {
-    const turn = this.gate.then(async () => {
-      if (need > this.bucket.capacity) throw new GroqError("too_large", `estimated ${need} tokens exceed the ${this.bucket.capacity}/min budget`);
+  /** Groq meters tokens per model (the 429/413 messages say "for model ..."), so every model gets its own bucket. */
+  private bucketOf(model: string): TokenBucket {
+    let b = this.buckets.get(model);
+    if (!b) {
+      b = new TokenBucket(this.tpm, this.tpm, this.now);
+      this.buckets.set(model, b);
+    }
+    return b;
+  }
+
+  /** Reserve `need` tokens of `bucket`, waiting at most `maxWaitMs` from `startedAt` for the budget. FIFO. */
+  private reserve(bucket: TokenBucket, need: number, startedAt: number, maxWaitMs: number): Promise<void> {
+    const turn = (this.gates.get(bucket) ?? Promise.resolve()).then(async () => {
+      if (need > bucket.capacity) throw new GroqError("too_large", `estimated ${need} tokens exceed the ${bucket.capacity}/min budget`);
       for (let spins = 0; spins < 4; spins++) {
-        const wait = this.bucket.waitFor(need);
+        const wait = bucket.waitFor(need);
         if (wait <= 0) {
-          this.bucket.take(need);
+          bucket.take(need);
           return;
         }
-        if (this.now() + wait - startedAt > this.maxWaitMs) {
+        if (this.now() + wait - startedAt > maxWaitMs) {
           this.paced++;
-          throw new GroqError("paced", `token budget exhausted (${Math.round(this.bucket.available())} of ${this.tpm}/min available)`);
+          throw new GroqError("paced", `token budget exhausted (${Math.round(bucket.available())} of ${this.tpm}/min available)`);
         }
         await this.sleep(wait);
       }
       this.paced++;
       throw new GroqError("paced", "token budget contended");
     });
-    this.gate = turn.catch(() => undefined);
+    this.gates.set(bucket, turn.catch(() => undefined));
     return turn;
   }
 
-  private settle(reserved: number, actual: number | null): void {
+  private settle(bucket: TokenBucket, reserved: number, actual: number | null): void {
     // actual === null: the call never consumed tokens (rejected before generation); give everything back
-    if (actual === null) this.bucket.give(reserved);
-    else if (actual < reserved) this.bucket.give(reserved - actual);
-    else if (actual > reserved) this.bucket.take(actual - reserved);
+    if (actual === null) bucket.give(reserved);
+    else if (actual < reserved) bucket.give(reserved - actual);
+    else if (actual > reserved) bucket.take(actual - reserved);
   }
 
-  private learnHeaders(h: Headers): void {
+  /**
+   * Read the rate-limit headers. They are the server's own bookkeeping, so the bucket is corrected by them, but only AFTER
+   * this call has been settled (its own cost is already in the header), and `addBack` is what a streaming response has not
+   * been refunded yet: its headers arrive before generation ends, with the whole completion allowance still held.
+   */
+  private learnHeaders(model: string, bucket: TokenBucket, h: Headers, addBack = 0): void {
     const rt = h.get("x-ratelimit-remaining-tokens");
     const rr = h.get("x-ratelimit-remaining-requests");
     const lt = h.get("x-ratelimit-limit-tokens");
@@ -409,9 +447,10 @@ export class GroqClient {
     if (rr && Number.isFinite(Number(rr))) this.remainingRequests = Number(rr);
     if (rt && Number.isFinite(Number(rt))) {
       this.remainingTokens = Number(rt);
+      this.remainingBy.set(model, Number(rt));
       // correct the local bucket by the server's view of the deficit (shared key, other processes)
       const limit = this.limitTokens ?? 8000;
-      this.bucket.clampTo(this.bucket.capacity - Math.max(0, limit - Number(rt)));
+      bucket.clampTo(bucket.capacity - Math.max(0, limit - Number(rt) - addBack));
     }
   }
 
@@ -421,7 +460,12 @@ export class GroqClient {
     const what = `Groq HTTP ${status}${code ? ` ${code}` : ""}`;
     if (status === 401 || status === 403) return new GroqError("auth", what, status);
     if (status === 413) return new GroqError("too_large", what, status, retryAfterMs);
-    if (status === 429) return new GroqError("rate_limit", what, status, retryAfterMs);
+    if (status === 429) {
+      // only a tokens-per-minute refusal says anything about THIS bucket: a per-day or per-request limit counts on other scales
+      const m = /tokens per minute \(TPM\): Limit (\d+), Used (\d+), Requested (\d+)/.exec(msg);
+      const which = /\((TPM|TPD|RPM|RPD)\)/.exec(msg)?.[1];
+      return new GroqError("rate_limit", which ? `${what} (${which})` : what, status, retryAfterMs, m ? { limit: Number(m[1]), used: Number(m[2]), requested: Number(m[3]) } : undefined);
+    }
     if (status === 400 || status === 422) {
       if (code === "json_validate_failed") return new GroqError("bad_output", what, status);
       if (/schema|response_format|json_schema|strict|enum|anyOf|additionalProperties/i.test(msg)) return new GroqError("schema_rejected", what, status);
@@ -439,8 +483,14 @@ export class GroqClient {
       this.rateLimited++;
       const wait = Math.min(Math.max(e.retryAfterMs ?? 5000, 1000), 120_000);
       this.coolUntil = this.now() + wait;
-      this.bucket.empty();
-      this.warnOnce("rate", `Groq rate limit (HTTP ${e.status ?? 429}): live calls pause ${Math.round(wait / 1000)} s (retry-after honoured, no retries)`);
+      this.coolReason = "rate_limit";
+      this.warnOnce("rate", `${e.message}: live calls pause ${Math.round(wait / 1000)} s (retry-after honoured, no retries)`);
+    } else if (e.kind === "network" || e.kind === "timeout") {
+      const until = this.now() + NETWORK_COOL_MS;
+      if (until > this.coolUntil) {
+        this.coolUntil = until;
+        this.coolReason = "network";
+      }
     } else if (e.kind === "too_large") {
       this.warnOnce("large", "Groq rejected a request as too large for the tokens-per-minute limit: the prompt must stay under it.");
     }
@@ -454,37 +504,38 @@ export class GroqClient {
     const estPrompt = estimatePromptTokens(req);
     const trace = (t: Omit<GroqTrace, "model" | "estimatedPromptTokens" | "streamed">): void =>
       this.opts.onTrace?.({ model: req.model, estimatedPromptTokens: estPrompt, streamed: stream, ...t });
-    const fail = (e: GroqError, extra: Partial<GroqTrace> = {}): never => {
-      this.afterError(e);
-      trace({ ok: false, status: e.status ?? 0, kind: e.kind, ms: this.now() - startedAt, ...extra });
+    // a refusal made here (cool-down, budget, cap) has no side effects; an error that CAME from the server starts the windows
+    const fail = (e: GroqError, extra: Partial<GroqTrace> = {}, fromServer = true): never => {
+      if (fromServer) this.afterError(e);
+      trace({ ok: false, status: e.status ?? 0, kind: e.kind, ms: this.now() - startedAt, remainingTokens: this.remainingTokens, bucketTokens: Math.round(this.bucketOf(req.model).available()), retryAfterMs: e.retryAfterMs, limits: e.limits, ...extra });
       throw e;
     };
 
     if (this.maxPerDay > 0 && this.requestsToday >= this.maxPerDay) {
       this.paced++;
-      return fail(new GroqError("daily_cap", `local cap of ${this.maxPerDay} requests per day reached`));
+      return fail(new GroqError("daily_cap", `local cap of ${this.maxPerDay} requests per day reached`), {}, false);
     }
     const off = this.disabledReason;
-    if (off === "auth") return fail(new GroqError("auth", "disabled after an authentication failure"));
-    if (off === "rate_limit") {
-      const left = this.coolUntil - this.now();
-      return fail(new GroqError("rate_limit", "cooling down after HTTP 429", undefined, left));
-    }
+    if (off === "auth") return fail(new GroqError("auth", "disabled after an authentication failure"), {}, false);
+    if (off === "rate_limit") return fail(new GroqError("rate_limit", "cooling down after HTTP 429", undefined, this.coolUntil - this.now()), {}, false);
+    if (off === "network") return fail(new GroqError("network", "skipping the cloud for a moment after a failed connection", undefined, this.coolUntil - this.now()), {}, false);
 
-    // reserve: the prompt we can count plus the completion we expect (the running average, else half the cap)
-    const expectOut = Math.min(req.maxCompletionTokens, Math.max(120, Math.round(this.completionAvg || req.maxCompletionTokens / 2)));
-    const need = estPrompt + expectOut;
+    // reserve the prompt plus the whole completion allowance: that is what Groq checks at admission (measured: a request is
+    // refused with 429 when remaining tokens < prompt + max_completion_tokens), then it charges what was really used
+    const need = estPrompt + req.maxCompletionTokens;
+    const bucket = this.bucketOf(req.model);
+    this.lastModel = req.model;
     try {
-      await this.reserve(need, startedAt);
+      await this.reserve(bucket, need, startedAt, o.maxWaitMs ?? this.maxWaitMs);
     } catch (e) {
-      return fail(e as GroqError);
+      return fail(e as GroqError, {}, false);
     }
+    const queuedMs = this.now() - startedAt;
 
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(new Error("timeout")), o.timeoutMs ?? 15_000);
     const onAbort = (): void => ctl.abort(new Error("aborted"));
     o.signal?.addEventListener("abort", onAbort, { once: true });
-    const sent = this.now();
     const sentPerf = performance.now();
     this.requestsToday++;
 
@@ -517,7 +568,7 @@ export class GroqClient {
 
     let res: Response;
     try {
-      o.onSend?.();
+      o.onSend?.(queuedMs);
       res = await fetch(`${this.baseUrl}/chat/completions`, {
         method: "POST",
         headers: { authorization: `Bearer ${this.opts.apiKey}`, "content-type": "application/json", accept: stream ? "text/event-stream" : "application/json" },
@@ -526,12 +577,13 @@ export class GroqClient {
       });
     } catch (err) {
       cleanup();
-      this.settle(need, null);
-      return fail(abortKind(err), { ms: performance.now() - sentPerf });
+      const e = abortKind(err);
+      // a refused connection spent nothing; a timeout may have (the server could still be generating)
+      this.settle(bucket, need, e.kind === "network" ? null : need);
+      return fail(e, { ms: performance.now() - sentPerf });
     }
     const firstByteMs = performance.now() - sentPerf;
     this.lastStatus = res.status;
-    this.learnHeaders(res.headers);
 
     if (!res.ok) {
       cleanup();
@@ -543,7 +595,13 @@ export class GroqClient {
       }
       const ra = parseDuration(res.headers.get("retry-after"));
       const e = this.classify(res.status, parsed, ra);
-      this.settle(need, null);
+      this.settle(bucket, need, null);
+      this.learnHeaders(req.model, bucket, res.headers);
+      // the server says when it will have room for exactly this request: believe we are `need` short, minus what refills until then
+      if (e.kind === "rate_limit") {
+        bucket.clampTo(need - (Math.min(Math.max(ra ?? 5000, 1000), 120_000) / 60_000) * this.tpm);
+        if (e.limits) bucket.clampTo(bucket.capacity - e.limits.used); // what the server says is already spent in this minute
+      }
       return fail(e, { ms: performance.now() - sentPerf, firstByteMs });
     }
 
@@ -599,18 +657,19 @@ export class GroqClient {
       }
     } catch (err) {
       cleanup();
-      this.settle(need, usage ? usage.promptTokens + usage.completionTokens : null);
+      // the request was accepted: the server spends the prompt (and whatever it generated) even if we stop reading
+      this.settle(bucket, need, usage ? usage.promptTokens + usage.completionTokens : need);
+      this.learnHeaders(req.model, bucket, res.headers, stream ? req.maxCompletionTokens : 0);
       if (err instanceof GroqError) return fail(err, { ms: performance.now() - sentPerf, firstByteMs, firstContentMs });
       return fail(abortKind(err), { ms: performance.now() - sentPerf, firstByteMs, firstContentMs });
     }
     cleanup();
 
     const real = usage ?? { promptTokens: estPrompt, completionTokens: Math.ceil(text.length / 3.5), reasoningTokens: 0, cachedTokens: 0 };
-    this.settle(need, real.promptTokens + real.completionTokens);
-    this.completionAvg = this.completionAvg ? 0.7 * this.completionAvg + 0.3 * real.completionTokens : real.completionTokens;
+    this.settle(bucket, need, real.promptTokens + real.completionTokens);
+    this.learnHeaders(req.model, bucket, res.headers, stream ? Math.max(0, req.maxCompletionTokens - real.completionTokens) : 0);
     const ms = performance.now() - sentPerf;
-    void sent;
-    trace({ ok: true, status: res.status, ms, firstByteMs, firstContentMs, usage: real, finishReason: finish });
-    return { text, finishReason: finish, usage: real, ms, firstByteMs, firstContentMs };
+    trace({ ok: true, status: res.status, ms, firstByteMs, firstContentMs, usage: real, finishReason: finish, remainingTokens: this.remainingTokens, bucketTokens: Math.round(bucket.available()) });
+    return { text, finishReason: finish, usage: real, queuedMs, ms, firstByteMs, firstContentMs };
   }
 }

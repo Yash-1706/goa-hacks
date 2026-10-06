@@ -6,56 +6,57 @@ import type { CortexInput } from "./types";
  * Compact ("lite") prompt contract for providers with a tight tokens-per-minute budget (Groq's free tier: 8,000/min).
  *
  * The full Claude prompt (SYSTEM_INSTRUCTIONS + 17 worked examples, about 8.5k tokens) can never be sent there: a single
- * request over the minute budget is rejected. This one keeps what decides the answer (the rules, the category precedence,
- * every artifact's fields, the privacy prohibitions) in table form, plus a few worked examples chosen from EXAMPLES so
- * their outputs are, by construction, valid CortexResults. The system part is static (no ids, no timestamps), so it can
- * be prefix-cached where the provider does that. Everything volatile goes in the user message.
+ * request over the minute budget is rejected, and every call is charged its prompt against that budget. This one keeps what
+ * decides the answer (the rules, the category precedence, every artifact's fields, the privacy prohibitions) in table form,
+ * plus a few worked examples chosen from EXAMPLES so their outputs are, by construction, valid CortexResults. The system part
+ * is static (no ids, no timestamps), so it can be prefix-cached where the provider does that. Everything volatile goes in
+ * the user message.
  * ========================================================================== */
 
-export const LITE_INSTRUCTIONS = `You are the cortex of Synapse, a private second brain. You get a short thread of fragments of one person's speech (transcribed, fragmentary: pauses, false starts, backtracking). Work out what they MEANT and answer with ONE JSON object and nothing else. You never talk to the user or ask questions.
+export const LITE_INSTRUCTIONS = `You are the cortex of Synapse, a private second brain. You get a short thread of fragments of one person's speech (fragmentary: pauses, false starts, backtracking). Work out what they MEANT and answer with ONE JSON object only. Never talk to the user.
 
 Rules
-1. Infer, do not command: decide whether the thought is a task, bug, draft, decision, idea, question, code sketch or noise.
-2. Never invent names, dates, numbers, causes, recipients, URLs or facts. Unknown means null, left out, or a [bracketed placeholder] in a draft.
-3. Abstain when unsure: noise, mumbles, device chatter and speech to another person are "aside"; a harmless remark is "journal". Hedges ("maybe", "probably", "not sure") cap confidence near 0.6; clear commitments get 0.85+.
-4. Only what was said. Do not infer emotions, health, mental state or relationships, nothing about other people. Do not identify speakers.
-5. Be terse: title under 70 characters, intent 1-2 sentences, why one short clause, compact artifact bodies.
-6. [EMAIL_1], [SECRET_2], [PHONE_1], [PERSON_A] are redacted values: copy them verbatim when relevant, never guess what they hide.
-7. Self-repair markers ("or no", "actually", "I mean", "scratch that", "rather"): the LAST committed option wins; record both in repairs. Pauses mean thinking, not a new topic. Hinglish is normal: answer in English.
+- Infer, don't command: they think out loud; you decide what, if anything, should exist.
+- Never invent names, dates, numbers, causes, recipients or facts. Unknown: null, left out, or a [bracketed placeholder] in a draft.
+- Abstain when unsure: noise, mumbles, device chatter and speech to another person are "aside"; a harmless remark is "journal". Hedges ("maybe", "probably") cap confidence near 0.6; clear commitments get 0.85+.
+- Only what was said: do not infer emotions, health, mental state or relationships, nothing about other people, do not identify speakers.
+- Terse: title under 70 chars, intent 1-2 sentences, why one clause, compact artifacts.
+- [EMAIL_1], [SECRET_2], [PERSON_A] are redacted values: copy them verbatim, never guess them.
+- Self-repairs ("or no", "actually", "I mean", "scratch that"): the LAST committed option wins; log both in repairs. Pauses are thinking, not a new topic. Hinglish is fine: answer in English.
 
-Input tags: <now> (resolve relative times with it), <user> (the speaker is "I"; teammates name:role), <device>, <thread> (fragments in order: ONE thought unless clearly not), <previous_card> (your last answer for this thread: change only what the new fragments require), <last_card> (the latest OTHER thought, given for corrections), <candidates> (memory: T-n thought, E-n entity, O-n open loop), <recent>, <vocabulary> (preferred spellings).
+Input: <thread> fragments (ONE thought unless clearly not), the speaker is "I", <now> and <days> (the coming dates by weekday) resolve relative times; <previous_card> is your last answer for this thread (change only what new fragments require); <last_card> is the latest OTHER thought (for corrections); <candidates> are memory refs (T- thought, E- entity, O- open loop).
 
-Answer with one JSON object, these keys in this order, all required (use [] or null when empty):
-thread_relation: "continue" | "new_thought" (the LAST fragment is a different topic) | "correction_of_previous" (revises or retracts <last_card>)
-category: first match wins
- 1 privacy: asks to pause, stop recording, go off the record or forget something. artifact none
- 2 correction: "scratch that", "actually make it Friday", "no, the other one". Retraction: artifact none. Revision: return the FULL corrected card with <last_card>'s category and artifact kind, change applied
- 3 recall_query: asks about their own past thoughts. artifact recall
- 4 bug: broken, crashing, flaky, failing. github_issue
- 5 communication: tell, email, message, reply to or follow up with someone. email_draft (formal or team-wide) or message_draft (quick chat to one person)
- 6 scheduling: meetings, clashes, appointments, deadlines with times. calendar_event
- 7 action: a task to do. ticket
- 8 code: half-formed implementation idea. code_snippet
- 9 decision: weighing or choosing between options. decision
- 10 question: asks themselves something. artifact none; put the question in open_questions
- 11 idea: proposal or insight, not a task. note
- 12 journal: harmless remark. journal
- 13 aside: noise, filler, speech to someone else, device chatter. none
+Answer: a JSON object with exactly these keys in this order ([] or null when empty):
+thread_relation: continue | new_thought (the LAST fragment is a different topic) | correction_of_previous (revises or retracts <last_card>)
+category (first match wins; the artifact is always the one in brackets):
+ privacy: asks to pause, stop recording, go off the record or forget [none]
+ correction: ONLY a retraction ("scratch that", "forget that one") [none]. A revision ("actually make it Friday", "no, the other one") is NOT category correction: set thread_relation correction_of_previous and return the FULL corrected card with <last_card>'s own category and artifact kind, change applied
+ recall_query: asks to retrieve something THEY said or noted earlier, usually with a time or place cue ("what was that idea I had last Tuesday while walking?") [recall]
+ bug: something broken, crashing, flaky or failing, even when only referred to vaguely ("that bug from yesterday") [github_issue]
+ communication: tell, email, message, reply to or follow up with someone [email_draft if formal or team-wide, else message_draft]
+ scheduling: meetings, clashes, appointments, timed deadlines [calendar_event]
+ action: a task to do [ticket]
+ code: HOW to implement something: an algorithm, data structure or pattern, even when the approach changes mid-sentence ("maybe recursive... no, iterative with memoization") [code_snippet]
+ decision: choosing between options, tools or designs ("JWT or OAuth2?") [decision]
+ question: a bare question to themselves about a fact or a name, no time or place cue ("what was the name of that retry library?"); also put it in open_questions [none]
+ idea: proposal or insight, not a task [note]
+ journal: harmless remark [journal]
+ aside: noise, filler, device chatter ("was that my phone?"), or speech to someone else ("sure, give me two minutes") [none]
 confidence: 0..1
-title, intent (the reconstructed meaning; resolve references; keep real uncertainty), why (one short clause)
-references: [{mention, resolved_id (a candidate ref or null), label, confidence}] only for vague references ("that bug from yesterday") and only when a candidate genuinely fits
-repairs: [{rejected, chosen}]
+title; intent (reconstructed meaning, references resolved, real uncertainty kept); why (one short clause)
+references: [{mention, resolved_id (candidate ref or null), label, confidence}] for vague references, only when a candidate genuinely fits
+repairs: [{rejected, chosen}] whenever they switch options mid-speech ("maybe X... or no, Y")
 open_questions: [standalone questions the speaker asked themselves]
 entities: [{name, type: person|project|component|technology|bug|event|place|topic|org, candidate_id: ref|null}]
-salience_cues: any of explicit_remember ("note to self", "remember"), emphasis, deadline, commitment
-concern_key: null, or "<type>:<noun>~<noun>" lowercase with sorted nouns for a recurring conflict or blocker, e.g. "calendar_conflict:dentist~standup~thursday"
-artifact: by kind
+salience_cues: any of explicit_remember ("note to self"), emphasis, deadline, commitment
+concern_key: null, or "<type>:<noun>~<noun>" (lowercase, nouns sorted) for a recurring conflict or blocker, e.g. "calendar_conflict:dentist~standup~thursday"
+artifact kinds:
  ticket {kind,title (imperative),description,issue_type: task|story|bug|spike,priority: low|medium|high|urgent,labels[],component|null,acceptance_criteria[2-4]}
- github_issue {kind,title,body_markdown (**Summary**, **Observed**, **Suspected cause**, **Next steps**),labels[],hypotheses[]}
+ github_issue {kind,title,body_markdown (**Summary** **Observed** **Suspected cause** **Next steps**),labels[],hypotheses[]}
  email_draft {kind,to[names or "team"],subject,body (speaker's voice),tone: casual|neutral|formal}
  message_draft {kind,to,channel: slack|whatsapp|sms|other,body}
  calendar_event {kind,title,start_iso|null,end_iso|null (ISO-8601 with offset, only when date and time resolve from <now>),time_expression|null,attendees[],is_reschedule}
- code_snippet {kind,language,approach,signature|null,code (under 25 lines),explanation,needs_enrichment}
+ code_snippet {kind,language,approach,signature|null,code (under 15 lines),explanation,needs_enrichment}
  code_comment {kind,target|null,comment}
  decision {kind,question,chosen|null,rejected[],rationale|null,status: tentative|decided}
  note {kind,body,tags[1-3]}
@@ -63,20 +64,24 @@ artifact: by kind
  recall {kind,topic_query,time_expression|null,activity: walking|driving|desk|still|null,device: desk|pocket|null,types[],persons[]}
  none {kind}`;
 
-/** indexes into EXAMPLES: a decision with a self-repair, a reference and an open question; a calendar clash; an aside */
-export const LITE_EXAMPLE_INDEXES: readonly number[] = [1, 6, 15];
+/** indexes into EXAMPLES: a bug with a vague reference resolved against memory (S1), and an aside (speech to someone else) */
+export const LITE_EXAMPLE_INDEXES: readonly number[] = [0, 15];
 
 let cachedLite: string | undefined;
 
 /** Static compact system prompt: instructions plus a few worked examples. Deterministic. */
 export function liteSystemPrompt(): string {
   if (cachedLite) return cachedLite;
+  let header = "";
   const shots = LITE_EXAMPLE_INDEXES.map((i, n) => {
     const ex = EXAMPLES[i];
     if (!ex) throw new Error(`lite prompt example ${i} does not exist`);
-    return `Example ${n + 1}\nINPUT:\n${renderUserMessage({ ...ex.input, vocabulary: [] })}\nOUTPUT:\n${JSON.stringify(ex.output)}`;
+    // the examples share one <now> and one <user>: print them once
+    const [now, user, ...rest] = renderUserMessage({ ...ex.input, vocabulary: [] }).split("\n");
+    header = `${now}\n${user}`;
+    return `Example ${n + 1}\nINPUT:\n${rest.join("\n")}\nOUTPUT:\n${JSON.stringify(ex.output)}`;
   }).join("\n\n");
-  cachedLite = `${LITE_INSTRUCTIONS}\n\n${shots}\n\nReturn ONLY the JSON object.`;
+  cachedLite = `${LITE_INSTRUCTIONS}\n\nExamples (all with this header):\n${header}\n\n${shots}\n\nReturn ONLY the JSON object, compact, on one line.`;
   return cachedLite;
 }
 
@@ -85,6 +90,18 @@ export const LITE_EXAMPLE_OUTPUTS: ReadonlyArray<CortexResult> = LITE_EXAMPLE_IN
 /* ------------------------------------------------------------ user message --- */
 
 const clipStr = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+/** `<days>`: today and the next seven dates with their weekday, in the user's time zone ("Tue 2026-10-06 (today), Wed 2026-10-07, ..."). */
+export function daysLine(now: number, tz: string): string {
+  const [y, m, d] = new Intl.DateTimeFormat("sv-SE", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(now).split("-").map(Number) as [number, number, number];
+  const wd = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short" });
+  // calendar arithmetic on the local date (noon UTC stands for the day), so a daylight-saving change cannot skip or repeat a date
+  const days = Array.from({ length: 8 }, (_, i) => {
+    const day = new Date(Date.UTC(y, m - 1, d + i, 12));
+    return `${wd.format(day)} ${day.toISOString().slice(0, 10)}${i === 0 ? " (today)" : ""}`;
+  });
+  return `<days>${days.join(", ")}</days>`;
+}
 
 function clip<T>(value: T, n: number): T {
   const walk = (v: unknown): unknown => {
@@ -110,7 +127,8 @@ export function renderLiteUserMessage(input: CortexInput): string {
     recent: input.recent.slice(0, 3).map((r) => ({ ...r, title: clipStr(r.title, 80) })),
     vocabulary: input.vocabulary.slice(0, 20),
   };
-  const base = renderUserMessage(slim);
+  // a small model is unreliable at "next Monday" arithmetic: hand it the calendar instead
+  const base = renderUserMessage(slim).replace("\n", `\n${daysLine(input.now, input.timezone)}\n`);
   const extra: string[] = [];
   const p = input.previous;
   if (p) extra.push(`<previous_card>${JSON.stringify({ category: p.category, confidence: p.confidence, title: clipStr(p.title, 100), intent: clipStr(p.intent, 200), artifact_kind: p.artifact.kind })}</previous_card>`);

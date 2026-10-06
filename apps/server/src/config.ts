@@ -61,7 +61,7 @@ const EnvSchema = z.object({
 
   GROQ_API_KEY: str(""),
   GROQ_BASE_URL: str("https://api.groq.com/openai/v1"),
-  GROQ_MODEL_FAST: str("openai/gpt-oss-20b"),
+  GROQ_MODEL_FAST: str("qwen/qwen3.8-27b"),
   GROQ_MODEL_DEEP: str("openai/gpt-oss-120b"),
   GROQ_OUTPUT_MODE: str("auto"),
   GROQ_TPM: num(7000),
@@ -99,7 +99,7 @@ const EnvSchema = z.object({
 export const ENV_KEYS: readonly string[] = Object.keys(EnvSchema.shape);
 
 export type LlmProvider = "anthropic" | "groq";
-export type GroqOutputMode = "auto" | "json_schema" | "json_object";
+export type GroqOutputMode = "auto" | "json_schema" | "json_object" | "text";
 
 export interface TeamMember {
   name: string;
@@ -185,7 +185,7 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
     else provider = raw.ANTHROPIC_API_KEY ? "anthropic" : raw.GROQ_API_KEY ? "groq" : "mock";
   }
   const effectiveLlm: "live" | "mock" = provider === "mock" ? "mock" : "live";
-  const groqMode = (["auto", "json_schema", "json_object"].includes(raw.GROQ_OUTPUT_MODE) ? raw.GROQ_OUTPUT_MODE : "auto") as GroqOutputMode;
+  const groqMode = (["auto", "json_schema", "json_object", "text"].includes(raw.GROQ_OUTPUT_MODE) ? raw.GROQ_OUTPUT_MODE : "auto") as GroqOutputMode;
 
   const team: TeamMember[] = raw.USER_TEAM.split(",")
     .map((p) => p.trim())

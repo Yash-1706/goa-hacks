@@ -192,6 +192,9 @@ export interface ClientConfig {
   wisprMode: "client" | "proxy" | "mock";
   languages: string[];
   llmMode: "live" | "mock";
+  /** which provider serves the live cortex and its hot-path model (absent while mock or local-only; the UI says "Claude" when absent) */
+  llmProvider?: "anthropic" | "groq";
+  llmModel?: string;
   localOnly: boolean;
   autonomyLevel: number;
   pauseWindowSecs: number;

@@ -21,6 +21,8 @@ import { seedCalendar } from "./integrations/calendar";
 import { Outbox } from "./integrations/outbox";
 import { ClaudeCortex } from "./llm/anthropic";
 import { DeepLlm } from "./llm/deep";
+import { GroqCortex } from "./llm/groq";
+import { GroqClient } from "./llm/groq-client";
 import { log } from "./log";
 import { Vault } from "./memory/crypto";
 import { Db } from "./memory/db";
@@ -46,6 +48,12 @@ export interface AppOptions {
   quiet?: boolean;
   /** supply the master key directly (tests); skips passphrase / OS keyring / keyfile */
   kek?: Buffer;
+  /**
+   * Share one Groq client between apps. The token budget and the day's request count belong to the API key, not to an app, so a
+   * benchmark or eval that builds many apps in one process must hand them the same client or each new app would start with a full
+   * bucket and walk into the server's 429.
+   */
+  groq?: GroqClient;
 }
 
 /** Everything wired together. Services are created in dependency order; the hub is late-bound. */
@@ -74,10 +82,15 @@ export interface AppCtx {
   deep: DeepLlm;
   hub: WsHub;
   mock: MockCortex;
-  live: ClaudeCortex | null;
+  /** the live cortex of the configured provider (null in mock mode) */
+  live: ClaudeCortex | GroqCortex | null;
+  /** the shared Groq client (pacing, counters) when LLM_PROVIDER resolves to groq */
+  groq: GroqClient | null;
   asides: { count: number };
   fastify: FastifyInstance;
   clientConfig: () => ClientConfig;
+  /** resolves when every recall answer started by a spoken question has finished (benchmarks and evals wait before they stop the app) */
+  idleRecall: () => Promise<void>;
 }
 
 class RoutingBackend implements CortexBackend {
@@ -141,19 +154,36 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   const autonomy = new AutonomyPolicy({ cfg, store, outbox, audit });
   const pseudonymNames = (): string[] =>
     cfg.privacy.pseudonymize ? [cfg.user.firstName, ...cfg.user.team.map((m) => m.name), ...[...store.entities.values()].filter((e) => e.type === "person").map((e) => e.name)] : [];
-  const onCloudCall = (info: { model: string; redactions: number }): void => audit.append("sent_to_llm", info.model, info.redactions);
+  // the audit trail names the model only (never content); other providers are prefixed so the ledger shows who got the call
+  const onCloudCall = (info: { model: string; redactions: number }): void => audit.append("sent_to_llm", cfg.llm.provider === "groq" ? `groq:${info.model}` : info.model, info.redactions);
 
   const mock = new MockCortex(triager, embedder);
-  const live = cfg.llm.mode === "live" ? new ClaudeCortex({ apiKey: cfg.llm.apiKey, model: cfg.llm.fast, fallback: mock, pseudonymNames, onCloudCall }) : null;
+  const groq =
+    cfg.llm.provider === "groq"
+      ? (opts.groq ?? new GroqClient({ apiKey: cfg.llm.groq.apiKey, baseUrl: cfg.llm.groq.baseUrl, tpm: cfg.llm.groq.tpm, maxWaitMs: cfg.llm.groq.maxWaitMs, maxRequestsPerDay: cfg.llm.groq.maxRequestsPerDay }))
+      : null;
+  const live: ClaudeCortex | GroqCortex | null =
+    cfg.llm.provider === "anthropic"
+      ? new ClaudeCortex({ apiKey: cfg.llm.apiKey, model: cfg.llm.fast, fallback: mock, pseudonymNames, onCloudCall })
+      : groq
+        ? new GroqCortex({ client: groq, model: cfg.llm.fast, fallback: mock, outputMode: cfg.llm.groq.outputMode, pseudonymNames, onCloudCall })
+        : null;
   const backend = opts.backend ?? new RoutingBackend(() => (privacy.localOnly || !live ? mock : live));
-  const deep = new DeepLlm(cfg, { isLocalOnly: () => privacy.localOnly, pseudonymNames, onCloudCall });
+  const deep = new DeepLlm(cfg, { isLocalOnly: () => privacy.localOnly, pseudonymNames, onCloudCall, groq: groq ?? undefined });
 
   const wispr = new WisprService({ cfg, store, clock, anyListening: () => hub.anyListening() });
   const recall = new RecallEngine({ cfg, clock, store, embedder, deep, emit, bus, audit });
 
+  // recall answers run on their own after the thought that asked for them; remember them so a run can wait for the last one
+  const pendingRecall = new Set<Promise<unknown>>();
+  const trackRecall = (p: Promise<unknown>): void => {
+    pendingRecall.add(p);
+    void p.finally(() => pendingRecall.delete(p));
+  };
+
   const engine = new CortexEngine({
     cfg, clock, bus, store, embedder, triager, intents, backend, emit, hub: hubIface, metrics, autonomy, controls: privacy, asides,
-    onRecallQuery: (t, dev) => void recall.answerForThought(t, dev).catch((e) => log.warn("recall", `failed: ${(e as Error).message}`)),
+    onRecallQuery: (t, dev) => trackRecall(recall.answerForThought(t, dev).catch((e) => log.warn("recall", `failed: ${(e as Error).message}`))),
     vocabulary: () => store.topDictionary(40),
   });
   privacy.attachEngine(engine);
@@ -165,6 +195,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
     wisprMode: cfg.wispr.mode,
     languages: cfg.wispr.languages,
     llmMode: privacy.localOnly ? "mock" : cfg.llm.mode,
+    ...(!privacy.localOnly && cfg.llm.provider !== "mock" ? { llmProvider: cfg.llm.provider, llmModel: cfg.llm.fast } : {}),
     localOnly: privacy.localOnly,
     autonomyLevel: autonomy.level,
     pauseWindowSecs: cfg.memory.pauseWindowSecs,
@@ -192,7 +223,8 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
 
   const ctx: AppCtx = {
     cfg, clock, bus, db, vault, store, embedder, triager, intents, metrics, battery, audit, trust, privacy, outbox, autonomy, engine,
-    recall, proactive, consolidator, wispr, deep, hub, mock, live, asides, fastify, clientConfig,
+    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, asides, fastify, clientConfig,
+    idleRecall: async () => void (await Promise.allSettled([...pendingRecall])),
   };
   registerRoutes(fastify, ctx);
 
@@ -214,7 +246,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
       }
     }
     timers.forEach((t) => t.unref?.());
-    banner(cfg, trust.pairingCode, embedder, vault.kekSource, wispr.mode, live ? cfg.llm.fast : "mock cortex (no LLM)", clientConfig().integrations);
+    banner(cfg, trust.pairingCode, embedder, vault.kekSource, wispr.mode, live ? (cfg.llm.provider === "groq" ? `groq ${cfg.llm.fast}` : cfg.llm.fast) : "mock cortex (no LLM)", clientConfig().integrations);
   }
 
   async function backendWarm(): Promise<void> {
@@ -227,6 +259,12 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
     consolidator.stop();
     wispr.stop();
     await engine.shutdown();
+    // an answer being written must not find the database closed under it (bounded: a hung call must not hold a shutdown)
+    if (pendingRecall.size) {
+      let giveUp: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([Promise.allSettled([...pendingRecall]), new Promise((r) => (giveUp = setTimeout(r, 3000)))]);
+      clearTimeout(giveUp);
+    }
     metrics.flush();
     hub.closeAll();
     await fastify.close();

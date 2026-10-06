@@ -6,40 +6,66 @@ import { matchPauseIntent, percentile } from "@synapse/shared";
 import { REPO_ROOT, loadConfig } from "../config";
 import { Db } from "../memory/db";
 import { STAGES, stagesOf, type LatencyRow } from "../metrics/latency";
-import { ephemeralApp, parseArgs } from "./common";
+import { ephemeralApp, intFlag, liveEnv, liveProvider, parseArgs, patience, sharedGroqClient, spreadBy } from "./common";
 import { speak } from "./replay-lib";
 
 /**
- * pnpm bench [--live] [--runs 2] [--out docs/LATENCY.md]
+ * pnpm bench [--live] [--runs 2] [--out docs/LATENCY.md] [--limit N] [--budget R]
  * Replays the intent corpora through the REAL pipeline (embed → triage → stitch → first paint → cortex → artifact)
  * and documents per-stage timing. Without a Wispr key the Wispr stage cannot be measured here; real captured
  * sessions (data/synapse.db latency table) are appended when present.
+ *   --limit N   replay at most N threads per run (sampled evenly across the corpora's categories)
+ *   --budget R  stop sending Groq requests after R (the rest fall back to the local cortex)
+ * A Groq run writes docs/LATENCY.groq.md (and latency.groq.csv) unless --out says otherwise: docs/LATENCY.md is the
+ * committed offline report. Between threads a Groq run waits for the token budget, so queueing for the free tier's
+ * tokens-per-minute limit does not pass as model latency.
  */
 const { flags } = parseArgs(process.argv.slice(2));
 const live = flags.live === true;
+const liveInfo = live ? liveProvider() : null;
+if (live && !liveInfo) {
+  console.error("bench --live needs a live LLM: set ANTHROPIC_API_KEY or GROQ_API_KEY (LLM_PROVIDER=anthropic|groq picks one when both exist) and turn LOCAL_ONLY off.");
+  process.exit(2);
+}
 const runs = Math.max(1, Number(flags.runs ?? 2));
-const outFile = path.resolve(REPO_ROOT, String(flags.out ?? "docs/LATENCY.md"));
-const csvFile = path.resolve(path.dirname(outFile), "latency.csv");
+const limit = intFlag(flags.limit);
+const budget = intFlag(flags.budget);
+const groq = liveInfo?.provider === "groq";
+const sharedGroq = sharedGroqClient(liveInfo?.provider, budget);
+const patient = patience(sharedGroq);
+const outFile = path.resolve(REPO_ROOT, String(flags.out ?? (groq ? "docs/LATENCY.groq.md" : "docs/LATENCY.md")));
+const csvFile = path.basename(outFile) === "LATENCY.md" ? path.resolve(path.dirname(outFile), "latency.csv") : outFile.replace(/\.md$/i, ".csv");
 
-interface Item { id: string; fragments: string[]; gaps?: number[] }
+interface Item { id: string; fragments: string[]; gaps?: number[]; expect?: { category: string } }
 const readJsonl = (f: string): Item[] => fs.readFileSync(path.join(REPO_ROOT, "eval", f), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Item);
-const items = [...readJsonl("intent_heldout.jsonl"), ...readJsonl("intent.jsonl")];
+const items = spreadBy([...readJsonl("intent_heldout.jsonl"), ...readJsonl("intent.jsonl")], limit, (it) => it.expect?.category ?? "");
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const rows: LatencyRow[] = [];
 const wall: number[] = [];
 let cacheHits = 0;
 let calls = 0;
+let degradedCalls = 0;
 for (let r = 0; r < runs; r++) {
-  const { ctx, stop } = await ephemeralApp({ LLM_MODE: live ? "live" : "mock", THREAD_CLOSE_MS: "100" });
+  const { ctx, stop } = await ephemeralApp({ LLM_MODE: live ? "live" : "mock", THREAD_CLOSE_MS: "100", ...liveEnv(liveInfo?.provider, budget) }, { groq: sharedGroq });
+  // wait until the free tier's token bucket can take a whole call (prompt + completion allowance), so the thread that follows measures the model, not the queue
+  const settleBudget = async (): Promise<void> => {
+    if (!ctx.groq) return;
+    for (let i = 0; i < 120 && ctx.groq.stats().bucketTokens < 3800; i++) await sleep(1000);
+  };
   // warm: the first call pays JIT, ONNX graph init and (live) schema compilation / cache writes
-  await speak(ctx, { fragments: ["warm up the pipeline"], sessionId: `warm-${r}` });
+  await settleBudget();
+  await speak(ctx, { fragments: ["warm up the pipeline"], sessionId: `warm-${r}`, beforeFragment: patient });
   await ctx.engine.finalizeAll();
   for (const it of items) {
+    await settleBudget();
     const t0 = performance.now();
-    await speak(ctx, { fragments: it.fragments, gaps: it.gaps, sessionId: `b${r}-${it.id}` });
+    await speak(ctx, { fragments: it.fragments, gaps: it.gaps, sessionId: `b${r}-${it.id}`, beforeFragment: patient });
     wall.push(performance.now() - t0);
     await ctx.engine.finalizeAll();
   }
+  for (const t of ctx.store.thoughts.values()) if (t.degraded) degradedCalls++;
+  await ctx.idleRecall();
   for (const row of ctx.metrics.rowsSnapshot()) {
     if (row.fragmentId.startsWith("warm-")) continue;
     rows.push(row);
@@ -70,9 +96,15 @@ const lines: string[] = [];
 const say = (s = "") => lines.push(s);
 say("# Latency benchmark");
 say();
-say(`Generated ${new Date().toISOString()} · cortex: **${live ? `live (${loadConfig().llm.fast})` : "offline mock (heuristics + local triage)"}** · ${rows.length} fragments over ${runs} run(s) · ${os.cpus()[0]?.model ?? "cpu"} · Node ${process.version}`);
+say(`Generated ${new Date().toISOString()} · cortex: **${liveInfo ? `live ${liveInfo.label}` : "offline mock (heuristics + local triage)"}** · ${rows.length} fragments over ${runs} run(s) · ${os.cpus()[0]?.model ?? "cpu"} · Node ${process.version}`);
 say();
-if (!live) say("> **Offline run.** The cortex stage here is the local heuristic cortex, so the end-to-end numbers show the pipeline overhead, not model latency. Run `pnpm bench --live` with `ANTHROPIC_API_KEY` for the real fragment→artifact numbers.");
+if (!live) say("> **Offline run.** The cortex stage here is the local heuristic cortex, so the end-to-end numbers show the pipeline overhead, not model latency. Run `pnpm bench --live` with `ANTHROPIC_API_KEY` (or `GROQ_API_KEY`) for the real fragment→artifact numbers.");
+else if (groq) {
+  const sampled = limit ? `${items.length} threads sampled across the categories` : "all threads";
+  say(
+    `> **Live run on Groq's free tier** (${liveInfo?.model}): the compact prompt of \`cortex/prompts-lite.ts\`, ${sampled}, and a wait for the token budget between threads so queueing for the 8,000 tokens-per-minute limit is not counted as model latency (in a live session a burst waits up to \`GROQ_MAX_WAIT_MS\` and then degrades to the local cortex). ${degradedCalls} thought(s) fell back to the local cortex in this run; ${sharedGroq?.stats().requestsToday ?? 0} request(s) were sent to Groq (free tier: 1,000 per day). Not the production Claude numbers.`,
+  );
+}
 say();
 say("## What each stage measures");
 say();
@@ -102,7 +134,7 @@ const first = stat(buckets.firstPaint ?? [0]);
 const art = stat(buckets.artifact ?? [0]);
 say(`**First paint:** p50 ${f(first.p50)} ms, p95 ${f(first.p95)} ms (budget ≤ 80 ms p50). **Fragment → complete artifact:** p50 ${f(art.p50)} ms, p95 ${f(art.p95)} ms (budget ≤ 1000 ms p50 for "incoherent vocalization → structured ticket in under a second", measured from Wispr's final text).`);
 say();
-if (live) say(`Prompt cache: ${cacheHits}/${calls} model calls were served with cached prompt tokens.`);
+if (live) say(`Prompt cache: ${cacheHits}/${calls} model calls were served with cached prompt tokens.${groq && cacheHits === 0 ? " (Groq's free tier reported no cached tokens: every call pays its whole prompt against the minute budget.)" : ""}`);
 say();
 say("## The honest end-to-end budget (voice → action)");
 say();
@@ -150,11 +182,13 @@ try {
 }
 say("## Method");
 say();
-say(`Items: ${items.length} threads (both intent corpora), each spoken as 1–3 fragments with realistic gaps, one thread at a time; \`${runs}\` run(s); a warm-up thread is excluded (JIT, ONNX graph init, schema compile, cache write). Timestamps are taken inside the pipeline: \`serverRecv\` → \`firstPaintEmit\` → \`llmStart/llmDone\` → \`artifactEmit\`. Reproduce with \`pnpm bench${live ? " --live" : ""}\`.`);
+say(`Items: ${items.length} threads (${limit ? "sampled from both intent corpora, --limit " + limit : "both intent corpora"}), each spoken as 1–3 fragments with realistic gaps, one thread at a time; \`${runs}\` run(s); a warm-up thread is excluded (JIT, ONNX graph init, schema compile, cache write). Timestamps are taken inside the pipeline: \`serverRecv\` → \`firstPaintEmit\` → \`llmStart/llmDone\` → \`artifactEmit\`. Reproduce with \`pnpm bench${live ? " --live" : ""}\`.`);
 
 fs.mkdirSync(path.dirname(outFile), { recursive: true });
 fs.writeFileSync(outFile, lines.join("\n") + "\n");
 fs.writeFileSync(csvFile, ["fragment_id,transport,model,cached_tokens," + STAGES.join(","), ...rows.map((r) => { const st = stagesOf(r); return [r.fragmentId, r.transport, r.model ?? "", r.cachedTokens ?? "", ...STAGES.map((s) => (st[s] !== undefined ? Math.round(st[s] as number) : ""))].join(","); })].join("\n") + "\n");
 console.log(lines.join("\n"));
 console.log(`\nwrote ${path.relative(REPO_ROOT, outFile)} and ${path.relative(REPO_ROOT, csvFile)}`);
+// let the HTTP connections of a live run go quiet before exiting (an immediate process.exit right after a fetch trips a libuv assertion on Windows)
+if (live) await new Promise((r) => setTimeout(r, 1500));
 process.exit(0);

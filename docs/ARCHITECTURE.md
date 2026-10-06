@@ -26,7 +26,7 @@ flowchart LR
       direction TB
       E1["embed (local MiniLM 384-d)"] --> E2["control intents<br/>pause / forget"] --> E3["local triage<br/>kNN + cues → FIRST PAINT"]
       E3 --> E4["thought stitcher<br/>(pauses are thinking)"] --> E5["reference resolver<br/>'that thing' → candidates"]
-      E5 --> E6["Claude: stream + strict schema<br/>or mock cortex"] --> E7["apply: split / merge / correct<br/>entities · edges · artifact · salience"]
+      E5 --> E6["Claude (or Groq): stream + schema<br/>or mock cortex"] --> E7["apply: split / merge / correct<br/>entities · edges · artifact · salience"]
     end
     ENG <--> MEM[("Encrypted memory<br/>SQLite + AES-256-GCM<br/>working 72 h · long-term<br/>per-day keys, crypto-shredding")]
     MEM --- KG["Knowledge graph<br/>sessions · thoughts · entities · decisions"]
@@ -44,7 +44,7 @@ flowchart LR
   WTOK -->|"generate_access_token (org key never leaves)"| WISPR
   MEM -->|"self-healing dictionary + last 6 fragments"| WTOK
   WTOK -->|"wispr.context / wispr.token"| WS
-  E6 <-->|"redacted text only"| CLAUDE[("Claude API<br/>Haiku 4.5 hot path · Opus 5.5 recall/brief")]
+  E6 <-->|"redacted text only"| CLAUDE[("Claude API<br/>Haiku 4.5 hot path · Opus 5.5 recall/brief<br/>or Groq (free tier): Qwen3.8-27B · gpt-oss-120B")]
   REC <-->|"redacted"| CLAUDE
   OUT --> GH[("GitHub / Jira")]
 ```
