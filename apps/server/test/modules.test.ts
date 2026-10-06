@@ -127,7 +127,12 @@ describe("wispr service", () => {
     expect((init!.headers as Record<string, string>).Authorization).toBe("Bearer fl-test123"); // no double "Bearer"
     expect(JSON.parse(String(init!.body))).toMatchObject({ client_id: "desk-1", duration_secs: 900 });
     await svc.token("desk-1");
-    expect(fetchMock).toHaveBeenCalledTimes(1); // cached
+    expect(fetchMock).toHaveBeenCalledTimes(1); // burst reuse inside the short window
+    await svc.token("desk-1", true);
+    expect(fetchMock).toHaveBeenCalledTimes(2); // force always mints a fresh token
+    clock.advance(WisprService.REUSE_WINDOW_MS + 1_000);
+    await svc.token("desk-1");
+    expect(fetchMock).toHaveBeenCalledTimes(3); // an older cached token is never re-served (it may be the rejected one)
     vi.stubGlobal("fetch", vi.fn(async () => new Response("no", { status: 401 })));
     const bad = await new WisprService({ cfg, store, clock, anyListening: () => true }).token("x");
     expect(bad.error).toMatch(/401/);

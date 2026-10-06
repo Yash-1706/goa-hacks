@@ -154,7 +154,11 @@ export const MetricsBatterySchema = z.object({
   charging: z.boolean().optional(),
 });
 
-export const WisprTokenRequestSchema = z.object({ type: z.literal("wispr.token.request") });
+export const WisprTokenRequestSchema = z.object({
+  type: z.literal("wispr.token.request"),
+  /** mint a fresh token even if a recent one is cached (sent after Wispr rejected the previous one) */
+  force: z.boolean().optional(),
+});
 
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   HelloSchema,

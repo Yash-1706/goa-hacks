@@ -16,6 +16,9 @@ import { toIcs } from "./calendar";
  * handed to the user (mailto: / copy).
  * ========================================================================== */
 
+/** every call to an external service is bounded: a hung GitHub/Jira must not hang the tap that triggered it */
+const HTTP_TIMEOUT_MS = 10_000;
+
 export const EXTERNAL_KINDS: ReadonlySet<ArtifactKind> = new Set<ArtifactKind>(["ticket", "github_issue", "calendar_event"]);
 
 export interface PushResult {
@@ -185,6 +188,7 @@ export class Outbox {
     const res = await fetch(`https://api.github.com/repos/${repo}/issues`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "synapse-hackathon", "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
       body: JSON.stringify({ title: p.title, body, labels: p.labels }),
     });
     if (!res.ok) throw new Error(`GitHub ${res.status}: ${(await res.text()).slice(0, 160)}`);
@@ -199,6 +203,7 @@ export class Outbox {
     await fetch(`https://api.github.com/repos/${repo}/issues/${m[1]}`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "synapse-hackathon", "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
       body: JSON.stringify({ state: "closed", state_reason: "not_planned" }),
     });
   }
@@ -212,6 +217,7 @@ export class Outbox {
     const res = await fetch(`${j.baseUrl}/rest/api/3/issue`, {
       method: "POST",
       headers: { Authorization: `Basic ${Buffer.from(`${j.email}:${j.token}`).toString("base64")}`, Accept: "application/json", "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
       body: JSON.stringify({
         fields: {
           project: { key: j.projectKey },

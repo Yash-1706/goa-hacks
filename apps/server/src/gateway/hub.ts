@@ -316,7 +316,7 @@ export class WsHub implements Hub {
         this.s.battery.add({ deviceId: id, ts: this.s.clock.now(), mode: msg.mode, cpuMs: msg.cpuMs, radioMs: msg.radioMs, bytesUp: msg.bytesUp, windowMs: msg.windowMs, level: msg.level, charging: msg.charging });
         return;
       case "wispr.token.request": {
-        this.sendTo(id, await this.s.wispr.token(id));
+        this.sendTo(id, await this.s.wispr.token(id, msg.force === true));
         this.sendTo(id, this.s.wispr.context(id, c.info.sessionId));
         return;
       }

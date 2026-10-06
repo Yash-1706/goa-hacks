@@ -19,7 +19,7 @@ type TokenMsg = Extract<ServerMessage, { type: "wispr.token" }>;
 type ContextMsg = Extract<ServerMessage, { type: "wispr.context" }>;
 
 export class WisprService {
-  private cache = new Map<string, { token: string; expiresAt: number }>();
+  private cache = new Map<string, { token: string; expiresAt: number; mintedAt: number }>();
   private warmTimer?: ReturnType<typeof setInterval>;
   lastWarm?: { at: number; ok: boolean; ms: number };
 
@@ -41,14 +41,21 @@ export class WisprService {
     return { wsUrl: `${base.replace(/^http/, "ws")}/client_ws`, restUrl: `${base}/client_api` };
   }
 
-  async token(deviceId: string): Promise<TokenMsg> {
+  /**
+   * A client only asks for a token when its own copy is missing, near expiry or was REJECTED, so serving an
+   * old cached one risks handing back the very token Wispr just refused. Reuse is limited to a short burst
+   * window (two sockets starting together); `force` always mints a fresh token.
+   */
+  static readonly REUSE_WINDOW_MS = 20_000;
+
+  async token(deviceId: string, force = false): Promise<TokenMsg> {
     const { cfg, clock } = this.d;
     if (cfg.wispr.mode === "mock") return { type: "wispr.token", mode: "mock" };
     if (cfg.wispr.mode === "proxy") return { type: "wispr.token", mode: "proxy", error: "proxy mode is not implemented in this build; use WISPR_MODE=client" };
 
     const cached = this.cache.get(deviceId);
     const now = clock.now();
-    if (cached && cached.expiresAt - now > cfg.wispr.tokenTtlSecs * 1000 * 0.5) {
+    if (!force && cached && now - cached.mintedAt < WisprService.REUSE_WINDOW_MS && cached.expiresAt - now > cfg.wispr.tokenTtlSecs * 1000 * 0.5) {
       return { type: "wispr.token", mode: "client", token: cached.token, expiresAt: cached.expiresAt, ...this.endpoints() };
     }
     try {
@@ -65,7 +72,7 @@ export class WisprService {
       }
       const j = (await res.json()) as { access_token: string; expires_in: number };
       const expiresAt = now + (j.expires_in ?? cfg.wispr.tokenTtlSecs) * 1000;
-      this.cache.set(deviceId, { token: j.access_token, expiresAt });
+      this.cache.set(deviceId, { token: j.access_token, expiresAt, mintedAt: now });
       return { type: "wispr.token", mode: "client", token: j.access_token, expiresAt, ...this.endpoints() };
     } catch (err) {
       const msg = `Wispr token request failed: ${(err as Error).message}`;

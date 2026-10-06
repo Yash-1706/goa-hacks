@@ -34,7 +34,9 @@ cp .env.example .env     # then edit (never commit it)
 Before a demo: `pnpm --filter @synapse/server warm-models` (caches the local embedding model so it works offline).
 
 ### Phone ("Pocket mode")
-Phones need HTTPS for the microphone. In PowerShell: `$env:HTTPS=1; pnpm dev:web`, open `https://<laptop-ip>:5173/pocket`, accept the self-signed certificate warning once, and enter the **6-digit pairing code** printed in the server console. Capture is foreground-only (iOS/Android suspend web audio in the background), so Pocket keeps the screen awake.
+Phones need HTTPS for the microphone. In PowerShell: `$env:HTTPS=1; pnpm dev:web`, open `https://<laptop-ip>:5173/pocket`, accept the self-signed certificate warning once, and enter the **6-digit pairing code** printed in the server console (a paired phone stays paired across restarts). Capture is foreground-only (iOS/Android suspend web audio in the background), so Pocket keeps the screen awake.
+
+*Phone can't connect?* Allow Node.js through the Windows firewall on **private** networks (ports 5173 and 8787), put the phone and laptop on the same Wi-Fi (venue Wi-Fi often isolates clients: use a phone hotspot), and use the laptop's LAN address, not `localhost`. Browsers on public websites cannot reach the API: only local/private-network origins are accepted.
 
 ## Commands
 

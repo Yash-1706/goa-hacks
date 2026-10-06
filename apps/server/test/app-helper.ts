@@ -31,7 +31,7 @@ export interface SayOpts {
 }
 
 /** A fully wired app (in-memory DB, real MiniLM embeddings, mock cortex) on a controllable clock. */
-export async function makeApp(env: Record<string, string> = {}, start = "2026-10-06T10:00:00+05:30"): Promise<TestApp> {
+export async function makeApp(env: Record<string, string> = {}, start = "2026-10-06T10:00:00+05:30", dbFile = ":memory:"): Promise<TestApp> {
   const clock = new FakeClock(Date.parse(start));
   const cfg = loadConfig({
     DATA_DIR: path.join(os.tmpdir(), `synapse-test-${randomBytes(4).toString("hex")}`),
@@ -42,7 +42,7 @@ export async function makeApp(env: Record<string, string> = {}, start = "2026-10
     SUGGESTION_MIN_GAP_S: "0",
     ...env,
   });
-  const { ctx, stop } = await createApp(cfg, { dbFile: ":memory:", clock, embedder: await modelEmbedder(), kek: randomBytes(32), quiet: true });
+  const { ctx, stop } = await createApp(cfg, { dbFile, clock, embedder: await modelEmbedder(), kek: randomBytes(32), quiet: true });
   const sent: ServerMessage[] = [];
   const orig = ctx.hub.broadcast.bind(ctx.hub);
   ctx.hub.broadcast = (m: ServerMessage) => {
