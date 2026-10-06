@@ -105,10 +105,11 @@ describe("memory stays consistent through a messy day", () => {
       expect(bad, bad.slice(0, 8).join("\n")).toEqual([]);
 
       // five hours on, the TTL sweep may only remove recall questions: nothing else is anywhere near its 72 h
-      const before = [...app.ctx.store.thoughts.values()].filter((t) => t.category !== "recall_query").map((t) => t.id);
+      const mem = app.ctx.store;
+      const before = [...mem.thoughts.values()].filter((t) => t.category !== "recall_query").map((t) => t.id);
       app.clock.advance(5 * HOUR);
-      app.ctx.store.sweep();
-      const lost = before.filter((id) => !app.ctx.store.thoughts.has(id));
+      mem.sweep();
+      const lost = before.filter((id) => !mem.thoughts.has(id));
       expect(lost, `${lost.length} non-recall thoughts vanished in a 5 h sweep`).toEqual([]);
       expect(consistency(app).filter((m) => !m.includes("still"))).toEqual([]);
     }, 240_000);
