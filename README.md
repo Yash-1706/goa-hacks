@@ -45,6 +45,7 @@ Phones need HTTPS for the microphone. In PowerShell: `$env:HTTPS=1; pnpm dev:web
 | `pnpm dev` | server + web together |
 | `pnpm test` / `pnpm typecheck` | all tests / all type checks |
 | `pnpm replay scripts/replay/s1_bug.json [--speed 4] [--local]` | play a scripted ramble into the running server (watch the UI), or in-process |
+| `pnpm wispr:check [--rest] [--idle 60]` | the first thing to run once a Wispr key exists: speaks a synthetic sentence through the real token path and streamer and reports the Wispr wire assumptions as PASS / FAIL / UNKNOWN |
 | `pnpm seed [--reset]` | write ~8 backdated sessions (development aid; **the live demo should use real dogfooded sessions**) |
 | `pnpm eval [--live]` | score intent, control phrases, reference resolution, recall, nonsense robustness → `docs/EVAL.md` |
 | `pnpm bench [--live]` | per-stage latency benchmark → `docs/LATENCY.md`, `docs/latency.csv` |

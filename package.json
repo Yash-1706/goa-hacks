@@ -18,7 +18,8 @@
     "replay": "pnpm --filter @synapse/server replay",
     "seed": "pnpm --filter @synapse/server seed",
     "eval": "pnpm --filter @synapse/server eval",
-    "bench": "pnpm --filter @synapse/server bench"
+    "bench": "pnpm --filter @synapse/server bench",
+    "wispr:check": "pnpm --filter @synapse/server exec tsx ../web/scripts/wispr-check.ts"
   },
   "devDependencies": {
     "concurrently": "^10.0.5"

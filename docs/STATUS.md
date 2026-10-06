@@ -13,7 +13,7 @@
 | 1 | Put `ANTHROPIC_API_KEY=…` in `.env` (gitignored) | live Claude cortex + DEEP (Opus) recall answers, briefs, consolidation | top-bar chip changes from `mock · wispr + llm` to `live`; Lab → latency shows `llm` stages |
 | 2 | Put `WISPR_API_KEY=…` and `WISPR_MODE=client` in `.env` (API access is granted by the organisers) | real transcription from the microphone | chip shows `wispr client`; the Lab diagnostics list standby/latency events |
 | 3 | `pnpm eval --live` and `pnpm bench --live`, once | the real model's accuracy and latency in `docs/EVAL.md` / `docs/LATENCY.md` (today they describe the **offline** cortex and say so) | the banner "Mock mode" disappears from both reports |
-| 4 | Say the 12 "unverified assumptions" through once (`apps/web/src/audio/README.md`) | confirms the Wispr wire details we implemented from the documentation | Lab diagnostics show `standby ready` without `assumed`, and no `fallback` events |
+| 4 | Run `pnpm wispr:check` (server in `WISPR_MODE=client`; 15 s, no microphone needed), then do one real spoken run | confirms the Wispr wire details we implemented from the documentation: the check reports items 1-6 of `apps/web/src/audio/README.md` as PASS / FAIL with evidence; the spoken run covers CORS, whispers and phones | every line PASS; Lab diagnostics show `standby ready` without `assumed`, and no `fallback` events |
 | 5 | `GITHUB_TOKEN` + `GITHUB_REPO=owner/sandbox` (fine-grained token, Issues: write) | a real issue when you tap Push or when L3 fires | the card shows a real issue link, not `GH-101 (simulated)` |
 | 6 | Phone: `HTTPS=1 pnpm dev:web`, open the printed LAN URL, enter the pairing code | Pocket mode on a real device | README → "Phone" has the firewall and certificate steps |
 
