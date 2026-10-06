@@ -112,6 +112,24 @@ export class MemoryStore {
     });
   }
 
+  /**
+   * After a restart nothing is in flight any more, so a thought that was still open (or still showing its first-paint
+   * card) when the process stopped would stay "analyzing" forever and never be summarised or recalled. It is as final as
+   * it is going to get.
+   */
+  recoverUnfinished(): number {
+    let n = 0;
+    for (const t of this.thoughts.values()) {
+      if (t.status === "final" && !t.provisional) continue;
+      t.status = "final";
+      t.provisional = false;
+      this.saveThought(t);
+      n++;
+    }
+    if (n) log.info("store", "finalized thoughts that were still open at shutdown", { thoughts: n });
+    return n;
+  }
+
   private async reembedAll(): Promise<void> {
     const frs = [...this.frags.values()];
     for (let i = 0; i < frs.length; i += 32) {

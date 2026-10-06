@@ -103,6 +103,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   const embedder = opts.embedder ?? (await createEmbedder({ mode: cfg.embeddings.mode, model: cfg.embeddings.model, dataDir: cfg.embeddings.cacheDir }));
   const store = new MemoryStore(db, vault, embedder, clock, cfg.memory.ttlHours);
   await store.init();
+  store.recoverUnfinished();
   const audit = new AuditChain(db, clock);
   store.audit = (event, ref, count) => audit.append(event, ref, count);
   store.onExpired = (id) => {
