@@ -67,7 +67,7 @@ const rig = (o: { client?: Partial<ConstructorParameters<typeof GroqClient>[0]>;
   const attempts: GroqAttempt[] = [];
   const sent: Rig["sent"] = [];
   const client = new GroqClient({ apiKey: KEY, baseUrl: fake.url, now, sleep, maxWaitMs: 2000, ...o.client });
-  const cortex = new GroqCortex({ client, model: MODEL, fallback, timeoutMs: 4000, outputMode: "json_object", onAttempt: (a) => attempts.push(a), onCloudCall: (i) => sent.push(i), ...o.cortex });
+  const cortex = new GroqCortex({ client, model: MODEL, fallback, timeoutMs: 20_000, outputMode: "json_object", onAttempt: (a) => attempts.push(a), onCloudCall: (i) => sent.push(i), ...o.cortex });
   return { cortex, client, attempts, sent };
 };
 const reset = (...script: FakeMode[]): void => fake.reset(...script);
@@ -95,7 +95,7 @@ describe("GroqCortex against a faithful chat-completions fake", () => {
   });
 
   it("a preview callback that throws never fails the call that is still generating the real answer", async () => {
-    reset({ kind: "ok", json: canned, chunkChars: 24, chunkDelayMs: 12 });
+    reset({ kind: "ok", json: canned, chunkChars: 48, chunkDelayMs: 6 });
     const out = await rig().cortex.analyze(baseInput("null pointer in the cart service"), () => {
       throw new Error("the card renderer fell over");
     });

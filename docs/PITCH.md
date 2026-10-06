@@ -25,7 +25,7 @@
 | Proactive without being creepy | WHY line on every suggestion · only at ≥1.2 s of silence · thresholds adapt on dismiss (`/lab`) |
 | Recall by vague, time/place-constrained query | `/recall` constraint chips · `/graph` · recall eval |
 | Privacy is architecture, not a promise | `/privacy` ledger, key list, audit verify · `docs/PRIVACY_WHITEPAPER.md` |
-| It survives chaos | scripted nonsense ramble creates 0 spurious artifacts · 130+ automated tests · every failure has a fallback (`docs/FAILURE_MODES.md`) |
+| It survives chaos | scripted nonsense ramble creates 0 spurious artifacts · 890+ automated tests · every failure has a fallback (`docs/FAILURE_MODES.md`) |
 
 ## Likely judge questions
 

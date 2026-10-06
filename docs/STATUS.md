@@ -4,7 +4,7 @@
 
 **Legend** · ✅ the acceptance criterion is verified in this repo (automated test or a generated report, named in the last column) · 🔶 built and unit-tested, but the criterion itself needs a live key, a real voice or a real phone · ⬜ designed, not built
 
-**Test inventory** (`pnpm test`): `@synapse/server` __SERVER_TESTS__ · `@synapse/web` __WEB_TESTS__ · typecheck clean on all three packages (`pnpm typecheck`). The tests that guard the claims most likely to be doubted were checked the hard way: the local-only test fails when the local-only router is removed, the GitHub test fails when an API header is changed, and the audio tests run against a fake Wispr that is itself proven to reject protocol violations (`fake-wispr.integration.test.ts`).
+**Test inventory** (`pnpm test`): `@synapse/server` 225 tests in 20 files · `@synapse/web` 669 tests in 42 files · typecheck clean on all three packages (`pnpm typecheck`). The tests that guard the claims most likely to be doubted were checked the hard way: the local-only test fails when the local-only router is removed, the GitHub test fails when an API header is changed, and the audio tests run against a fake Wispr that is itself proven to reject protocol violations (`fake-wispr.integration.test.ts`).
 
 ## What a human has to add (nothing below can be done from inside this repository)
 

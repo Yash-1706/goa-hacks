@@ -1,8 +1,8 @@
 # Latency benchmark
 
-Generated 2026-10-06T15:30:11.677Z · cortex: **offline mock (heuristics + local triage)** · 149 fragments over 1 run(s) · AMD Ryzen 5 6600H with Radeon Graphics          · Node v25.2.1
+Generated 2026-10-06T19:18:27.234Z · cortex: **offline mock (heuristics + local triage)** · 298 fragments over 2 run(s) · AMD Ryzen 5 6600H with Radeon Graphics          · Node v25.2.1
 
-> **Offline run.** The cortex stage here is the local heuristic cortex, so the end-to-end numbers show the pipeline overhead, not model latency. Run `pnpm bench --live` with `ANTHROPIC_API_KEY` for the real fragment→artifact numbers.
+> **Offline run.** The cortex stage here is the local heuristic cortex, so the end-to-end numbers show the pipeline overhead, not model latency. Run `pnpm bench --live` with `ANTHROPIC_API_KEY` (or `GROQ_API_KEY`) for the real fragment→artifact numbers.
 
 ## What each stage measures
 
@@ -19,12 +19,12 @@ Generated 2026-10-06T15:30:11.677Z · cortex: **offline mock (heuristics + local
 
 | stage | n | p50 | p95 | max |
 |---|---:|---:|---:|---:|
-| triage | 145 | 12.0 | 19.0 | 26.0 |
-| firstPaint | 145 | 12.0 | 19.0 | 26.0 |
-| cortex | 132 | 4.0 | 6.0 | 9.0 |
-| artifact | 132 | 27.0 | 38.0 | 79.0 |
+| triage | 290 | 10.0 | 15.0 | 21.0 |
+| firstPaint | 290 | 10.0 | 15.0 | 21.0 |
+| cortex | 264 | 4.0 | 6.0 | 9.0 |
+| artifact | 264 | 22.0 | 31.0 | 114 |
 
-**First paint:** p50 12.0 ms, p95 19.0 ms (budget ≤ 80 ms p50). **Fragment → complete artifact:** p50 27.0 ms, p95 38.0 ms (budget ≤ 1000 ms p50 for "incoherent vocalization → structured ticket in under a second", measured from Wispr's final text).
+**First paint:** p50 10.0 ms, p95 15.0 ms (budget ≤ 80 ms p50). **Fragment → complete artifact:** p50 22.0 ms, p95 31.0 ms (budget ≤ 1000 ms p50 for "incoherent vocalization → structured ticket in under a second", measured from Wispr's final text).
 
 
 ## The honest end-to-end budget (voice → action)
@@ -34,13 +34,13 @@ Generated 2026-10-06T15:30:11.677Z · cortex: **offline mock (heuristics + local
 | VAD end-of-speech redemption | 480 ms | tunable 300–900 ms; shorter = more fragments (the stitcher merges them) |
 | Wispr commit → final text | *unmeasured* | pre-authenticated standby socket removes connect+auth from the path; needs a live key |
 | Wispr → server (WebSocket hop) | ~10–40 ms LAN | clock-offset corrected per device |
-| Server: embed + triage → first card | **12.0 ms** | measured above |
-| Server: complete artifact | **27.0 ms** | offline cortex; the live number is dominated by model generation |
+| Server: embed + triage → first card | **10.0 ms** | measured above |
+| Server: complete artifact | **22.0 ms** | offline cortex; the live number is dominated by model generation |
 
 ## Pause path ("pause memory")
 
-Client-side phrase matcher: p50 1040 µs, p95 4356 µs per utterance (2000 samples). The microphone is released the moment Wispr returns the phrase's text; the browser pipeline reports the end-of-phrase → mic-released latency (`pause` stage) when run with a live key. The server backstop (semantic match) adds one embedding (~5 ms).
+Client-side phrase matcher: p50 1123 µs, p95 4002 µs per utterance (2000 samples). The microphone is released the moment Wispr returns the phrase's text; the browser pipeline reports the end-of-phrase → mic-released latency (`pause` stage) when run with a live key. The server backstop (semantic match) adds one embedding (~5 ms).
 
 ## Method
 
-Items: 127 threads (both intent corpora), each spoken as 1–3 fragments with realistic gaps, one thread at a time; `1` run(s); a warm-up thread is excluded (JIT, ONNX graph init, schema compile, cache write). Timestamps are taken inside the pipeline: `serverRecv` → `firstPaintEmit` → `llmStart/llmDone` → `artifactEmit`. Reproduce with `pnpm bench`.
+Items: 127 threads (both intent corpora), each spoken as 1–3 fragments with realistic gaps, one thread at a time; `2` run(s); a warm-up thread is excluded (JIT, ONNX graph init, schema compile, cache write). Timestamps are taken inside the pipeline: `serverRecv` → `firstPaintEmit` → `llmStart/llmDone` → `artifactEmit`. Reproduce with `pnpm bench`.
