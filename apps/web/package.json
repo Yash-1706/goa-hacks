@@ -1,0 +1,37 @@
+{
+  "name": "@synapse/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ricky0123/vad-web": "^0.0.31",
+    "@synapse/shared": "workspace:*",
+    "lucide-react": "^1.52.0",
+    "motion": "^14.0.0",
+    "onnxruntime-web": "1.30.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-force-graph-2d": "^1.29.2",
+    "react-router-dom": "^7.18.4",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3",
+    "vite-plugin-pwa": "^2.0.0",
+    "vite-plugin-static-copy": "^4.1.1",
+    "vitest": "^5.0.3"
+  }
+}

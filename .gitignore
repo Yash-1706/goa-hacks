@@ -1,0 +1,26 @@
+node_modules/
+dist/
+.vite/
+coverage/
+
+# runtime data: encrypted DB, keys, model cache, calendar
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# secrets
+.env
+.env.*
+!.env.example
+certs/
+
+# audio must never be committed or written
+*.wav
+*.pcm
+*.webm
+*.ogg
+
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm 10 blocks dependency build scripts unless allow-listed.
+onlyBuiltDependencies:
+  - esbuild
+  - onnxruntime-node
+  - sharp

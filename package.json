@@ -1,0 +1,26 @@
+{
+  "name": "synapse",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Synapse: ambient cognitive offloading (second brain) built on Wispr Flow",
+  "type": "module",
+  "packageManager": "pnpm@10.28.2",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c cyan,magenta \"pnpm --filter @synapse/server dev\" \"pnpm --filter @synapse/web dev\"",
+    "dev:server": "pnpm --filter @synapse/server dev",
+    "dev:web": "pnpm --filter @synapse/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "replay": "pnpm --filter @synapse/server replay",
+    "seed": "pnpm --filter @synapse/server seed",
+    "eval": "pnpm --filter @synapse/server eval",
+    "bench": "pnpm --filter @synapse/server bench"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}
