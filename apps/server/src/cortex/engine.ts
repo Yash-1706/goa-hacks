@@ -611,7 +611,8 @@ export class CortexEngine {
     t.redactions = out.redactions;
     t.degraded = out.degraded;
     t.version += 1;
-    [t.emb] = await embedder.embed([`${t.title}. ${t.intent}`], "passage") as [Float32Array];
+    // the gist is what the thought MEANS: a display-only "…" (clipped title) must not leak into the embedding
+    [t.emb] = await embedder.embed([`${t.title.replace(/…$/, "")}. ${t.intent}`], "passage") as [Float32Array];
     th.lastResult = r;
 
     // entities → knowledge graph + self-healing dictionary
@@ -624,8 +625,13 @@ export class CortexEngine {
     // artifact
     await this.applyArtifact(t, r.artifact);
 
-    // recall queries are ephemeral: short retention, never promoted
-    if (r.category === "recall_query" && !t.promoted) t.expiresAt = clock.now() + 30 * 60_000;
+    // recall queries are ephemeral: short retention, never promoted. A thought that merely STARTED as one (the first
+    // fragment sounded like a question, the thread then became a decision) must get its normal retention back,
+    // otherwise it would silently expire half an hour later.
+    if (!t.promoted) {
+      if (r.category === "recall_query") store.setRetention(t, Math.min(t.expiresAt ?? Infinity, clock.now() + 30 * 60_000));
+      else store.setRetention(t, Math.max(t.expiresAt ?? 0, store.workingExpiry(t.createdAt)));
+    }
 
     // interim salience (final value computed at finalize)
     const sal = computeSalience(store, embedder, t);

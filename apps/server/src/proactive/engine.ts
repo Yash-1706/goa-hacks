@@ -348,11 +348,13 @@ export class ProactiveEngine implements ProactiveApi {
       if (embedder.calibrate(dot(t.emb, o.emb)) < T.decisionTopic) continue;
       const key = `contradiction:${o.id}:${t.id}`;
       if (this.queue.some((q) => q.key === key)) return;
+      // say what the earlier thought actually was: a decision, or only something being considered
+      const earlier = (oa.payload as ArtifactOf<"decision">).status === "decided" ? "you chose" : "you were considering";
       this.enqueue({
         kind: "contradiction",
         key,
         title: `Decision changed: ${before} → ${now}`,
-        body: `${this.when(o.createdAt)} you chose ${before}. Now you're leaning ${now}. Revisit?`,
+        body: `${this.when(o.createdAt)} ${earlier} ${before}. Now you're leaning ${now}. Revisit?`,
         why: `Two decisions on the same topic disagree (${o.code} vs ${t.code}).`,
         value: 0.8,
         sources: [this.src(o), this.src(t)],

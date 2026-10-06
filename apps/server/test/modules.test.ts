@@ -268,7 +268,7 @@ describe("consolidation (sleep cycle)", () => {
     await app.say("There's a null pointer exception in the cart service when applying a discount code", { session: "A" });
     await app.settle();
     app.clock.advance(20 * 3600_000);
-    await app.say("The cart service discount code validator needs a regression test", { session: "B" });
+    await app.say("The discount code validator in the cart service still throws that null pointer exception", { session: "B" });
     await app.settle();
     app.ctx.store.endSession("A");
     app.ctx.store.endSession("B");

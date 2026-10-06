@@ -74,6 +74,46 @@ describe("fragment → structure (problem statement examples)", () => {
     expect(art.chosen?.toLowerCase()).toContain("oauth");
   });
 
+  it("a thread that STARTS like a question but becomes a decision keeps its normal 72 h retention (it must not expire as a recall query)", async () => {
+    app = await makeApp();
+    const sweepAfter = async (ms: number) => {
+      app!.clock.advance(ms);
+      return app!.ctx.store.sweep();
+    };
+    await app.say("Hmm, the auth module needs a decision");
+    // the first fragment alone really is analysed as a recall-style question (that is what makes this scenario)
+    expect(app.thoughts()[0]!.category).toBe("recall_query");
+    await app.say("JWT with a short expiry or OAuth2 with PKCE", { gapMs: 2200 });
+    await app.say("I'm leaning towards JWT because it's simpler", { gapMs: 1800 });
+    await app.settle();
+
+    const t = [...app.ctx.store.thoughts.values()].find((x) => x.category === "decision")!;
+    expect(t).toBeTruthy();
+    expect(t.expiresAt).toBeGreaterThanOrEqual(t.createdAt + app.ctx.cfg.memory.ttlHours * HOUR);
+    for (const f of app.ctx.store.fragmentsOf(t)) expect(f.expiresAt).toBe(t.expiresAt);
+    if (t.artifactId) expect(app.ctx.store.artifacts.get(t.artifactId)!.expiresAt).toBe(t.expiresAt);
+
+    // five hours later the sleep cycle's TTL sweep must still find it
+    await sweepAfter(5 * HOUR);
+    expect(app.ctx.store.thoughts.has(t.id)).toBe(true);
+    // and it expires only when the real TTL is up
+    await sweepAfter((app.ctx.cfg.memory.ttlHours + 1) * HOUR);
+    expect(app.ctx.store.thoughts.has(t.id)).toBe(false);
+  });
+
+  it("a real recall question stays ephemeral (30 minutes) and is never promoted", async () => {
+    app = await makeApp();
+    await app.say("What was that idea I had about caching last Tuesday while I was walking?");
+    await app.settle();
+    const q = [...app.ctx.store.thoughts.values()].find((x) => x.category === "recall_query")!;
+    expect(q).toBeTruthy();
+    expect(q.promoted).toBe(false);
+    expect(q.expiresAt! - app.clock.now()).toBeLessThanOrEqual(30 * 60_000 + 1000);
+    app.clock.advance(31 * 60_000);
+    app.ctx.store.sweep();
+    expect(app.ctx.store.thoughts.has(q.id)).toBe(false);
+  });
+
   it("filters asides without storing them", async () => {
     app = await makeApp();
     await app.say("Wait, was that my phone?");

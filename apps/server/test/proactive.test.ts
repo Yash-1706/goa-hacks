@@ -53,6 +53,37 @@ describe("contradiction", () => {
   });
 });
 
+describe("contradiction from a plain-spoken leaning (no self-repair needed)", () => {
+  it("'Sarah suggested OAuth2' then 'I'm leaning towards JWT' → a revisit prompt that says what the earlier thought was", async () => {
+    app = await makeApp({}, "2026-10-04T10:00:00+05:30");
+    await app.say("Sarah suggested we use OAuth2 with PKCE for the mobile app login", { session: "A" });
+    await app.settle();
+    const sarah = [...app.ctx.store.thoughts.values()][0]!;
+    const sa = app.ctx.store.artifacts.get(sarah.artifactId!);
+    // a teammate's suggestion is recorded as a tentative leaning, never as the user's decision
+    if (sa?.kind === "decision") expect((sa.payload as { status: string }).status).toBe("tentative");
+
+    app.ctx.proactive.start();
+    app.clock.advance(26 * H);
+    await app.say("Hmm, the auth module needs a decision", { session: "B" });
+    await app.say("JWT with a short expiry or OAuth2 with PKCE", { gapMs: 2200, session: "B" });
+    await app.say("I'm leaning towards JWT because it's simpler", { gapMs: 1800, session: "B" });
+    await app.settle();
+    await wait(900);
+
+    const mine = [...app.ctx.store.thoughts.values()].find((t) => t.sessionId === "B")!;
+    expect(mine.category).toBe("decision");
+    const art = app.ctx.store.artifacts.get(mine.artifactId!)!;
+    expect(art.payload).toMatchObject({ kind: "decision", chosen: "JWT", status: "tentative" });
+
+    const s = app.suggestions().find((x) => x.kind === "contradiction");
+    expect(s, "a leaning that disagrees with an earlier thought on the same topic should be flagged").toBeTruthy();
+    expect(s!.title).toMatch(/OAuth2.*JWT/i);
+    expect(s!.body).toMatch(/you were considering OAuth2/); // not "you chose": it was Sarah's suggestion
+    app.ctx.proactive.stop();
+  });
+});
+
 describe("repeated pattern → reusable snippet", () => {
   it("notices the same code idea in two sessions and offers one reusable snippet", async () => {
     app = await makeApp({}, "2026-10-05T12:00:00+05:30");

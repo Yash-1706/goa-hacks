@@ -235,7 +235,9 @@ say(`Generated ${new Date().toISOString()} · cortex: **${live ? "live Claude" :
 say();
 say(live ? "> Live mode: results include real model behaviour and cost." : "> **Mock mode**: this measures the offline fallback path. Run `pnpm eval --live` with an `ANTHROPIC_API_KEY` for the real model numbers.");
 say();
-say("## 1a. Intent classification: held-out set (novel phrasings: the honest number)");
+say("## 1a. Intent classification: held-out set (phrasings that are not in the classifier's exemplars)");
+say();
+say("> Not a blind test: the same people wrote this set and the classifier, and the offline cue patterns were adjusted while an earlier run of it was in view. It is the more meaningful of the two intent numbers here because no sentence is shared with the exemplars, but real speech will be messier. The number that matters is the live model on speech nobody here wrote (`pnpm eval --live`, ideally on a teammate's phrasings).");
 say();
 const intent = await evalIntent("intent_heldout.jsonl");
 say();

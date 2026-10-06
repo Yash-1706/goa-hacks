@@ -83,6 +83,17 @@ export function extractRepairs(fragments: CortexFragment[]): Array<{ rejected: s
   return out;
 }
 
+/** "leaning towards JWT", "going with Redis", "let's use OAuth2", "Sarah suggested we use X", "decided on X" */
+const PICK_RE = /\b(leaning (?:towards?|to)|going (?:with|to use)|(?:let'?s|we(?:'ll| will| should)|i(?:'ll| will| should)|should) (?:go with|use|pick|take)|suggested (?:we )?(?:use|go with)|decided (?:on|to use|to go with)|settled on)\s+([A-Za-z0-9][\w.+#-]*)/i;
+const NOT_AN_OPTION = /^(the|a|an|it|that|this|some|our|my|your|their|something|one|both)$/i;
+
+export function pickedOption(text: string): { option: string; leaning: boolean; suggested: boolean } | null {
+  const m = PICK_RE.exec(text);
+  if (!m || NOT_AN_OPTION.test(m[2] as string)) return null;
+  const how = m[1] as string;
+  return { option: m[2] as string, leaning: /^leaning/i.test(how), suggested: /^suggested/i.test(how) };
+}
+
 const TECH = /\b(JWT|OAuth2?|PKCE|OIDC|SAML|Redis|Postgres(?:QL)?|MySQL|Mongo(?:DB)?|Kafka|RabbitMQ|SQS|GraphQL|REST|gRPC|React|Vue|Svelte|Next\.js|Node(?:\.js)?|TypeScript|Python|Go|Rust|Docker|Kubernetes|Terraform|Fastify|Express|SQLite|Elasticsearch|Stripe|Auth0|AWS|GCP|Azure|CI|CD)\b/g;
 const COMPONENT = /\b([a-z][a-z0-9]*(?:[- ](?:service|module|api|worker|queue|handler|endpoint|page|pipeline|job|server|client|library|lib)))\b/gi;
 const ISSUE = /\b(null pointer(?: exception)?|npe|race condition|memory leak|crash(?:es|ing)?|time ?outs?|exception|stale data|duplicate[sd]?|wrong (?:\w+ )?(?:total|value|timezone|date)|500 error|404|deadlock|infinite loop|flaky(?: test)?)\b/i;
@@ -247,8 +258,16 @@ function artifactFor(category: Category, ctx: {
       return { kind: "code_snippet", language: "typescript", approach: repairs[0]?.chosen ?? title, signature: null, code, explanation: `${intent} (heuristic sketch: replace the placeholder logic).`, needs_enrichment: false };
     }
     case "decision": {
-      const chosen = repairs.length ? (repairs[repairs.length - 1] as { chosen: string }).chosen : null;
-      return { kind: "decision", question: titleCase(`Which option for ${entities.find((e) => e.type !== "person")?.name ?? "this"}?`).replace(/Which option for (JWT|OAuth2?)\?/i, "Which auth approach?"), chosen, rejected: repairs.map((r) => r.rejected), rationale: null, status: chosen && !hedged ? "decided" : "tentative" };
+      const pick = repairs.length ? null : pickedOption(text);
+      const chosen = repairs.length ? (repairs[repairs.length - 1] as { chosen: string }).chosen : (pick?.option ?? null);
+      const rejected = repairs.length
+        ? repairs.map((r) => r.rejected)
+        : pick
+          ? distinct(entities.filter((e) => e.type === "technology" && fold(e.name) !== fold(pick.option)).map((e) => e.name)).filter((n) => /\b(or|vs|versus|instead)\b/i.test(text) && n.toLowerCase() !== "pkce").slice(0, 2)
+          : [];
+      // "leaning towards X" and "Sarah suggested X" are leanings, not decisions
+      const tentative = hedged || Boolean(pick && (pick.leaning || pick.suggested));
+      return { kind: "decision", question: titleCase(`Which option for ${entities.find((e) => e.type !== "person")?.name ?? "this"}?`).replace(/Which option for (JWT|OAuth2?)\?/i, "Which auth approach?"), chosen, rejected, rationale: null, status: chosen && !tentative ? "decided" : "tentative" };
     }
     case "idea":
       return { kind: "note", body: intent, tags: distinct(entities.map((e) => fold(e.name).split(" ")[0] as string)).slice(0, 3) };
@@ -295,9 +314,9 @@ function titleFor(category: Category, text: string, input: CortexInput, repairs:
     case "code":
       return titleCase(repairs[0]?.chosen ?? quickTitle(clean, 7));
     case "decision": {
+      const topic = /\b(jwt|oauth|session|token|auth)/i.test(text) ? "Auth" : titleCase(entities.find((e) => e.type !== "person")?.name ?? "Decision");
       if (repairs.length) {
         const r = repairs[repairs.length - 1] as { rejected: string; chosen: string };
-        const topic = /\b(jwt|oauth|session|token|auth)/i.test(text) ? "Auth" : titleCase(entities.find((e) => e.type !== "person")?.name ?? "Decision");
         return `${topic}: ${r.chosen} over ${r.rejected}`.slice(0, 80);
       }
       return quickTitle(clean, 9);

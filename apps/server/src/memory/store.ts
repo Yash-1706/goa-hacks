@@ -594,6 +594,26 @@ export class MemoryStore {
     this.db.run("DELETE FROM calendar_events WHERE id = ?", id);
   }
 
+  /** Change a working thought's retention, and that of everything that hangs off it. No-op once promoted. */
+  setRetention(t: ThoughtRec, expiresAt: number): void {
+    if (t.promoted || t.expiresAt === expiresAt) return;
+    t.expiresAt = expiresAt;
+    this.saveThought(t);
+    for (const f of this.fragmentsOf(t)) {
+      f.expiresAt = expiresAt;
+      P.saveFragment(this.db, this.vault, f);
+    }
+    const a = t.artifactId ? this.artifacts.get(t.artifactId) : undefined;
+    if (a) {
+      a.expiresAt = expiresAt;
+      P.saveArtifact(this.db, this.vault, a);
+    }
+    for (const o of this.loopsOf(t.id)) {
+      o.expiresAt = expiresAt;
+      P.saveOpenLoop(this.db, this.vault, o);
+    }
+  }
+
   // ------------------------------------------------------------- promotion --
 
   /** Move a thought (and everything that hangs off it) from working to long-term memory. */

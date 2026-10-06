@@ -47,7 +47,8 @@ export interface TextFeatures {
 
 const REPAIR_CUE = /\b(or no|no wait|no,? wait|wait no|actually|i mean|scratch that|rather|not that|no no|nahi|nahin|correction|sorry)\b/i;
 const REPAIR_START = /^(or no|no wait|no,? wait|wait no|actually|i mean|scratch that|rather|no no|no,|nahi|or,? maybe|or actually)\b/i;
-const CONNECTOR_START = /^(and|or|but|so|then|also|plus|because|which|that|the one|in the|on the|with the|probably|maybe)\b/i;
+// leading connectives AND anaphoric pronouns ("she also wants...", "it should retry...") continue the previous thought
+const CONNECTOR_START = /^(and|or|but|so|then|also|plus|because|which|that|the one|in the|on the|with the|probably|maybe|she|he|they|it|its|this|these|those|them|his|her|their)\b/i;
 const HEDGE = /\b(maybe|probably|perhaps|i think|i guess|might|could be|not sure|kind of|sort of|shayad)\b/i;
 const QUESTION_LEAD = /^(what|why|how|when|where|who|which|did|do|does|is|are|was|were|can|could|should|would|will)\b/i;
 const TRAILING_OPEN = /(\.\.\.|…|,|-|–)\s*$/;
@@ -102,7 +103,16 @@ export function editDistance(a: string, b: string): number {
   return (d[m] as number[])[n] as number;
 }
 
-/** A short working title from raw speech: drop fillers/leading connectors, keep ~8 content words. */
+/** words a title must never end on ("... PKCE for the") */
+const TITLE_DANGLING = new Set([
+  "and", "or", "but", "with", "the", "to", "of", "a", "an", "in", "on", "for", "that", "which", "because", "if", "so", "as", "at", "by",
+  "from", "into", "about", "my", "our", "your", "their", "we", "i", "it", "is", "are", "was", "were", "be", "this", "these", "those", "then",
+]);
+
+/**
+ * A short working title from raw speech: drop fillers/leading connectors, keep ~8 words, never end on a dangling
+ * function word, and say so ("…") when the title is a cut-down version of what was said.
+ */
 export function quickTitle(raw: string, maxWords = 8): string {
   const cleaned = normalizeText(raw)
     .replace(/\b(uh+|um+|hmm+|er+|ah+)\b[,.]?/gi, "")
@@ -110,7 +120,10 @@ export function quickTitle(raw: string, maxWords = 8): string {
     .replace(/^(so|well|okay|ok|and|or|but|like|yeah|right|actually)[, ]+/i, "")
     .replace(/\s+/g, " ")
     .trim();
-  const parts = cleaned.split(" ").filter(Boolean).slice(0, maxWords);
+  const all = cleaned.split(" ").filter(Boolean);
+  const parts = all.slice(0, maxWords);
+  while (parts.length > 3 && TITLE_DANGLING.has((parts[parts.length - 1] as string).replace(/[,;:.!?\-–]+$/, "").toLowerCase())) parts.pop();
   const t = parts.join(" ").replace(/[,;:\-–]+$/, "");
-  return t ? t[0]!.toUpperCase() + t.slice(1) : "…";
+  if (!t) return "…";
+  return t[0]!.toUpperCase() + t.slice(1) + (parts.length < all.length ? "…" : "");
 }

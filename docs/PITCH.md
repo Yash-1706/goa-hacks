@@ -20,7 +20,7 @@
 
 | Claim | Evidence |
 |---|---|
-| Reconstructs intent from broken speech | `/` Desk trail drawer · `docs/EVAL.md` held-out set (unseen phrasings reported separately from the leaky dev set) |
+| Reconstructs intent from broken speech | `/` Desk trail drawer · `docs/EVAL.md` held-out set (phrasings outside the classifier exemplars, reported separately from the leaky dev set; not a blind test, see the note in the report) |
 | First paint is instant, artifact in about a second | latency badge per card · `/lab` · `docs/LATENCY.md` (run `pnpm bench --live`) |
 | Proactive without being creepy | WHY line on every suggestion · only at ≥1.2 s of silence · thresholds adapt on dismiss (`/lab`) |
 | Recall by vague, time/place-constrained query | `/recall` constraint chips · `/graph` · recall eval |

@@ -35,7 +35,7 @@ export async function makeApp(env: Record<string, string> = {}, start = "2026-10
   const clock = new FakeClock(Date.parse(start));
   const cfg = loadConfig({
     DATA_DIR: path.join(os.tmpdir(), `synapse-test-${randomBytes(4).toString("hex")}`),
-    THREAD_CLOSE_MS: "200",
+    THREAD_CLOSE_MS: "30000", // never closes by timer inside a test (real timers + a loaded machine = flaky); settle() finalizes explicitly
     LLM_MODE: "mock",
     WISPR_MODE: "mock",
     REQUIRE_PAIRING: "0",

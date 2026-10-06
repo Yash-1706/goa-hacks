@@ -1,10 +1,12 @@
 # Evaluation report
 
-Generated 2026-10-06T15:43:43.568Z · cortex: **offline mock (heuristics + local triage)** · embeddings: MiniLM (local) · node v25.2.1 · AMD Ryzen 5 6600H with Radeon Graphics         
+Generated 2026-10-06T16:29:05.811Z · cortex: **offline mock (heuristics + local triage)** · embeddings: MiniLM (local) · node v25.2.1 · AMD Ryzen 5 6600H with Radeon Graphics         
 
 > **Mock mode**: this measures the offline fallback path. Run `pnpm eval --live` with an `ANTHROPIC_API_KEY` for the real model numbers.
 
-## 1a. Intent classification: held-out set (novel phrasings: the honest number)
+## 1a. Intent classification: held-out set (phrasings that are not in the classifier's exemplars)
+
+> Not a blind test: the same people wrote this set and the classifier, and the offline cue patterns were adjusted while an earlier run of it was in view. It is the more meaningful of the two intent numbers here because no sentence is shared with the exemplars, but real speech will be messier. The number that matters is the live model on speech nobody here wrote (`pnpm eval --live`, ideally on a teammate's phrasings).
 
 | class | precision | recall | F1 | support |
 |---|---:|---:|---:|---:|
@@ -43,7 +45,7 @@ Misclassified:
 - h-dec05: expected decision, got idea ("Let's keep the monolith for one more quarter")
 - h-ide01: expected idea, got journal ("Based on what you said this morning")
 - h-ide02: expected idea, got communication ("Email the team")
-- h-ide06: expected idea, got code ("A heatmap of when the errors happen")
+- h-ide06: expected idea, got code ("A heatmap of when the errors happen…")
 
 **63 unseen threads · accuracy 88.9% · macro-F1 88.7% · artifact-kind accuracy 76.2%** (target macro-F1 ≥ 85%)
 
@@ -93,7 +95,7 @@ Confusion matrix (rows = expected, columns = predicted):
 
 ## 4. Recall (vague, time/place-constrained questions)
 
-- Recall@3 on 10 vague queries over 11 remembered thoughts: 10/10 = 100.0%
+- Recall@3 on 10 vague queries over 10 remembered thoughts: 10/10 = 100.0%
 
 ## 5. Robustness to nonsense (2-minute ramble)
 
