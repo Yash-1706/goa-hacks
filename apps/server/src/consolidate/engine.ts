@@ -178,7 +178,7 @@ export class Consolidator {
           "You label how two of a person's spoken thoughts relate. For each pair choose: refines (B adds detail to or improves A), contradicts (they disagree), follows_up (B is a later step on A), same_topic (just related), unrelated. Give a one-line reason using only the text provided.",
         user: best.map((p) => `A [${p.a.code}] ${p.a.title}: ${p.a.intent}\nB [${p.b.code}] ${p.b.title}: ${p.b.intent}`).join("\n---\n"),
         schema: RelationSchema,
-        maxTokens: 700,
+        maxTokens: 2500,
       });
       if (res) {
         for (const r of res.pairs) {

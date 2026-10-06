@@ -22,7 +22,7 @@ import type { BatteryLog, Metrics } from "../metrics/latency";
 import type { PrivacyService } from "../privacy/service";
 import type { AuditChain } from "../privacy/audit";
 import type { WisprService } from "../wispr/service";
-import type { Trust } from "./trust";
+import { isAllowedOrigin, type Trust } from "./trust";
 
 /* ============================================================================
  * Realtime gateway (TRD §14): one WebSocket per device. Messages are validated with zod at the
@@ -110,6 +110,10 @@ export class WsHub implements Hub {
   async register(app: FastifyInstance): Promise<void> {
     await app.register(websocket, { options: { maxPayload: MAX_MESSAGE } });
     app.get("/ws", { websocket: true }, (socket, req) => {
+      if (!isAllowedOrigin(req.headers.origin)) {
+        socket.close(1008, "origin not allowed");
+        return;
+      }
       const ip = this.s.trust.clientIp(req.raw);
       this.pending.add(socket);
       let conn: Conn | undefined;

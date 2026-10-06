@@ -1,8 +1,10 @@
 # Synapse — Technical Requirements Document (TRD)
 
 > Companion to [`PRD.md`](./PRD.md) · PS4 *Ambient Cognitive Offloading* · WhisperFlow Hackathon 2026
-> Status: v1.0 (build-ready) · Date: 2026-10-06
+> Status: v1.0 spec (build-ready), **now implemented**. Date: 2026-10-06
 > Audience: the build agent and the team. **Read PRD §6 (requirements) and this doc's §18 (build order) before writing code.**
+>
+> **As-built note:** this is the *design*. Where the implementation deliberately differs (recalibrated similarity thresholds in `apps/server/src/thresholds.ts`, the stitcher scoring, our own strict structured-output schema, features cut for time) the differences are listed in [`ARCHITECTURE.md` §6](./ARCHITECTURE.md). The code is the authority; numbers quoted here as thresholds are *design* values.
 
 ---
 

@@ -668,7 +668,7 @@ export class ProactiveEngine implements ProactiveApi {
           "Only use what is in the input; thought_code must be the [T-n] code of the source thought. Do not infer emotions or anything about people.",
         user: `Thoughts:\n${lines}\n\nFiltered asides: ${filtered}`,
         schema: BriefSchema,
-        maxTokens: 900,
+        maxTokens: 3000,
       });
       if (res) {
         out = {

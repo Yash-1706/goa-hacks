@@ -14,7 +14,7 @@ import { MockCortex } from "./cortex/mock";
 import type { CortexBackend, CortexInput, CortexOutput, PartialCallback } from "./cortex/types";
 import { WsHub, type HubServices } from "./gateway/hub";
 import { registerRoutes } from "./gateway/routes";
-import { Trust } from "./gateway/trust";
+import { Trust, isAllowedOrigin } from "./gateway/trust";
 import { ControlIntents } from "./gate/intent";
 import { Triager } from "./gate/triage";
 import { seedCalendar } from "./integrations/calendar";
@@ -186,7 +186,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
 
   // ---- http
   const fastify = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024 });
-  await fastify.register(cors, { origin: true });
+  await fastify.register(cors, { origin: (origin, cb) => cb(null, isAllowedOrigin(origin ?? undefined)) });
   await hub.register(fastify);
 
   const ctx: AppCtx = {

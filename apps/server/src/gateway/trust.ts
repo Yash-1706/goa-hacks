@@ -12,6 +12,29 @@ import { safeEqual } from "../memory/crypto";
 export const isLoopback = (ip: string | undefined): boolean =>
   !ip || ip === "::1" || ip === "127.0.0.1" || ip === "::ffff:127.0.0.1" || ip === "localhost";
 
+/**
+ * Browser-origin guard. Loopback is trusted, so without this ANY website the user visits could
+ * `fetch("http://localhost:8787/api/state")` and read their memory (and DNS rebinding would too).
+ * Allowed: no Origin header (CLI, curl, native clients) or an origin on this machine / a private
+ * network (the Vite dev server, a phone on the LAN, Tailscale). Everything else is refused.
+ */
+export function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin || origin === "null") return !origin; // opaque origins (file://, sandboxed iframes) are refused
+  let host: string;
+  try {
+    host = new URL(origin).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return false;
+  }
+  if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return true;
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254);
+  }
+  return /^(fe80|fc|fd)[0-9a-f:]*$/i.test(host); // IPv6 link-local / unique-local
+}
+
 export class Trust {
   readonly pairingCode: string;
   private secret: Buffer;

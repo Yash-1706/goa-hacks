@@ -7,7 +7,7 @@ import { graphSnapshot } from "../memory/graph";
 import { ENERGY, STAGES, stagesOf } from "../metrics/latency";
 import { parseQuery } from "../recall/engine";
 import { entitiesInText } from "../recall/search";
-import { isLoopback } from "./trust";
+import { isAllowedOrigin, isLoopback } from "./trust";
 
 /* REST surface (TRD §14). Everything except /api/health requires a trusted client: loopback, or a
  * paired device token. /api/dev/* additionally requires dev mode and loopback. */
@@ -23,6 +23,7 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
   app.addHook("onRequest", async (req, reply) => {
     const url = req.url.split("?")[0] as string;
     if (!url.startsWith("/api") || url === "/api/health") return;
+    if (!isAllowedOrigin(header(req, "origin"))) return reply.code(403).send({ error: "origin not allowed" });
     const ip = trust.clientIp(req.raw);
     const verdict = trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token"));
     if (!verdict.ok) return reply.code(401).send({ error: verdict.reason ?? "unauthorized" });

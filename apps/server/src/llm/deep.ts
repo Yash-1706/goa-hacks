@@ -86,7 +86,7 @@ export class DeepLlm {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const params: any = {
           model: this.model,
-          max_tokens: o.maxTokens ?? 500,
+          max_tokens: o.maxTokens ?? 1500, // thinking tokens count against max_tokens
           system: o.system,
           messages: [{ role: "user", content: user }],
           output_config: { effort: "low" },
@@ -128,7 +128,7 @@ export class DeepLlm {
       const res = await this.client.messages.parse(
         {
           model: this.model,
-          max_tokens: o.maxTokens ?? 1200,
+          max_tokens: o.maxTokens ?? 3000,
           system: o.system,
           messages: [{ role: "user", content: user }],
           output_config: { effort: "low", format: zodOutputFormat(o.schema) },

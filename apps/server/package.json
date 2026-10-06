@@ -4,15 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/index.ts",
-    "start": "tsx src/index.ts",
+    "dev": "tsx watch --clear-screen=false --disable-warning=ExperimentalWarning src/index.ts",
+    "start": "tsx --disable-warning=ExperimentalWarning src/index.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "replay": "tsx src/cli/replay.ts",
-    "seed": "tsx src/cli/seed.ts",
-    "eval": "tsx src/cli/eval.ts",
-    "bench": "tsx src/cli/bench.ts",
-    "warm-models": "tsx src/cli/warm-models.ts"
+    "replay": "tsx --disable-warning=ExperimentalWarning src/cli/replay.ts",
+    "seed": "tsx --disable-warning=ExperimentalWarning src/cli/seed.ts",
+    "eval": "tsx --disable-warning=ExperimentalWarning src/cli/eval.ts",
+    "bench": "tsx --disable-warning=ExperimentalWarning src/cli/bench.ts",
+    "warm-models": "tsx --disable-warning=ExperimentalWarning src/cli/warm-models.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -34,6 +34,7 @@
     "@types/ws": "^8.18.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "ws": "^8.22.0"
   }
 }
