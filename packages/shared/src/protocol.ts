@@ -119,6 +119,8 @@ export const SuggestionActionSchema = z.object({
   type: z.literal("suggestion.action"),
   id: z.string(),
   action: z.enum(["accept", "dismiss", "later"]),
+  /** reschedule suggestions: which of the offered slots to hold (index into payload.slots) */
+  pick: z.number().int().min(0).max(9).optional(),
 });
 
 export const RecallAskSchema = z.object({

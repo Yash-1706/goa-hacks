@@ -202,6 +202,21 @@ describe("Jira adapter (stubbed fetch)", () => {
   });
 });
 
+describe("calendar hold", () => {
+  it("the success notice names the event and its time, never the internal 'cal:<id>' reference", async () => {
+    app = await makeApp({}, "2026-10-06T10:00:00+05:30");
+    const t = app.ctx.store.createThought({ sessionId: "s", deviceId: "d", deviceKind: "desk", activity: "desk", category: "scheduling", title: "Vendor sync", intent: "x", emb: new Float32Array(384), source: "mock" });
+    const a = app.ctx.store.createArtifact(t, { kind: "calendar_event", title: "Vendor sync", start_iso: "2026-10-09T15:00:00+05:30", end_iso: null, time_expression: "Friday 3pm", attendees: [], is_reschedule: false }, 2);
+    a.status = "staged";
+    const res = await app.ctx.outbox.push(a);
+    expect(res.externalRef).toMatch(/^cal:/); // the internal reference is still what we store
+    const notice = app.sent.filter((m) => m.type === "notice" && m.level === "success").map((m) => ("text" in m ? m.text : ""));
+    expect(notice).toHaveLength(1);
+    expect(notice[0]).toMatch(/^Calendar hold created: “Vendor sync” on .*Oct 15:00$/);
+    expect(notice[0]).not.toContain("cal:");
+  });
+});
+
 describe("secrets stay server-side", () => {
   it("neither token appears in anything emitted to clients, audited, or exposed by the REST surface", async () => {
     app = await makeApp({ AUTONOMY_LEVEL: "2", GITHUB_TOKEN: GH_TOKEN, GITHUB_REPO: "acme/synapse-sandbox", ...{ JIRA_BASE_URL: "https://acme.atlassian.net", JIRA_EMAIL: "rio@example.com", JIRA_API_TOKEN: JIRA_TOKEN, JIRA_PROJECT_KEY: "SYN" } });

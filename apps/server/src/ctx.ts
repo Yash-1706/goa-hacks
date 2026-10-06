@@ -42,6 +42,6 @@ export interface RecallApi {
 
 /** Proactive engine surface used by the hub (TRD §9). */
 export interface ProactiveApi {
-  action(id: string, action: "accept" | "dismiss" | "later"): Promise<void>;
+  action(id: string, action: "accept" | "dismiss" | "later", pick?: number): Promise<void>;
   snapshot(): { suggestions: import("@synapse/shared").SuggestionView[]; echoes: import("@synapse/shared").EchoView[] };
 }

@@ -295,7 +295,7 @@ export class WsHub implements Hub {
         await this.onCardAction(msg);
         return;
       case "suggestion.action":
-        await this.s.proactive()?.action(msg.id, msg.action);
+        await this.s.proactive()?.action(msg.id, msg.action, msg.pick);
         return;
       case "recall.ask":
         await this.s.recall()?.ask(msg.queryId, msg.text, this.ref(c));

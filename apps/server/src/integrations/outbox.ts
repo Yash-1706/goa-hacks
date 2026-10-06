@@ -7,7 +7,7 @@ import { log } from "../log";
 import type { MemoryStore } from "../memory/store";
 import type { ArtifactRec, ThoughtRec } from "../memory/types";
 import type { AuditChain } from "../privacy/audit";
-import { toIcs } from "./calendar";
+import { fmtSlot, toIcs } from "./calendar";
 
 /* ============================================================================
  * Outbox (PRD §6.8, TRD §12): drafted artifacts become real things — but only through here, and
@@ -103,10 +103,18 @@ export class Outbox {
     this.d.emit({
       type: "notice",
       level: "success",
-      text: `${res.simulated ? "(simulated) " : ""}${labelOf(a.kind)} created: ${res.externalRef}`,
+      text: `${res.simulated ? "(simulated) " : ""}${labelOf(a.kind)} created: ${this.describe(a, res)}`,
       at: this.d.clock.now(),
     });
     return res;
+  }
+
+  /** what the success notice calls the new thing: an issue key, or for a calendar hold its title and time (never "cal:<id>") */
+  private describe(a: ArtifactRec, res: PushResult): string {
+    if (res.system !== "calendar") return res.externalRef;
+    const p = a.payload as ArtifactOf<"calendar_event">;
+    const start = Date.parse(p.start_iso as string);
+    return Number.isFinite(start) ? `“${p.title}” on ${fmtSlot(start, this.d.cfg.timezone, this.d.clock.now())}` : `“${p.title}”`;
   }
 
   async undo(a: ArtifactRec): Promise<void> {

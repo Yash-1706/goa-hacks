@@ -246,4 +246,30 @@ describe("memory store", () => {
     const d = await store.upsertEntity("cart-service", "component");
     expect(d?.id).toBe(c?.id);
   });
+
+  it("a correction replaces the 'learned from' origin of a term that already exists, and a later plain mention does not undo it", async () => {
+    const { store } = await makeStore();
+    store.upsertDict("cart-service", "component", "learned from T-1", 0.5);
+    store.upsertDict("cart-service", "component", 'corrected "cart surface" → "cart-service" in T-2', 0.8);
+    expect(store.dict.get("cart-service")!.source).toMatch(/^corrected "cart surface"/);
+    store.upsertDict("cart-service", "component", "learned from T-3", 0.6);
+    expect(store.dict.get("cart-service")!.source).toMatch(/^corrected/);
+    expect(store.dict.get("cart-service")!.salience).toBe(0.8); // never lowered
+    // seeds keep their origin when the same term is merely learned later
+    store.upsertDict("Sarah", "person", "team", 0.9);
+    store.upsertDict("Sarah", "person", "learned from T-4", 0.5);
+    expect(store.dict.get("sarah")!.source).toBe("team");
+  });
+});
+
+describe("wire protocol: suggestion.action carries the slot the person picked", () => {
+  it("keeps a valid pick, rejects an invalid one", async () => {
+    const { ClientMessageSchema } = await import("@synapse/shared");
+    const ok = ClientMessageSchema.parse({ type: "suggestion.action", id: "s1", action: "accept", pick: 2 });
+    expect(ok).toMatchObject({ type: "suggestion.action", action: "accept", pick: 2 });
+    expect(ClientMessageSchema.parse({ type: "suggestion.action", id: "s1", action: "dismiss" })).not.toHaveProperty("pick");
+    for (const pick of [-1, 10, 1.5, "2"]) {
+      expect(ClientMessageSchema.safeParse({ type: "suggestion.action", id: "s1", action: "accept", pick }).success, String(pick)).toBe(false);
+    }
+  });
 });

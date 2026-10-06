@@ -291,6 +291,56 @@ describe("proactivity", () => {
     app.ctx.proactive.stop();
   });
 
+  it("holds the slot the person PICKED, not always the first (and ignores an out-of-range pick)", async () => {
+    app = await makeApp({ RECURRING_N: "3" }, "2026-10-06T10:00:00+05:30");
+    app.ctx.proactive.start();
+    const clash = async (text: string) => {
+      await app!.say(text, { gapMs: 2000 });
+      await app!.settle();
+      app!.clock.advance(3 * 60_000);
+    };
+    await clash("Ugh, Thursday's standup is going to clash with the dentist");
+    await clash("The dentist overlaps with the Thursday standup again");
+    await clash("I really need to sort out the standup and dentist clash on Thursday");
+    await new Promise((r) => setTimeout(r, 900));
+    const s = app.suggestions().find((x) => x.kind === "reschedule")!;
+    const slots = (s.payload as { slots: Array<{ start: number; end: number }> }).slots;
+    expect(slots.length).toBeGreaterThanOrEqual(3);
+
+    const held = new Set([...app.ctx.store.calendar.values()].map((c) => c.id));
+    await app.ctx.proactive.action(s.id, "accept", 2);
+    const added = [...app.ctx.store.calendar.values()].filter((c) => !held.has(c.id));
+    expect(added).toHaveLength(1);
+    expect(added[0]!.start).toBe(slots[2]!.start);
+    expect(added[0]!.end).toBe(slots[2]!.end);
+    expect(added[0]!.title).toMatch(/\(proposed\)$/);
+    const notice = app.sent.filter((m) => m.type === "notice").map((m) => ("text" in m ? m.text : "")).find((t) => t.startsWith("Held "));
+    expect(notice).toBeTruthy();
+    app.ctx.proactive.stop();
+
+    // an out-of-range pick falls back to the first slot instead of failing or holding nothing
+    const app2 = await makeApp({ RECURRING_N: "3" }, "2026-10-06T10:00:00+05:30");
+    try {
+      app2.ctx.proactive.start();
+      for (const text of ["Ugh, Thursday's standup is going to clash with the dentist", "The dentist overlaps with the Thursday standup again", "I really need to sort out the standup and dentist clash on Thursday"]) {
+        await app2.say(text, { gapMs: 2000 });
+        await app2.settle();
+        app2.clock.advance(3 * 60_000);
+      }
+      await new Promise((r) => setTimeout(r, 900));
+      const s2 = app2.suggestions().find((x) => x.kind === "reschedule")!;
+      const slots2 = (s2.payload as { slots: Array<{ start: number }> }).slots;
+      const before = new Set([...app2.ctx.store.calendar.values()].map((c) => c.id));
+      await app2.ctx.proactive.action(s2.id, "accept", 9);
+      const add2 = [...app2.ctx.store.calendar.values()].filter((c) => !before.has(c.id));
+      expect(add2).toHaveLength(1);
+      expect(add2[0]!.start).toBe(slots2[0]!.start);
+      app2.ctx.proactive.stop();
+    } finally {
+      await app2.stop();
+    }
+  });
+
   it("never delivers a suggestion while someone is speaking", async () => {
     app = await makeApp();
     // pretend a device is mid-utterance

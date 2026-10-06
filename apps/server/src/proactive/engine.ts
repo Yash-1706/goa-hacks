@@ -529,10 +529,15 @@ export class ProactiveEngine implements ProactiveApi {
     return this.d.store.db.all<{ key: string; threshold: number; accepts: number; dismisses: number }>("SELECT key, threshold, accepts, dismisses FROM pattern_state ORDER BY key");
   }
 
-  async action(id: string, action: "accept" | "dismiss" | "later"): Promise<void> {
+  async action(id: string, action: "accept" | "dismiss" | "later", pick?: number): Promise<void> {
     const q = this.queue.find((x) => x.view.id === id);
     if (!q) return;
     const { clock, store } = this.d;
+    // the person chose one of the offered slots: carry the choice into the accept handler
+    if (pick !== undefined && action === "accept" && q.view.kind === "reschedule") {
+      const slots = ((q.view.payload ?? {}) as { slots?: unknown[] }).slots ?? [];
+      if (pick >= 0 && pick < slots.length) q.view.payload = { ...(q.view.payload ?? {}), pick };
+    }
     const now = clock.now();
     const kind = q.view.kind;
     if (action === "later") {

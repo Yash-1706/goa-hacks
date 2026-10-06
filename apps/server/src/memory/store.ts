@@ -580,6 +580,9 @@ export class MemoryStore {
     if (d) {
       d.salience = Math.max(d.salience, salience);
       d.lastSeen = now;
+      // a correction is the most informative origin a term can have: it replaces "learned from ..." (and is never
+      // overwritten by a later plain mention, nor by a seed/team entry)
+      if (source.startsWith("corrected") || (/^learned/.test(d.source) && /^(team|seed)$/.test(source))) d.source = source;
     } else {
       d = { id: newId(), keyId: "ltm", term: t, kind, source, salience, lastSeen: now };
       this.dict.set(key, d);
