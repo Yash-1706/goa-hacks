@@ -34,13 +34,39 @@ Everything else (the whole pipeline, memory, recall, proactivity, privacy contro
 | Deliverable | Where | State |
 |---|---|---|
 | Live monologue demo | `docs/DEMO_SCRIPT.md` + `pnpm replay scripts/replay/s1_bug.json` (and s2…s9) | ✅ scripted and replayable keyless · 🔶 with a real voice |
-| Knowledge-graph visualisation (5+ sessions) | `/graph` screen, `pnpm seed` (8 sessions) | __GRAPH_STATE__ |
+| Knowledge-graph visualisation (5+ sessions) | `/graph` screen, `pnpm seed` (8 sessions) | ✅ verified in the browser: 61 nodes, 8 sessions in three clusters (five bridged by the cart-service hub, an OAuth2/PKCE pair, one isolated), session colours, entity hubs, a timeline scrubber that replays how memory grew · 🔶 on your own dogfooded sessions |
 | 1-page privacy whitepaper | `docs/PRIVACY_WHITEPAPER.md` | ✅ every claim cross-checked against code and tests |
 | Recall demo | `/recall` screen; the recall beat in `docs/DEMO_SCRIPT.md` → "The 3 minutes" | ✅ typed and spoken-question paths · 🔶 spoken answer (TTS) on a real device |
 | Architecture diagram | `docs/ARCHITECTURE.md` (mermaid) | ✅ |
 | Latency benchmark | `docs/LATENCY.md`, `docs/latency.csv`, `pnpm bench` | ✅ pipeline stages measured (first paint p50 12 ms) · 🔶 Wispr and Claude stages need keys |
 | 1-page failure-mode analysis | `docs/FAILURE_MODES.md` (20 modes, each marked ✅/🟡/❌) | ✅ |
 | 3-minute pitch | `docs/PITCH.md` | ✅ |
+
+## What was exercised end to end (mock mode, typed input, in a browser)
+
+Everything below was run against the real server and the real UI, not mocks, with the offline cortex and no keys:
+
+- **Demo beats** ①–⑤ on the Desk: a self-repair decision with JWT struck out, the open question answered quietly from the seeded session, the *Decision changed: JWT → OAuth2, revisit?* prompt, a four-fragment bug report whose whispered tail joins the same issue, an email draft, a half-formed code snippet, asides filtered while the journal note is kept.
+- **Proactivity:** three clash mentions → one reschedule suggestion with three concrete slots; picking the **third** slot held exactly that slot (this was broken until the pass: the server ignored the choice).
+- **Privacy:** "pause memory" released the (typed) mic and purged the trailing thought with the toast "1 recent thought forgotten", the audit chain verified, resume needed a tap; "scratch that" retracted a note; "actually make it Friday" revised the call in place; "forget what I said about …" deleted by meaning.
+- **Resilience:** the API was stopped under an open page (the Desk showed "Listening, but offline. Fragments are queued"), a line typed while offline was delivered after the restart.
+- **Screens:** Recall (constraint chips, sources in 4 ms, cited answer), Privacy Center, Graph (timeline scrub), Lab, Outbox (edit persisted on the server), Pocket at 375 px; no horizontal overflow on any route; no console errors apart from the browser's own "WebSocket failed" lines while the server was down.
+- **Network:** from a LAN address every route except `/api/health` answers 401 until paired; dev routes answer 401/404 off-loopback; a public website origin gets 403; the HTTPS dev mode serves pages, proxies the API and upgrades WebSockets; the production build's service worker is valid and precaches 34 files that all exist.
+- **Voice path without a key:** `pnpm wispr:check` ran the real streamer, over a real socket, through the real server token path against the strict fake: PASS on every item that can be tested from Node.
+
+### Bugs this pass found (each fixed, each with a regression test)
+
+| Bug | How it showed | Fix |
+|---|---|---|
+| A thought that began like a recall question and became a decision kept the 30-minute recall retention and was deleted by the next TTL sweep | one seeded session vanished from the graph | retention restored on re-categorisation (`store.setRetention`); a fuzz test over a messy day guards the whole class |
+| A thought still open when the server stopped stayed "analyzing" forever | found by reasoning about `pnpm dev` restarts | finalised on the next start |
+| After `pnpm seed` the demo calendar was last week's, so "Thursday standup vs dentist" had nothing to clash with | Lab: "Nothing ahead" | the demo calendar always covers this week and next |
+| "Forget what I said about the pricing service" also deleted an unrelated cart-service bug | live test | forget-by-meaning only deletes what is demonstrably about the topic (named entity or a specific word) |
+| The chosen reschedule slot was ignored (always the first) | UI/server contract gap | `suggestion.action` carries `pick` |
+| Corrected dictionary terms never showed as "corrected"; the calendar notice printed `cal:<id>` | UI agent's report | fixed in the store and the outbox |
+| "Add a retry budget to the webhook sender" was filed as a message to the team | live test after a reconnect | technical-vocabulary cue; the offline classifier's held-out macro-F1 is unchanged at 88.7 % |
+| `pnpm replay --local --speed 50` split thoughts that a human-paced run keeps together | replay output differed by speed | no timer-based thread closing in a compressed replay |
+| Server tests flaked on a loaded machine (a real 200 ms close timer between utterances) | full-suite runs while browsers were open | deterministic thread closing in the test helper |
 
 ## Requirements (PRD §6)
 
@@ -64,11 +90,11 @@ Everything else (the whole pipeline, memory, recall, proactivity, privacy contro
 | CTX-2 13-class latent intent | P0 | 🔶 | ✅ offline macro-F1 88.7 % on the held-out set, which the same authors wrote (weak classes: decision 66.7 %, idea 50 % — see the confusion matrix in `docs/EVAL.md`); the live model's number is unmeasured (`pnpm eval --live`) |
 | CTX-3 reconstruction | P0 | ✅ / 🔶 | self-repair + open question test (offline); Claude path verified against a faithful SSE fake, not the real API |
 | CTX-4 artifact drafting | P0 | ✅ | schema-valid artifacts per class; `.ics`/`mailto` export test; artifact-kind accuracy offline 76.2 % |
-| CTX-5 living cards | P0 | ✅ | provisional first-paint card, then the analysed card, over a real socket (`gateway.test.ts`); morph in the UI: __UI_MORPH__ |
+| CTX-5 living cards | P0 | ✅ | provisional first-paint card, then the analysed card, over a real socket (`gateway.test.ts`); in the UI the offline cortex answers in the same tick as first paint (~190 ms), so the visible streaming morph needs a live model |
 | CTX-6 reference resolution | P0 | ✅ | 8/8 on the coreference set; "assuming you mean…" only when the top-2 margin is small |
 | CTX-7 abstention | P0 | ✅ | 25-fragment ramble: 0 stored, 0 spurious artifacts, 22 filtered as asides; asides never stored |
 | CTX-8 natural corrections | P1 | ✅ | "make it Friday" revises, "scratch that" retracts, an uninterpretable correction changes nothing |
-| CTX-9 reasoning trail | P0 | __UI_TRAIL__ | |
+| CTX-9 reasoning trail | P0 | ✅ | every card has a Trail drawer (browser-verified): the heard fragments with pause gaps, the reconstruction, resolved references with confidence, self-repairs, salience reasons, the model used, per-stage latency |
 | CTX-10 session brief | P0 | ✅ / 🔶 | brief test (tasks, decisions, snippets, open loops, asides filtered); ≤ 5 s with Opus unmeasured |
 
 ### Memory: "Hippocampus"
@@ -111,7 +137,7 @@ Everything else (the whole pipeline, memory, recall, proactivity, privacy contro
 | PRV-4 audio never on our server | P0 | ✅ | `no-audio.test.ts`, `audio/egress.test.ts` |
 | PRV-5 encryption at rest + crypto-shredding | P0 | ✅ | no plaintext in the DB file; destroyed day key can never decrypt |
 | PRV-6 redaction before cloud | P1 | ✅ | emails, cards (Luhn), keys, spoken secrets masked and restored; verified through the Claude path (`claude-cortex.test.ts`) |
-| PRV-7 memory ledger | P0 | __UI_PRIVACY__ | API: ledger, export, purge, keys |
+| PRV-7 memory ledger | P0 | ✅ | `/privacy` (browser-verified): data-flow diagram, retention and key list (destroyed day keys), controls, export, pairing, a ledger of every stored item with its expiry countdown, delete and why-kept, and the audit chain with a Verify button ("Chain intact. All 11 events re-hashed") |
 | PRV-8 hash-chained audit | P1 | ✅ | verifies; detects a rewritten or deleted row; survives restart |
 | PRV-9 owner-only speaker verification | P2 | ⬜ | not built (declared in the whitepaper and failure modes) |
 | PRV-10 local-only mode | P1 | ✅ | `local-only.test.ts` |
@@ -121,8 +147,8 @@ Everything else (the whole pipeline, memory, recall, proactivity, privacy contro
 ### Cross-device and mobile
 | ID | Pri | Status | Evidence, and what is missing |
 |---|---|---|---|
-| DEV-1 installable PWA, Pocket mode | P0 | __UI_PWA__ | |
-| DEV-2 one memory across devices | P0 | 🔶 | ✅ both devices receive every card and suggestion (`gateway.test.ts`); "≤ 1 s phone → desk" on a real network unmeasured |
+| DEV-1 installable PWA, Pocket mode | P0 | 🔶 | Pocket verified at 375 px (no horizontal overflow on any of the 7 routes); production build emits a manifest, icons and a service worker (34 precache entries, the VAD model and wasm deliberately excluded), assets are served with the right MIME types, and the HTTPS dev mode used for phones serves pages, the API and the WebSocket upgrade. The embedded browser used here cannot register service workers, so install-to-home-screen is unverified |
+| DEV-2 one memory across devices | P0 | ✅ / 🔶 | both devices receive every card and suggestion (`gateway.test.ts`); browser-verified with Desk and Pocket as two devices: a line typed on Pocket was a card on the Desk **211 ms** later (loopback). Over venue Wi-Fi it adds the network round trip, unmeasured |
 | DEV-3 activity context | P1 | 🔶 | motion-sensor classifier unit-tested; needs a real phone |
 | DEV-4 battery optimisation | P0 | 🔶 | ✅ the energy *model* shows ≥ 70 % saving vs always-on streaming; frame skipping, eco batching, VAD-gated radio tested. It is a model: real battery deltas exist only where the Battery API does (Chromium) |
 
@@ -138,9 +164,9 @@ Everything else (the whole pipeline, memory, recall, proactivity, privacy contro
 ### Observability and deliverables
 | ID | Pri | Status | Evidence |
 |---|---|---|---|
-| OBS-1 latency HUD | P0 | __UI_HUD__ | stage derivation with device clock offset is tested |
+| OBS-1 latency HUD | P0 | ✅ | per-card badge, top-bar p50 and sparkline, and the Lab's latency-by-stage table against the PRD targets (browser-verified). Numbers from the offline cortex measured in the throttled in-app browser are inflated: first paint p50 388 ms there against 12 ms server-side |
 | OBS-2 benchmark export | P0 | ✅ | `pnpm bench` → `docs/LATENCY.md` + CSV (offline cortex; says so) |
-| OBS-3 knowledge-graph visualisation | P0 | __UI_GRAPH__ | |
+| OBS-3 knowledge-graph visualisation | P0 | ✅ | see Deliverables: ≥ 5 sessions linked, entity hubs, working-memory nodes, timeline scrubber (browser-verified) |
 | OBS-4 docs | P0 | ✅ | `docs/` |
 
 ## Known gaps, stated plainly
