@@ -8,8 +8,45 @@ import type { ControlIntent } from "../gate/intent";
 import { log } from "../log";
 import type { Embedder } from "../memory/embeddings";
 import type { MemoryStore } from "../memory/store";
-import { searchThoughts } from "../recall/search";
+import { entitiesInText, searchThoughts } from "../recall/search";
+import type { ThoughtRec } from "../memory/types";
+import { contentWords, fold } from "../text";
 import type { AuditChain } from "./audit";
+
+/** nouns that name a KIND of thing, not THE thing: "the pricing service" is about pricing, not about every service */
+const GENERIC_TOPIC_WORDS = new Set([
+  "service", "services", "module", "modules", "thing", "things", "stuff", "idea", "ideas", "bug", "bugs", "issue", "issues", "code",
+  "project", "task", "tasks", "meeting", "call", "email", "message", "today", "yesterday", "earlier", "recent", "something",
+  "anything", "everything", "said", "say", "about", "what", "know",
+  // plain function words: never evidence that a thought is about the topic
+  "the", "and", "for", "with", "that", "this", "these", "those", "have", "had", "has", "was", "were", "are", "you", "your", "our",
+  "his", "her", "their", "from", "into", "over", "which", "when", "where", "who", "whom", "just", "like", "also", "then", "than",
+  "there", "here", "some", "any", "all", "one", "two", "forget", "talked", "told", "mention", "mentioned",
+]);
+
+/**
+ * Which thoughts does "forget what I said about X" mean? Deleting is not undoable, so a thought is only chosen when it is
+ * demonstrably about X: it is linked to an entity the question names, or it contains one of the question's specific words.
+ * Merely resembling X is not enough ("forget the pricing service" must not take the cart-service bug with it). A question
+ * with nothing specific in it ("forget that bug") falls back to near-paraphrases only, and never more than two.
+ */
+export function selectForForget(store: MemoryStore, embedder: Embedder, query: string, qEmb: Float32Array, now: number): ThoughtRec[] {
+  const norm = (s: string): string => fold(s).replace(/-/g, " ");
+  const entityIds = new Set(entitiesInText(store, norm(query)).map((e) => e.id));
+  // an entity such as "pricing-service" is written with a hyphen but spoken with a space
+  for (const e of store.entities.values()) if ([e.name, ...e.aliases].some((n) => norm(n).length >= 3 && ` ${norm(query)} `.includes(` ${norm(n)} `))) entityIds.add(e.id);
+  const terms = contentWords(query).filter((w) => !GENERIC_TOPIC_WORDS.has(w) && w.length >= 3);
+  const stem = (w: string): string => w.replace(/(ing|ed|es|s)$/, "");
+  const mentionsTerm = (t: ThoughtRec): boolean => {
+    const words = norm(`${t.title} ${t.intent} ${store.fragmentsOf(t).map((f) => f.text).join(" ")}`).split(" ");
+    return terms.some((w) => words.some((x) => stem(x) === stem(w)));
+  };
+  if (entityIds.size || terms.length) {
+    return [...store.thoughts.values()].filter((t) => t.entityIds.some((id) => entityIds.has(id)) || mentionsTerm(t));
+  }
+  const hits = searchThoughts(store, embedder, { query, qEmb, now, limit: 8, minScore: 0.25, persons: undefined });
+  return hits.filter((h) => h.parts.vec >= 0.7).slice(0, 2).map((h) => h.thought);
+}
 
 /* ============================================================================
  * Guardian (PRD §6.6, TRD §10.2): the privacy control plane.
@@ -126,8 +163,7 @@ export class PrivacyService implements Controls {
     } else if (scope === "query" && o.query) {
       const [qEmb] = await embedder.embed([o.query], "query");
       if (qEmb) {
-        const hits = searchThoughts(store, embedder, { query: o.query, qEmb, now, limit: 8, minScore: 0.4, persons: undefined });
-        for (const h of hits.slice(0, 8)) if (store.deleteThought(h.thought.id)) removed.push(h.thought.id);
+        for (const t of selectForForget(store, embedder, o.query, qEmb, now)) if (store.deleteThought(t.id)) removed.push(t.id);
       }
     }
 

@@ -99,4 +99,38 @@ describe("forgetting by meaning", () => {
     // the forget command itself is never stored
     expect([...app.ctx.store.frags.values()].some((f) => /forget what i said/i.test(f.text))).toBe(false);
   });
+
+  it("deletes only what is demonstrably about the topic: a similar bug in ANOTHER service survives 'forget the pricing service'", async () => {
+    app = await makeApp();
+    await app.say("There's a null pointer exception in the cart service when applying a discount code", { session: "a" });
+    await app.settle();
+    await app.say("The crash in the pricing service is a stack overflow, probably the currency conversion", { session: "b", gapMs: 9000 });
+    await app.settle();
+    await app.say("Remind me to review the checkout service logs on Friday", { session: "c", gapMs: 9000 });
+    await app.settle();
+    const titles = () => app!.thoughts().map((t) => t.title.toLowerCase());
+    expect(app.thoughts()).toHaveLength(3);
+
+    await app.say("forget what I said about the pricing service", { session: "d", gapMs: 9000 });
+    await app.settle();
+    expect(titles().some((t) => /pricing/.test(t))).toBe(false); // the pricing thought is gone
+    expect(titles().some((t) => /cart/.test(t))).toBe(true); // the cart-service bug is not collateral damage
+    expect(titles().some((t) => /checkout|review/.test(t))).toBe(true);
+    const forgot = app.sent.find((m) => m.type === "privacy.forgot" && m.scope === "query");
+    expect(forgot && "count" in forgot ? forgot.count : -1).toBe(1);
+  });
+
+  it("a question with nothing specific in it ('forget that bug') only takes a near-paraphrase, never a pile of loosely related thoughts", async () => {
+    app = await makeApp();
+    await app.say("There's a null pointer exception in the cart service when applying a discount code", { session: "a" });
+    await app.settle();
+    await app.say("The login page crashes on Safari after the redirect", { session: "b", gapMs: 9000 });
+    await app.settle();
+    await app.say("Remind me to rotate the staging keys on Friday", { session: "c", gapMs: 9000 });
+    await app.settle();
+    await app.say("forget what I said about that bug", { session: "d", gapMs: 9000 });
+    await app.settle();
+    expect(app.thoughts().length).toBeGreaterThanOrEqual(2); // at most one of the three is taken
+    expect(app.thoughts().some((t) => /rotate|keys/i.test(t.title))).toBe(true); // an unrelated action is never touched
+  });
 });
