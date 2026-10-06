@@ -251,6 +251,7 @@ export class WsHub implements Hub {
         if (msg.activity) c.info.activity = msg.activity;
         store.ensureSession(msg.sessionId, id, c.info.kind, c.info.activity ?? "unknown");
         c.info.listening = true;
+        this.s.bus.emit("session.started", { sessionId: msg.sessionId, deviceId: id });
         this.sendTo(id, this.s.wispr.context(id, msg.sessionId));
         this.pushState();
         return;
