@@ -1,0 +1,12 @@
+{
+  "name": "S6 recurring calendar conflict",
+  "description": "Three mutters about the same Thursday clash within 10 minutes -> ONE reschedule suggestion with concrete free slots, delivered at a pause. (Wait times are real; run with --speed 1 or lower RECURRING_WINDOW.)",
+  "steps": [
+    { "say": "Ugh, Thursday's standup is going to clash with the dentist", "gapMs": 0 },
+    { "wait": 9000, "endThread": true },
+    { "say": "The dentist overlaps with the Thursday standup again", "gapMs": 2000 },
+    { "wait": 9000, "endThread": true },
+    { "say": "I really need to sort out the standup and dentist clash on Thursday", "gapMs": 2000 },
+    { "wait": 9000 }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "S3 email the team",
+  "description": "Actionable thought -> draft email (never sent).",
+  "steps": [
+    { "say": "I need to email the team about the delay", "gapMs": 0 },
+    { "wait": 7000 }
+  ]
+}

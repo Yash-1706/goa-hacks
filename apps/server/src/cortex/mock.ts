@@ -89,24 +89,49 @@ function findEntities(text: string, input: CortexInput): CortexResult["entities"
   return distinct(out, (e) => e.name).slice(0, 6);
 }
 
+const REF_NOUN = "bug|issue|error|crash|problem|thing|idea|snippet|ticket|meeting|email|decision|approach|one|stuff|task|note|question|conflict|clash|plan|fix|call|doc|draft|message|thought|discussion";
+const REF_CATEGORY: Array<[RegExp, Category]> = [
+  [/^(bug|issue|error|crash|problem|fix)$/, "bug"],
+  [/^(idea|thought)$/, "idea"],
+  [/^(decision)$/, "decision"],
+  [/^(email|message|draft)$/, "communication"],
+  [/^(meeting|conflict|clash|call)$/, "scheduling"],
+  [/^(snippet|approach)$/, "code"],
+  [/^(task|ticket)$/, "action"],
+];
+const stemWord = (w: string): string => w.toLowerCase().replace(/(ing|ed|es|s)$/, "").replace(/e$/, "");
+
 function resolveReferences(text: string, input: CortexInput, category: Category): CortexResult["references"] {
   const out: CortexResult["references"] = [];
-  const thoughts = input.candidates.filter((c) => c.kind === "thought" || c.kind === "open_loop");
-  const want = (wantCat: Category | null): Candidate | undefined =>
-    thoughts.filter((c) => c.score >= 0.28).sort((a, b) => (wantCat && b.category === wantCat ? 0.2 : 0) + b.score - ((wantCat && a.category === wantCat ? 0.2 : 0) + a.score))[0];
+  const thoughts = input.candidates.filter((c) => (c.kind === "thought" || c.kind === "open_loop") && c.score >= 0.28);
 
-  const demonstrative = text.match(/\b(that|the) (bug|issue|error|thing|idea|snippet|ticket|meeting|email|one|problem|approach)\b(?: (?:from|of|about|i|we) [a-z ]{0,30})?/i);
-  if (demonstrative) {
-    const cat: Category | null = /bug|issue|error|problem/i.test(demonstrative[2] ?? "") ? "bug" : /idea/i.test(demonstrative[2] ?? "") ? "idea" : null;
-    const c = want(cat);
-    out.push({ mention: cleanClause(demonstrative[0]), resolved_id: c?.ref ?? null, label: c?.label ?? "", confidence: c ? Math.min(0.9, 0.4 + c.score) : 0 });
+  // "that bug from yesterday", "that caching idea", "the retry thing again", "that Safari crash"
+  const demo = text.match(new RegExp(String.raw`\b(that|the|this)\s+((?:[A-Za-z][\w-]*\s+){0,3}?)(${REF_NOUN})\b(?:\s+(?:from|of|about|i|we|with|again|earlier)\b[^.?!…]{0,30})?`, "i"));
+  if (demo && !/^(the|that|this)$/i.test(demo[2]?.trim() ?? "") ) {
+    const mods = (demo[2] ?? "").trim().split(/\s+/).filter((w) => w.length > 2 && !/^(the|that|this|one|same|old|new|other|big|small|first|last)$/i.test(w)).map(stemWord);
+    const noun = (demo[3] ?? "").toLowerCase();
+    const wantCat = REF_CATEGORY.find(([re]) => re.test(noun))?.[1] ?? null;
+    const scored = thoughts.map((c) => {
+      const snippet = fold(c.snippet).split(" ").map(stemWord);
+      const overlap = mods.length ? mods.filter((m) => snippet.some((w) => w === m || w.startsWith(m) || m.startsWith(w))).length / mods.length : 0;
+      return { c, s: c.score + (wantCat && c.category === wantCat ? 0.2 : 0) + 0.25 * overlap };
+    }).sort((a, b) => b.s - a.s);
+    const best = scored[0]?.c;
+    out.push({ mention: cleanClause(demo[0]), resolved_id: best?.ref ?? null, label: best?.label ?? "", confidence: best ? Math.min(0.9, 0.45 + (scored[0] as { s: number }).s * 0.6) : 0 });
+  } else if (/\b(from|of) (yesterday|earlier|last (?:week|night)|this morning)\b/i.test(text) && thoughts[0]) {
+    const c = thoughts[0];
+    out.push({ mention: (text.match(/\b(?:from|of) (?:yesterday|earlier|last (?:week|night)|this morning)\b/i) ?? [""])[0], resolved_id: c.ref, label: c.label, confidence: Math.min(0.85, 0.4 + c.score) });
   }
-  const said = text.match(/\bwhat (?:did )?(\w+) (?:say|said|think|suggest|suggested|mention(?:ed)?)\b/i);
+
+  // "what did Sarah say", "what does Dev need again", "what's Sarah thinking"
+  const said = text.match(/\bwhat(?:'s| is| did| does| do| was| were)\s+(\w+)\s+(?:say|said|saying|think|thinking|thought|suggest(?:ed)?|mention(?:ed)?|need(?:s|ed)?|want(?:s|ed)?|ask(?:ed)?|tell|told|recommend(?:ed)?|decide[ds]?)\b/i);
   if (said) {
-    const person = (said[1] as string).toLowerCase();
-    const c =
-      thoughts.find((t) => fold(t.snippet).includes(person) && t.score >= 0.28) ?? input.candidates.find((e) => e.kind === "entity" && fold(e.label) === person);
-    out.push({ mention: said[0], resolved_id: c?.ref ?? null, label: c?.label ?? "", confidence: c ? 0.7 : 0 });
+    const who = (said[1] as string).toLowerCase();
+    const known = input.user.team.some((m) => m.name.toLowerCase() === who) || input.candidates.some((e) => e.kind === "entity" && fold(e.label) === who);
+    if (known) {
+      const c = thoughts.filter((t) => fold(t.snippet).includes(who)).sort((a, b) => b.score - a.score)[0] ?? input.candidates.find((e) => e.kind === "entity" && fold(e.label) === who);
+      out.push({ mention: said[0], resolved_id: c?.ref ?? null, label: c?.label ?? "", confidence: c ? 0.7 : 0 });
+    }
   }
   if (category === "correction") {
     const last = input.lastCard ?? null;

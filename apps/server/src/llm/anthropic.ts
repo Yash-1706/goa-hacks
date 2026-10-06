@@ -6,6 +6,7 @@ import type { CortexBackend, CortexInput, CortexOutput, PartialCallback } from "
 import { createRedactor, rehydrate } from "../gate/redact";
 import { log } from "../log";
 import { parsePartialJson } from "./partial-json";
+import { auditSchema, buildOutputFormat, type OutputFormat } from "./schema";
 
 /* ============================================================================
  * Live cortex on Claude (TRD §6.5–6.6).
@@ -42,12 +43,24 @@ const mapStrings = <T>(value: T, fn: (s: string) => string): T => {
 export class ClaudeCortex implements CortexBackend {
   readonly name = "claude";
   private client: Anthropic;
-  private format = zodOutputFormat(CortexResultSchema);
+  /** our schema keeps enum/const (real constrained decoding); the SDK's helper is the proven-accepted fallback */
+  private fullFormat: OutputFormat = buildOutputFormat(CortexResultSchema);
+  private sdkFormat = zodOutputFormat(CortexResultSchema);
+  private useSdkFormat = false;
   private disabledUntil = 0;
   private warned = new Set<string>();
   private timeoutMs: number;
 
+  private get format(): { type: "json_schema"; schema: Record<string, unknown> } {
+    return this.useSdkFormat ? this.sdkFormat : this.fullFormat;
+  }
+
   constructor(private opts: ClaudeCortexOpts) {
+    const problems = auditSchema(this.fullFormat.schema);
+    if (problems.length) {
+      log.warn("llm", `output schema audit: ${problems.length} issue(s), using the SDK schema`, { first: problems[0] });
+      this.useSdkFormat = true;
+    }
     this.client = new Anthropic({ apiKey: opts.apiKey || undefined, maxRetries: 1, timeout: 15_000 });
     this.timeoutMs = opts.timeoutMs ?? 6000;
   }
@@ -84,7 +97,11 @@ export class ClaudeCortex implements CortexBackend {
     }
   }
 
-  async analyze(input: CortexInput, onPartial?: PartialCallback): Promise<CortexOutput> {
+  analyze(input: CortexInput, onPartial?: PartialCallback): Promise<CortexOutput> {
+    return this.run(input, onPartial, false);
+  }
+
+  private async run(input: CortexInput, onPartial: PartialCallback | undefined, retried: boolean): Promise<CortexOutput> {
     const t0 = performance.now();
     if (Date.now() < this.disabledUntil) return this.degrade(input, "llm_disabled");
 
@@ -170,7 +187,10 @@ export class ClaudeCortex implements CortexBackend {
       };
     } catch (err) {
       clearTimeout(timer);
-      return this.degrade(input, this.handleError(err, "analyze"), t0);
+      const verdict = this.handleError(err, "analyze");
+      // the API refused our strict schema: retry this very request once with the SDK's schema
+      if (verdict === "schema_rejected" && !retried) return this.run(input, onPartial, true);
+      return this.degrade(input, verdict, t0);
     }
   }
 
@@ -186,6 +206,11 @@ export class ClaudeCortex implements CortexBackend {
       return "rate_limit";
     }
     if (err instanceof Anthropic.BadRequestError) {
+      if (!this.useSdkFormat && /schema|output_config|format|enum|const|anyOf/i.test(err.message)) {
+        this.useSdkFormat = true;
+        this.warnOnce("schema", `API rejected the strict output schema; switching to the SDK schema: ${err.message.slice(0, 140)}`);
+        return "schema_rejected";
+      }
       this.warnOnce("bad", `Anthropic rejected the request (${where}): ${err.message.slice(0, 160)}`);
       return "bad_request";
     }

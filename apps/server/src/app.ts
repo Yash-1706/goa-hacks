@@ -29,6 +29,7 @@ import { MemoryStore } from "./memory/store";
 import { BatteryLog, Metrics } from "./metrics/latency";
 import { AuditChain } from "./privacy/audit";
 import { PrivacyService } from "./privacy/service";
+import { Consolidator } from "./consolidate/engine";
 import { AutonomyPolicy } from "./proactive/autonomy";
 import { ProactiveEngine } from "./proactive/engine";
 import { RecallEngine } from "./recall/engine";
@@ -68,6 +69,7 @@ export interface AppCtx {
   engine: CortexEngine;
   recall: RecallEngine;
   proactive: ProactiveEngine;
+  consolidator: Consolidator;
   wispr: WisprService;
   deep: DeepLlm;
   hub: WsHub;
@@ -98,7 +100,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   const dbFile = opts.dbFile ?? path.join(cfg.dataDir, "synapse.db");
   const db = new Db(dbFile);
   const vault = opts.kek ? Vault.withKek(db, opts.kek, clock.now()) : await Vault.open(db, { dataDir: cfg.dataDir, passphrase: cfg.memory.passphrase, now: () => clock.now() });
-  const embedder = opts.embedder ?? (await createEmbedder({ mode: cfg.embeddings.mode, model: cfg.embeddings.model, dataDir: cfg.dataDir }));
+  const embedder = opts.embedder ?? (await createEmbedder({ mode: cfg.embeddings.mode, model: cfg.embeddings.model, dataDir: cfg.embeddings.cacheDir }));
   const store = new MemoryStore(db, vault, embedder, clock, cfg.memory.ttlHours);
   await store.init();
   const audit = new AuditChain(db, clock);
@@ -156,6 +158,8 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   privacy.attachEngine(engine);
   const proactive = new ProactiveEngine({ cfg, clock, bus, store, embedder, hub: hubIface, emit, recall, deep, outbox, privacy, audit, asides });
 
+  const consolidator = new Consolidator({ cfg, clock, store, embedder, deep, emit, audit, isPaused: () => privacy.isPaused() });
+
   const clientConfig = (): ClientConfig => ({
     wisprMode: cfg.wispr.mode,
     languages: cfg.wispr.languages,
@@ -187,7 +191,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
 
   const ctx: AppCtx = {
     cfg, clock, bus, db, vault, store, embedder, triager, intents, metrics, battery, audit, trust, privacy, outbox, autonomy, engine,
-    recall, proactive, wispr, deep, hub, mock, live, asides, fastify, clientConfig,
+    recall, proactive, consolidator, wispr, deep, hub, mock, live, asides, fastify, clientConfig,
   };
   registerRoutes(fastify, ctx);
 
@@ -197,6 +201,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
     await fastify.listen({ port: cfg.port, host: "0.0.0.0" });
     if (!opts.quiet) {
       proactive.start();
+      consolidator.start();
       timers.push(
         setInterval(() => store.sweep(), 60_000),
         setInterval(() => metrics.flush(), 5_000),
@@ -218,6 +223,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   async function stop(): Promise<void> {
     for (const t of timers) clearInterval(t);
     proactive.stop();
+    consolidator.stop();
     wispr.stop();
     await engine.shutdown();
     metrics.flush();

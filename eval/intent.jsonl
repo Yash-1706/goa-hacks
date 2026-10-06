@@ -1,0 +1,64 @@
+{"id":"act01","fragments":["I need to refactor the auth module"],"expect":{"category":"action"}}
+{"id":"act02","fragments":["Uh, I should really clean up","the deployment scripts at some point"],"gaps":[0,1800],"expect":{"category":"action"}}
+{"id":"act03","fragments":["Remind me to update the onboarding doc"],"expect":{"category":"action"}}
+{"id":"act04","fragments":["Have to review Priya's pull request today"],"expect":{"category":"action"}}
+{"id":"act05","fragments":["Note to self,","rotate the staging keys on Friday"],"gaps":[0,1200],"expect":{"category":"action"}}
+{"id":"act06","fragments":["Kal tak migration script likhna hai,","staging pe test bhi karna hai"],"gaps":[0,1700],"expect":{"category":"action"},"tags":["hinglish"]}
+{"id":"act07","fragments":["We should add rate limiting","to the public API"],"gaps":[0,1500],"expect":{"category":"action"}}
+{"id":"bug01","fragments":["That bug from yesterday...","the one with the null pointer...","in the cart service... probably the discount code"],"gaps":[0,1600,1100],"expect":{"category":"bug"},"tags":["ps4"]}
+{"id":"bug02","fragments":["The login page crashes on Safari"],"expect":{"category":"bug"}}
+{"id":"bug03","fragments":["There's a race condition in the queue worker"],"expect":{"category":"bug"}}
+{"id":"bug04","fragments":["The build fails only on CI, not locally"],"expect":{"category":"bug"}}
+{"id":"bug05","fragments":["Something's off with cache invalidation,","it returns stale data"],"gaps":[0,1400],"expect":{"category":"bug"}}
+{"id":"bug06","fragments":["500 error on the payments endpoint again"],"expect":{"category":"bug"}}
+{"id":"com01","fragments":["I need to email the team about the delay"],"expect":{"category":"communication"},"tags":["ps4"]}
+{"id":"com02","fragments":["Tell Dev the staging deploy is done"],"expect":{"category":"communication"}}
+{"id":"com03","fragments":["I should message Sarah about the release"],"expect":{"category":"communication"}}
+{"id":"com04","fragments":["Need to reply to the vendor about pricing"],"expect":{"category":"communication"}}
+{"id":"com05","fragments":["Ping the design team","about the new mockups"],"gaps":[0,1300],"expect":{"category":"communication"}}
+{"id":"com06","fragments":["Follow up with Priya about the contract"],"expect":{"category":"communication"}}
+{"id":"sch01","fragments":["Ugh, Thursday's standup is going to clash with the dentist"],"expect":{"category":"scheduling"}}
+{"id":"sch02","fragments":["Reschedule the one on one with Sam"],"expect":{"category":"scheduling"}}
+{"id":"sch03","fragments":["Block time tomorrow afternoon for deep work"],"expect":{"category":"scheduling"}}
+{"id":"sch04","fragments":["I'm double booked at ten"],"expect":{"category":"scheduling"}}
+{"id":"sch05","fragments":["Push the sprint review to next week"],"expect":{"category":"scheduling"}}
+{"id":"sch06","fragments":["Set up a call with the vendor on Monday"],"expect":{"category":"scheduling"}}
+{"id":"cod01","fragments":["Maybe a recursive...","no, iterative approach with memoization"],"gaps":[0,1400],"expect":{"category":"code"},"tags":["ps4"]}
+{"id":"cod02","fragments":["Use a debounce on that input handler"],"expect":{"category":"code"}}
+{"id":"cod03","fragments":["A retry wrapper with exponential backoff and jitter"],"expect":{"category":"code"}}
+{"id":"cod04","fragments":["Could use a map instead of the nested loop"],"expect":{"category":"code"}}
+{"id":"cod05","fragments":["Something like a sliding window for the rate limiter"],"expect":{"category":"code"}}
+{"id":"cod06","fragments":["A small LRU cache in front of that lookup"],"expect":{"category":"code"}}
+{"id":"dec01","fragments":["Uhh, so the auth thing...","maybe JWT but shorter expiry?","Or no, OAuth2..."],"gaps":[0,1800,2100],"expect":{"category":"decision"},"tags":["ps4"]}
+{"id":"dec02","fragments":["Let's go with Postgres, not Mongo"],"expect":{"category":"decision"}}
+{"id":"dec03","fragments":["I think we should use a queue instead of cron"],"expect":{"category":"decision"}}
+{"id":"dec04","fragments":["Decided: ship it behind a feature flag"],"expect":{"category":"decision"}}
+{"id":"dec05","fragments":["Redis for the session store,","no wait, just Postgres"],"gaps":[0,1500],"expect":{"category":"decision"}}
+{"id":"dec06","fragments":["We'll go with weekly releases, not daily"],"expect":{"category":"decision"}}
+{"id":"ide01","fragments":["What if we cached the embeddings on disk"],"expect":{"category":"idea"}}
+{"id":"ide02","fragments":["Idea: let users pin their favorite searches"],"expect":{"category":"idea"}}
+{"id":"ide03","fragments":["It would be cool to auto summarize the standups"],"expect":{"category":"idea"}}
+{"id":"ide04","fragments":["What about a dark mode for the dashboard"],"expect":{"category":"idea"}}
+{"id":"ide05","fragments":["Maybe we could offer a CLI for power users"],"expect":{"category":"idea"}}
+{"id":"ide06","fragments":["If we precompute the report overnight it would feel instant"],"expect":{"category":"idea"}}
+{"id":"que01","fragments":["Wait, what was the name of that retry library?"],"expect":{"category":"question"}}
+{"id":"que02","fragments":["Why does the build take so long?"],"expect":{"category":"question"}}
+{"id":"que03","fragments":["Did we ever decide on the logging format?"],"expect":{"category":"question"}}
+{"id":"que04","fragments":["Who owns the billing service?"],"expect":{"category":"question"}}
+{"id":"que05","fragments":["Which region are we deploying to?"],"expect":{"category":"question"}}
+{"id":"jou01","fragments":["The sky is nice today"],"expect":{"category":"journal"},"tags":["ps4"]}
+{"id":"jou02","fragments":["That coffee was great"],"expect":{"category":"journal"}}
+{"id":"jou03","fragments":["The park is so green right now"],"expect":{"category":"journal"}}
+{"id":"jou04","fragments":["Today was productive"],"expect":{"category":"journal"}}
+{"id":"jou05","fragments":["Nice quiet morning"],"expect":{"category":"journal"}}
+{"id":"asi01","fragments":["Wait, was that my phone?"],"expect":{"category":"aside"},"tags":["ps4"]}
+{"id":"asi02","fragments":["Hold on, someone's at the door"],"expect":{"category":"aside"}}
+{"id":"asi03","fragments":["Yeah I'll be there in five,","do you want a coffee?"],"gaps":[0,1200],"expect":{"category":"aside"},"tags":["to-other-person"]}
+{"id":"asi04","fragments":["Hello, can you hear me?"],"expect":{"category":"aside"}}
+{"id":"asi05","fragments":["uh um hmm"],"expect":{"category":"aside"}}
+{"id":"asi06","fragments":["Sorry, what?"],"expect":{"category":"aside"}}
+{"id":"rec01","fragments":["What was that idea I had about caching last Tuesday while I was walking?"],"expect":{"category":"recall_query"},"tags":["ps4"]}
+{"id":"rec02","fragments":["What did I say about the auth module yesterday?"],"expect":{"category":"recall_query"}}
+{"id":"rec03","fragments":["Remind me what I decided about the database"],"expect":{"category":"recall_query"}}
+{"id":"rec04","fragments":["Find that thing I mentioned about retries"],"expect":{"category":"recall_query"}}
+{"id":"rec05","fragments":["What were my thoughts on the pricing page?"],"expect":{"category":"recall_query"}}

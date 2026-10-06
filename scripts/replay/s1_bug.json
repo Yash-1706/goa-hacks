@@ -1,0 +1,11 @@
+{
+  "name": "S1 mumbled bug report",
+  "description": "PS4 example: a bug described across four pauses, one fragment whispered. Expect ONE thought (bug), a GitHub issue draft, entity cart-service.",
+  "steps": [
+    { "say": "That bug from yesterday...", "gapMs": 0 },
+    { "say": "the one with the null pointer...", "gapMs": 1600 },
+    { "say": "in the cart service...", "gapMs": 1100, "whisper": true },
+    { "say": "probably the discount code", "gapMs": 900 },
+    { "wait": 7000 }
+  ]
+}

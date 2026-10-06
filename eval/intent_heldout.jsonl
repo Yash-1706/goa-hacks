@@ -1,0 +1,63 @@
+{"id":"h-act01","fragments":["I keep meaning to upgrade the Node version on the build servers"],"expect":{"category":"action"}}
+{"id":"h-act02","fragments":["Gotta write the postmortem for last week's outage"],"expect":{"category":"action"}}
+{"id":"h-act03","fragments":["Oh and I have to renew the SSL certificate","before it expires"],"gaps":[0,1500],"expect":{"category":"action"}}
+{"id":"h-act04","fragments":["Let me draft the architecture doc for the new billing flow"],"expect":{"category":"action"}}
+{"id":"h-act05","fragments":["Should probably archive the old repos"],"expect":{"category":"action"}}
+{"id":"h-act06","fragments":["Yaar mujhe kal subah code review karna hai"],"expect":{"category":"action"},"tags":["hinglish"]}
+{"id":"h-bug01","fragments":["Users are getting logged out randomly after about ten minutes"],"expect":{"category":"bug"}}
+{"id":"h-bug02","fragments":["The export button does nothing","when the table has more than a thousand rows"],"gaps":[0,1400],"expect":{"category":"bug"}}
+{"id":"h-bug03","fragments":["Memory keeps climbing on the worker pods until they get killed"],"expect":{"category":"bug"}}
+{"id":"h-bug04","fragments":["The unit test for dates fails on the first of the month"],"expect":{"category":"bug"}}
+{"id":"h-bug05","fragments":["Emails are going out twice for password resets"],"expect":{"category":"bug"}}
+{"id":"h-bug06","fragments":["The mobile layout breaks when the keyboard opens"],"expect":{"category":"bug"}}
+{"id":"h-com01","fragments":["I owe Marcus a reply about the API proposal"],"expect":{"category":"communication"}}
+{"id":"h-com02","fragments":["Should send the client a short status update tomorrow"],"expect":{"category":"communication"}}
+{"id":"h-com03","fragments":["Let Priya know the design review moved"],"expect":{"category":"communication"}}
+{"id":"h-com04","fragments":["Write to the support team about the refund edge case"],"expect":{"category":"communication"}}
+{"id":"h-com05","fragments":["Need to tell everyone the wifi password changed"],"expect":{"category":"communication"}}
+{"id":"h-com06","fragments":["Drop a note to finance about the invoice mismatch"],"expect":{"category":"communication"}}
+{"id":"h-sch01","fragments":["My three o'clock with the investors overlaps with the demo prep"],"expect":{"category":"scheduling"}}
+{"id":"h-sch02","fragments":["Can we move the retro to Wednesday morning"],"expect":{"category":"scheduling"}}
+{"id":"h-sch03","fragments":["I have to be at the airport by six on Saturday"],"expect":{"category":"scheduling"}}
+{"id":"h-sch04","fragments":["Put the quarterly review on the calendar for the fourteenth"],"expect":{"category":"scheduling"}}
+{"id":"h-sch05","fragments":["The dentist booking is at the same time as the all hands"],"expect":{"category":"scheduling"}}
+{"id":"h-sch06","fragments":["Free up Friday afternoon so we can pair on the migration"],"expect":{"category":"scheduling"}}
+{"id":"h-cod01","fragments":["Could do this with a generator","instead of building the whole list"],"gaps":[0,1300],"expect":{"category":"code"}}
+{"id":"h-cod02","fragments":["Probably a topological sort to order the migrations"],"expect":{"category":"code"}}
+{"id":"h-cod03","fragments":["Use a bloom filter before hitting the database"],"expect":{"category":"code"}}
+{"id":"h-cod04","fragments":["Wrap the callbacks in promises,","or no, just use async await throughout"],"gaps":[0,1500],"expect":{"category":"code"}}
+{"id":"h-cod05","fragments":["Throttle the scroll handler and use requestAnimationFrame"],"expect":{"category":"code"}}
+{"id":"h-cod06","fragments":["Hash the password with argon2 and a per user salt"],"expect":{"category":"code"}}
+{"id":"h-dec01","fragments":["I'm going with SQLite for now,","we can move to Postgres later"],"gaps":[0,1400],"expect":{"category":"decision"}}
+{"id":"h-dec02","fragments":["Either Kafka or just a Postgres table as a queue,","I'll go with the table"],"gaps":[0,1700],"expect":{"category":"decision"}}
+{"id":"h-dec03","fragments":["Final call, we're not supporting Internet Explorer at all"],"expect":{"category":"decision"}}
+{"id":"h-dec04","fragments":["Tabs or spaces,","okay spaces, two of them"],"gaps":[0,1500],"expect":{"category":"decision"}}
+{"id":"h-dec05","fragments":["Let's keep the monolith for one more quarter"],"expect":{"category":"decision"}}
+{"id":"h-dec06","fragments":["REST or GraphQL for the mobile app,","hmm, REST"],"gaps":[0,1800],"expect":{"category":"decision"}}
+{"id":"h-ide01","fragments":["Imagine if the app could suggest the next task","based on what you said this morning"],"gaps":[0,1500],"expect":{"category":"idea"}}
+{"id":"h-ide02","fragments":["A weekly digest email of everything we shipped might be nice"],"expect":{"category":"idea"}}
+{"id":"h-ide03","fragments":["We could let customers vote on the roadmap items"],"expect":{"category":"idea"}}
+{"id":"h-ide04","fragments":["What if onboarding was just a voice conversation"],"expect":{"category":"idea"}}
+{"id":"h-ide05","fragments":["Maybe a plugin system so teams can add their own integrations"],"expect":{"category":"idea"}}
+{"id":"h-ide06","fragments":["A heatmap of when the errors happen would reveal patterns"],"expect":{"category":"idea"}}
+{"id":"h-que01","fragments":["Where did we put the runbook for the payments outage?"],"expect":{"category":"question"}}
+{"id":"h-que02","fragments":["Is the cache layer even turned on in staging?"],"expect":{"category":"question"}}
+{"id":"h-que03","fragments":["How many requests per second can this thing handle"],"expect":{"category":"question"}}
+{"id":"h-que04","fragments":["What's the difference between those two plans again"],"expect":{"category":"question"}}
+{"id":"h-que05","fragments":["Who approved the access request for the contractor?"],"expect":{"category":"question"}}
+{"id":"h-jou01","fragments":["The light in here is lovely this afternoon"],"expect":{"category":"journal"}}
+{"id":"h-jou02","fragments":["That was a really good lunch"],"expect":{"category":"journal"}}
+{"id":"h-jou03","fragments":["It's pouring outside"],"expect":{"category":"journal"}}
+{"id":"h-jou04","fragments":["Good music today"],"expect":{"category":"journal"}}
+{"id":"h-jou05","fragments":["Feels like a calm afternoon"],"expect":{"category":"journal"}}
+{"id":"h-asi01","fragments":["Oh sorry, I was talking to myself"],"expect":{"category":"aside"}}
+{"id":"h-asi02","fragments":["Can you pass me the charger"],"expect":{"category":"aside"}}
+{"id":"h-asi03","fragments":["Yes I'm here, give me a second"],"expect":{"category":"aside"}}
+{"id":"h-asi04","fragments":["Hmm hm hm"],"expect":{"category":"aside"}}
+{"id":"h-asi05","fragments":["Ha, no, I was just thinking out loud"],"expect":{"category":"aside"}}
+{"id":"h-asi06","fragments":["Is that you calling? Hang on"],"expect":{"category":"aside"}}
+{"id":"h-rec01","fragments":["What did I say about the invoice thing earlier today"],"expect":{"category":"recall_query"}}
+{"id":"h-rec02","fragments":["Where did I land on the queue versus cron question"],"expect":{"category":"recall_query"}}
+{"id":"h-rec03","fragments":["Remind me what Sarah told me about the login flow"],"expect":{"category":"recall_query"}}
+{"id":"h-rec04","fragments":["What was the idea I had on the train about onboarding"],"expect":{"category":"recall_query"}}
+{"id":"h-rec05","fragments":["Find my notes on the postmortem"],"expect":{"category":"recall_query"}}

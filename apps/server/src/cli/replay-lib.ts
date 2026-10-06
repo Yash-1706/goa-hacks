@@ -102,3 +102,54 @@ export async function runReplay(ctx: AppCtx, script: ReplayScript, opts: ReplayO
   }
   return { fragments: ids.length, ids };
 }
+
+export interface SpeakOptions {
+  fragments: string[];
+  /** silence before each fragment (ms); default 0 for the first, 1500 for the rest */
+  gaps?: number[];
+  sessionId: string;
+  device?: "desk" | "pocket";
+  activity?: Activity;
+  whisper?: boolean;
+}
+
+/**
+ * Speak one thought (a list of fragments) on the ctx clock: client timestamps are derived from
+ * `ctx.clock.now()`, so a FakeClock can place the thought hours in the past. Awaits the pipeline.
+ */
+export async function speak(ctx: AppCtx, o: SpeakOptions): Promise<{ ids: string[] }> {
+  const kind = o.device ?? "desk";
+  const activity = o.activity ?? (kind === "pocket" ? "walking" : "desk");
+  const dev = devRef(kind, activity);
+  ctx.store.ensureSession(o.sessionId, dev.id, dev.kind, activity);
+  let vt = ctx.clock.now();
+  let lastEnd = 0;
+  const ids: string[] = [];
+  for (let i = 0; i < o.fragments.length; i++) {
+    const text = o.fragments[i] as string;
+    const gap = o.gaps?.[i] ?? (i === 0 ? 0 : 1500);
+    const dur = Math.max(700, text.split(/\s+/).length * 330);
+    const start = vt + gap;
+    const end = start + dur;
+    vt = end;
+    const id = `${o.sessionId}-${Math.random().toString(36).slice(2, 8)}`;
+    ids.push(id);
+    await ctx.engine.handleFragment(dev, {
+      type: "fragment.final",
+      fragmentId: id,
+      sessionId: o.sessionId,
+      text,
+      t: { speechStart: start, speechEnd: end, commitSent: end, wisprFinal: end + 200 },
+      durationMs: dur,
+      pauseBeforeMs: lastEnd ? Math.max(0, start - lastEnd) : 0,
+      rmsMean: o.whisper ? 0.02 : 0.08,
+      rmsMax: 0.2,
+      whisper: Boolean(o.whisper),
+      activity,
+      transport: "replay",
+    });
+    lastEnd = end;
+    await ctx.engine.idle();
+  }
+  return { ids };
+}

@@ -59,6 +59,7 @@ const EnvSchema = z.object({
 
   EMBEDDINGS: str("model"),
   EMBED_MODEL: str("Xenova/all-MiniLM-L6-v2"),
+  MODEL_CACHE_DIR: str(""),
 
   SYNAPSE_PASSPHRASE: str(""),
   WORKING_MEMORY_TTL_HOURS: num(72),
@@ -114,7 +115,7 @@ export interface Config {
     fast: string;
     deep: string;
   };
-  embeddings: { mode: "model" | "hash"; model: string };
+  embeddings: { mode: "model" | "hash"; model: string; cacheDir: string };
   memory: {
     passphrase: string;
     ttlHours: number;
@@ -182,6 +183,8 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
     embeddings: {
       mode: raw.EMBEDDINGS === "hash" ? "hash" : "model",
       model: raw.EMBED_MODEL,
+      // the (non-sensitive) model cache is independent of the user-data dir so tools and tests share one download
+      cacheDir: raw.MODEL_CACHE_DIR ? path.resolve(REPO_ROOT, raw.MODEL_CACHE_DIR) : path.resolve(REPO_ROOT, "data"),
     },
     memory: {
       passphrase: raw.SYNAPSE_PASSPHRASE,

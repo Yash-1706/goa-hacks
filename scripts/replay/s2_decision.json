@@ -1,0 +1,11 @@
+{
+  "name": "S2 backtracking decision",
+  "description": "PS4 example: JWT is considered then rejected for OAuth2, plus an open question. Expect a decision card with JWT struck through and (if Sarah's earlier thought exists) a quiet answer.",
+  "steps": [
+    { "say": "Uhh, so the auth thing...", "gapMs": 0 },
+    { "say": "maybe JWT but shorter expiry?", "gapMs": 1800 },
+    { "say": "Or no, OAuth2...", "gapMs": 2100 },
+    { "say": "what did Sarah say?", "gapMs": 1500 },
+    { "wait": 7000 }
+  ]
+}

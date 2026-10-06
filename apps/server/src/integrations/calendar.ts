@@ -52,10 +52,15 @@ export function findSlots(
     const dow = new Date(day + off * 60_000).getUTCDay();
     if (dow === 0 || dow === 6) continue;
     seen++;
-    for (let t = day + ws * HOUR; t + dur <= day + we * HOUR && slots.length < count; t += 30 * 60_000) {
+    let today = 0;
+    let lastStart = -Infinity;
+    for (let t = day + ws * HOUR; t + dur <= day + we * HOUR && slots.length < count && today < 2; t += 30 * 60_000) {
       if (t < now + 15 * 60_000) continue;
+      if (t - lastStart < 2 * HOUR) continue; // spread the options out instead of listing back-to-back half hours
       if (busy.some((b) => t < b.end && t + dur > b.start)) continue;
       slots.push({ start: t, end: t + dur, label: fmtSlot(t, cfg.timezone, now) });
+      lastStart = t;
+      today++;
     }
   }
   return slots;

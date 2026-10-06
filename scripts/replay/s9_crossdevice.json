@@ -1,0 +1,11 @@
+{
+  "name": "S9 phone to desk",
+  "description": "A walk thought on the phone shows up on the desk; then a desk thought links to it.",
+  "steps": [
+    { "device": "pocket", "activity": "walking", "say": "What if we cached the embeddings on disk", "gapMs": 0 },
+    { "say": "and kept the hot ones in memory", "gapMs": 1500 },
+    { "wait": 7000 },
+    { "device": "desk", "activity": "desk", "say": "That caching idea from my walk, an LRU with a size cap would do it", "gapMs": 2000 },
+    { "wait": 7000 }
+  ]
+}

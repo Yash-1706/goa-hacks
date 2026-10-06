@@ -1,0 +1,9 @@
+{
+  "name": "S4 half-formed code",
+  "description": "PS4 example: recursive -> iterative with memoization. Expect a code snippet + explanation, repair recorded.",
+  "steps": [
+    { "say": "Maybe a recursive...", "gapMs": 0 },
+    { "say": "no, iterative approach with memoization", "gapMs": 1400 },
+    { "wait": 7000 }
+  ]
+}

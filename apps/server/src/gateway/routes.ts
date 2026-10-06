@@ -255,6 +255,8 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
     }
     return { fragmentId: id };
   });
+  app.post("/api/dev/consolidate", async () => ctx.consolidator.run());
+  app.get("/api/consolidation", async () => ctx.consolidator.last ?? null);
   app.post("/api/dev/replay", async (req) => {
     const script = z
       .object({ name: z.string(), sessionId: z.string().optional(), steps: z.array(z.record(z.string(), z.unknown())), speed: z.number().optional(), settle: z.boolean().optional() })

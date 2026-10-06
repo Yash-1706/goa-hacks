@@ -1,0 +1,28 @@
+{"text":"pause memory","expect":"pause"}
+{"text":"Pause memory.","expect":"pause"}
+{"text":"pause the memory please","expect":"pause"}
+{"text":"okay pause memory","expect":"pause"}
+{"text":"paws memory","expect":"pause"}
+{"text":"pause memori","expect":"pause"}
+{"text":"stop listening","expect":"pause"}
+{"text":"off the record","expect":"pause"}
+{"text":"go off the record","expect":"pause"}
+{"text":"go private","expect":"pause"}
+{"text":"stop recording","expect":"pause"}
+{"text":"don't remember this","expect":"pause"}
+{"text":"turn off the memory","expect":"pause"}
+{"text":"memory band karo","expect":"pause"}
+{"text":"forget that","expect":"forget"}
+{"text":"forget the last five minutes","expect":"forget"}
+{"text":"delete the last 2 minutes","expect":"forget"}
+{"text":"forget what I said about Sarah","expect":"forget"}
+{"text":"we should pause recording the metrics until the deploy finishes","expect":"none"}
+{"text":"the memory leak is in the websocket handler","expect":"none"}
+{"text":"I need to stop the deploy","expect":"none"}
+{"text":"let's pause the migration for a day and think about it","expect":"none"}
+{"text":"record the demo tomorrow","expect":"none"}
+{"text":"that was off the charts and I told Sarah about it yesterday afternoon","expect":"none"}
+{"text":"I forgot that the build was red","expect":"none"}
+{"text":"the memory usage doubled after the release","expect":"none"}
+{"text":"private mode in the browser leaks the cache","expect":"none"}
+{"text":"remember to rotate the keys","expect":"none"}

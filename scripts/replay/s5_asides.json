@@ -1,0 +1,11 @@
+{
+  "name": "S5 asides and journal",
+  "description": "A fleeting observation (journal), a conversational aside (filtered, counter only), mumbling (ignored), speech to another person (filtered).",
+  "steps": [
+    { "say": "The sky is nice today", "gapMs": 0 },
+    { "say": "Wait, was that my phone?", "gapMs": 4500 },
+    { "say": "uh um hmm", "gapMs": 2000 },
+    { "say": "Yeah I'll be there in five, do you want a coffee?", "gapMs": 3000 },
+    { "wait": 7000 }
+  ]
+}

@@ -1,0 +1,10 @@
+{"id":"rc01","query":"What was that idea I had about caching last Tuesday while I was walking?","expect":"cache"}
+{"id":"rc02","query":"What did Sarah say about the mobile login?","expect":"oauth"}
+{"id":"rc03","query":"That bug with the discount code","expect":"discount"}
+{"id":"rc04","query":"Something I said about retrying webhooks","expect":"retry"}
+{"id":"rc05","query":"What did I decide about auth earlier?","expect":"auth"}
+{"id":"rc06","query":"The thing about rotating keys","expect":"keys"}
+{"id":"rc07","query":"That idea about favorite searches from my walk","expect":"pin"}
+{"id":"rc08","query":"What was the standup conflict about?","expect":"standup"}
+{"id":"rc09","query":"Tell me about the Safari problem","expect":"safari"}
+{"id":"rc10","query":"What did I want to tell Dev?","expect":"dev"}

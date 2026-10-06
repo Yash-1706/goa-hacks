@@ -399,6 +399,19 @@ export class MemoryStore {
     t.entityIds = ents.map((e) => e.id);
   }
 
+  saveEntity(e: EntityRec): void {
+    P.saveEntity(this.db, this.vault, e);
+  }
+
+  /** Remove an entity and everything that points at it (links, edges, vector, dictionary is untouched). */
+  removeEntity(id: string): void {
+    this.entities.delete(id);
+    this.entityVec.remove(id);
+    this.db.run("DELETE FROM thought_entities WHERE entity_id = ?", id);
+    this.db.run("DELETE FROM entities WHERE id = ?", id);
+    this.removeEdgesTouching(id);
+  }
+
   /** Seed/pinned entities (teammates) are never garbage collected and never expire. */
   pinEntity(e: EntityRec): void {
     e.longTerm = 2;

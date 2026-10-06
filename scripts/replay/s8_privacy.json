@@ -1,0 +1,9 @@
+{
+  "name": "S8 whispered credentials then pause",
+  "description": "Sensitive speech, then the whispered kill phrase: mic released, trailing window purged, phrase never stored.",
+  "steps": [
+    { "say": "The staging database password is hunter two", "gapMs": 0, "whisper": true },
+    { "say": "pause memory", "gapMs": 900, "whisper": true },
+    { "wait": 2000 }
+  ]
+}

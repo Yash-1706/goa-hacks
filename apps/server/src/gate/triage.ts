@@ -36,7 +36,16 @@ const CUES: Array<{ re: RegExp; boost: Partial<Record<Category, number>> }> = [
   { re: /\b(maybe|or no|go(ing)? with|decided|it is then|leaning (towards|toward)|instead of|rather than|not .{1,20} but)\b.*\b(jwt|oauth2?|postgres|mongo|redis|queue|cron|session|monorepo|rest|graphql|fastify|express)\b/i, boost: { decision: 0.4 } },
   { re: /\b(pause memory|stop listening|off the record|go private|forget (that|this|the last))\b/i, boost: { privacy: 0.9 } },
   { re: /\b(scratch that|undo that|never mind the last|i meant|actually make it|not that one|the other one)\b/i, boost: { correction: 0.45 } },
-  { re: /\b(sky|weather|coffee|hungry|beautiful|sunset|lovely|nice day)\b/i, boost: { journal: 0.3 } },
+  { re: /\b(sky|weather|coffee|hungry|beautiful|sunset|lovely|nice day|pouring|lunch|music today|calm afternoon)\b/i, boost: { journal: 0.3 } },
+  // questions about one's OWN past speech / notes
+  { re: /\b(where did i (land|leave|end up)|what did i (say|decide|think|note|mention|want)|remind me (what|about)|find (my|the|that) (notes?|thing|idea)|what (was|were) (the|that|my) (idea|thought|bug|decision|plan))\b/i, boost: { recall_query: 0.6 } },
+  { re: /\b(gotta|got to|i keep meaning to|oh and i have to|should probably|let me (write|draft|fix|clean|update|check|sort))\b/i, boost: { action: 0.3 } },
+  { re: /\b(final call|going with|i'?ll go with|let'?s keep|we(?:'| a)re not|we will not|okay,? (spaces|tabs)|either .{3,40} or)\b/i, boost: { decision: 0.4 } },
+  { re: /\b(imagine if|what if|might be nice|it would be (cool|nice)|we could|how about|what about)\b/i, boost: { idea: 0.3 } },
+  { re: /\b(drop a note|let \w+ know|owe \w+ a reply|status update|write to|send (the|a) (client|team))\b/i, boost: { communication: 0.3 } },
+  { re: /\b(airport|o'clock|all hands|free up|put .{2,30} on the calendar|move the (retro|meeting|call|review)|be at)\b/i, boost: { scheduling: 0.3 } },
+  { re: /\b(argon2|bloom filter|generator|topological|throttle|requestanimationframe|async await|promises|hash the)\b/i, boost: { code: 0.35 } },
+  { re: /^(how many|how much|how long|how do|where did we|is the|are we|which|who|what's the)\b/i, boost: { question: 0.3 } },
   { re: /\b(was that my phone|hold on|one sec|sorry what|can you hear|testing|someone('s| is) at the door|do you want|bye)\b/i, boost: { aside: 0.5 } },
 ];
 
