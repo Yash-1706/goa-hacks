@@ -8,6 +8,7 @@ import { Trust, isLoopback } from "../src/gateway/trust";
 import { loadConfig } from "../src/config";
 import { WisprService } from "../src/wispr/service";
 import { ambiguity } from "../src/cortex/resolver";
+import { seedCalendar } from "../src/integrations/calendar";
 import { computeSalience } from "../src/cortex/salience";
 import { makeApp, type TestApp } from "./app-helper";
 import { makeStore } from "./helpers";
@@ -289,5 +290,41 @@ describe("consolidation (sleep cycle)", () => {
     expect([...app.ctx.store.edges.values()].some((e) => e.type === "same_topic")).toBe(true);
     expect(rep.sessionsLabelled).toBeGreaterThanOrEqual(1);
     expect(createHash("sha256").update("x").digest("hex")).toBeTruthy();
+  });
+});
+
+describe("demo calendar", () => {
+  const cfg = { timezone: "Asia/Kolkata" };
+  const DAY = 86_400_000;
+  const dayOf = (ms: number) => new Intl.DateTimeFormat("en-GB", { timeZone: cfg.timezone, weekday: "short" }).format(ms);
+
+  it("always has a Thursday clash ahead: this week and next, idempotent, stale seed weeks dropped, the person's own events kept", async () => {
+    const { store } = await makeStore();
+    const tue = Date.parse("2026-10-06T23:00:00+05:30");
+    seedCalendar(store, cfg, tue);
+    const first = [...store.calendar.values()];
+    expect(first.length).toBe(22); // 11 events x 2 weeks
+    const thursdays = first.filter((c) => c.title === "Dentist appointment").map((c) => c.start);
+    expect(thursdays).toHaveLength(2);
+    for (const t of thursdays) {
+      expect(dayOf(t)).toBe("Thu");
+      expect(t).toBeGreaterThan(tue); // both Thursdays are still ahead
+    }
+    // the clash exists in the data: standup and dentist overlap on each Thursday
+    for (const t of thursdays) expect(first.some((c) => c.title === "Team standup" && c.start === t)).toBe(true);
+
+    seedCalendar(store, cfg, tue); // idempotent
+    expect(store.calendar.size).toBe(22);
+
+    // the person adds their own event; two weeks later the old seed weeks go, a fresh pair appears, theirs stays
+    store.addCalendar("Vendor sync (proposed)", tue + 3 * DAY, tue + 3 * DAY + 30 * 60_000, "voice");
+    const later = tue + 14 * DAY;
+    seedCalendar(store, cfg, later);
+    const all = [...store.calendar.values()];
+    expect(all.filter((c) => c.source === "voice")).toHaveLength(1);
+    const seeds = all.filter((c) => c.source === "seed");
+    expect(seeds.every((c) => c.end > later - 7 * DAY)).toBe(true); // nothing older than the current week survives
+    const dentists = seeds.filter((c) => c.title === "Dentist appointment").map((c) => c.start);
+    expect(dentists.some((t) => t > later)).toBe(true);
   });
 });

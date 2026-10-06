@@ -88,7 +88,7 @@ Your job is to infer what they MEANT, decide what (if anything) deserves to exis
 Each example shows the input and the exact JSON you should return. The values are illustrative: derive yours from the actual input.
 `;
 
-type Example = { input: Omit<CortexInput, "triage" | "vocabulary" | "threadRef"> & { threadRef?: string }; output: CortexResult };
+export type Example = { input: Omit<CortexInput, "triage" | "vocabulary" | "threadRef"> & { threadRef?: string }; output: CortexResult };
 
 const NOW = Date.parse("2026-10-06T15:42:10+05:30");
 const base: Pick<CortexInput, "now" | "timezone" | "user" | "previous" | "lastCard"> = {
@@ -100,7 +100,7 @@ const base: Pick<CortexInput, "now" | "timezone" | "user" | "previous" | "lastCa
 };
 const frag = (id: string, dtMs: number, text: string, whisper = false) => ({ id, dtMs, text, whisper, pauseBeforeMs: dtMs });
 
-const EXAMPLES: Example[] = [
+export const EXAMPLES: Example[] = [
   {
     input: {
       ...base,

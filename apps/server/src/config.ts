@@ -53,9 +53,20 @@ const EnvSchema = z.object({
   WISPR_WARMUP_INTERVAL_S: num(120),
 
   LLM_MODE: str("mock"),
+  // auto | anthropic | groq. auto: Anthropic when its key is set, else Groq when its key is set, else mock.
+  LLM_PROVIDER: str("auto"),
   ANTHROPIC_API_KEY: str(""),
   MODEL_FAST: str("claude-haiku-4-5"),
   MODEL_DEEP: str("claude-opus-5-5"),
+
+  GROQ_API_KEY: str(""),
+  GROQ_BASE_URL: str("https://api.groq.com/openai/v1"),
+  GROQ_MODEL_FAST: str("openai/gpt-oss-20b"),
+  GROQ_MODEL_DEEP: str("openai/gpt-oss-120b"),
+  GROQ_OUTPUT_MODE: str("auto"),
+  GROQ_TPM: num(7000),
+  GROQ_MAX_WAIT_MS: num(2000),
+  GROQ_MAX_REQUESTS_PER_DAY: num(900),
 
   EMBEDDINGS: str("model"),
   EMBED_MODEL: str("Xenova/all-MiniLM-L6-v2"),
@@ -84,6 +95,12 @@ const EnvSchema = z.object({
   JIRA_PROJECT_KEY: str(""),
 });
 
+/** Every environment variable the server reads (a test keeps .env.example in step with this list). */
+export const ENV_KEYS: readonly string[] = Object.keys(EnvSchema.shape);
+
+export type LlmProvider = "anthropic" | "groq";
+export type GroqOutputMode = "auto" | "json_schema" | "json_object";
+
 export interface TeamMember {
   name: string;
   role: string;
@@ -110,10 +127,28 @@ export interface Config {
   };
   llm: {
     mode: "live" | "mock";
+    /** the provider that serves the live paths; "mock" whenever `mode` is "mock" */
+    provider: LlmProvider | "mock";
+    /** a key exists for the effective provider */
     hasKey: boolean;
+    /** the Anthropic key (the Groq key lives in `groq.apiKey`) */
     apiKey: string;
+    /** model ids of the effective provider (Anthropic's MODEL_FAST/DEEP unless the provider is groq) */
     fast: string;
     deep: string;
+    groq: {
+      apiKey: string;
+      baseUrl: string;
+      fast: string;
+      deep: string;
+      outputMode: GroqOutputMode;
+      /** tokens-per-minute budget the client paces itself to (the free tier allows 8,000) */
+      tpm: number;
+      /** longest a call may queue for the budget before it degrades to the local cortex */
+      maxWaitMs: number;
+      /** local safety cap on requests per UTC day (the free tier allows 1,000); 0 = no cap */
+      maxRequestsPerDay: number;
+    };
   };
   embeddings: { mode: "model" | "hash"; model: string; cacheDir: string };
   memory: {
@@ -139,8 +174,18 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
   // client/proxy need a key to mint tokens or to proxy; without one we fall back to mock.
   const effectiveWispr = wisprMode !== "mock" && !raw.WISPR_API_KEY ? "mock" : wisprMode;
 
+  // LLM provider. LLM_MODE=mock and LOCAL_ONLY always win. An explicit LLM_PROVIDER=anthropic keeps the original
+  // semantics (live even without a key: the call fails with an auth error and degrades). `auto` and `groq` need a key.
   const llmWanted = raw.LLM_MODE === "live" ? "live" : "mock";
-  const effectiveLlm: "live" | "mock" = llmWanted === "live" && !raw.LOCAL_ONLY ? "live" : "mock";
+  const asked = raw.LLM_PROVIDER.toLowerCase();
+  let provider: LlmProvider | "mock" = "mock";
+  if (llmWanted === "live" && !raw.LOCAL_ONLY) {
+    if (asked === "anthropic") provider = "anthropic";
+    else if (asked === "groq") provider = raw.GROQ_API_KEY ? "groq" : "mock";
+    else provider = raw.ANTHROPIC_API_KEY ? "anthropic" : raw.GROQ_API_KEY ? "groq" : "mock";
+  }
+  const effectiveLlm: "live" | "mock" = provider === "mock" ? "mock" : "live";
+  const groqMode = (["auto", "json_schema", "json_object"].includes(raw.GROQ_OUTPUT_MODE) ? raw.GROQ_OUTPUT_MODE : "auto") as GroqOutputMode;
 
   const team: TeamMember[] = raw.USER_TEAM.split(",")
     .map((p) => p.trim())
@@ -175,10 +220,21 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
     },
     llm: {
       mode: effectiveLlm,
-      hasKey: Boolean(raw.ANTHROPIC_API_KEY),
+      provider,
+      hasKey: provider === "groq" ? Boolean(raw.GROQ_API_KEY) : Boolean(raw.ANTHROPIC_API_KEY),
       apiKey: raw.ANTHROPIC_API_KEY,
-      fast: raw.MODEL_FAST,
-      deep: raw.MODEL_DEEP,
+      fast: provider === "groq" ? raw.GROQ_MODEL_FAST : raw.MODEL_FAST,
+      deep: provider === "groq" ? raw.GROQ_MODEL_DEEP : raw.MODEL_DEEP,
+      groq: {
+        apiKey: raw.GROQ_API_KEY,
+        baseUrl: raw.GROQ_BASE_URL.replace(/\/$/, ""),
+        fast: raw.GROQ_MODEL_FAST,
+        deep: raw.GROQ_MODEL_DEEP,
+        outputMode: groqMode,
+        tpm: Math.max(500, raw.GROQ_TPM),
+        maxWaitMs: Math.max(0, raw.GROQ_MAX_WAIT_MS),
+        maxRequestsPerDay: Math.max(0, Math.round(raw.GROQ_MAX_REQUESTS_PER_DAY)),
+      },
     },
     embeddings: {
       mode: raw.EMBEDDINGS === "hash" ? "hash" : "model",

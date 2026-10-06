@@ -98,28 +98,39 @@ export function toIcs(e: { id: string; title: string; start: number; end: number
     .join("\r\n");
 }
 
-/** Seed a realistic week (incl. the demo conflict) when the calendar is empty. */
+/**
+ * Keep a realistic demo calendar (incl. the demo conflict: Thursday standup vs dentist) for THIS week and NEXT week,
+ * so "Thursday" always has a clash to find, whenever the database was created. Idempotent per week; seed events from
+ * weeks that are over are dropped; events the person added (voice / manual) are never touched.
+ */
 export function seedCalendar(store: MemoryStore, cfg: Pick<Config, "timezone">, now: number): void {
-  if (store.calendar.size > 0) return;
   const tz = cfg.timezone;
   const off = tzOffsetMinutes(now, tz);
   const today = startOfDay(now, tz);
   const dow = new Date(today + off * 60_000).getUTCDay(); // 0=Sun
-  const monday = today - ((dow + 6) % 7) * DAY;
-  const at = (dayOffset: number, h: number, m = 0): number => monday + dayOffset * DAY + (h + m / 60) * HOUR;
-  const ev = (title: string, d: number, h: number, m: number, mins: number): void => {
-    store.addCalendar(title, at(d, h, m), at(d, h, m) + mins * 60_000, "seed");
-  };
-  // the demo conflict: Thursday standup vs dentist
-  ev("Team standup", 3, 10, 0, 30);
-  ev("Dentist appointment", 3, 10, 0, 60);
-  ev("Team standup", 0, 10, 0, 30);
-  ev("Team standup", 1, 10, 0, 30);
-  ev("Team standup", 2, 10, 0, 30);
-  ev("Team standup", 4, 10, 0, 30);
-  ev("Sprint planning", 0, 14, 0, 60);
-  ev("1:1 with Sarah", 2, 15, 0, 30);
-  ev("Design review", 1, 16, 0, 45);
-  ev("Release sync", 4, 15, 30, 30);
-  ev("Lunch with Dev", 3, 13, 0, 60);
+  const thisMonday = today - ((dow + 6) % 7) * DAY;
+
+  for (const rec of [...store.calendar.values()]) if (rec.source === "seed" && rec.end < thisMonday) store.removeCalendar(rec.id);
+
+  for (const week of [0, 1]) {
+    const monday = thisMonday + week * 7 * DAY;
+    const weekEnd = monday + 7 * DAY;
+    if ([...store.calendar.values()].some((c) => c.source === "seed" && c.start >= monday && c.start < weekEnd)) continue;
+    const at = (dayOffset: number, h: number, m = 0): number => monday + dayOffset * DAY + (h + m / 60) * HOUR;
+    const ev = (title: string, d: number, h: number, m: number, mins: number): void => {
+      store.addCalendar(title, at(d, h, m), at(d, h, m) + mins * 60_000, "seed");
+    };
+    // the demo conflict: Thursday standup vs dentist
+    ev("Team standup", 3, 10, 0, 30);
+    ev("Dentist appointment", 3, 10, 0, 60);
+    ev("Team standup", 0, 10, 0, 30);
+    ev("Team standup", 1, 10, 0, 30);
+    ev("Team standup", 2, 10, 0, 30);
+    ev("Team standup", 4, 10, 0, 30);
+    ev("Sprint planning", 0, 14, 0, 60);
+    ev("1:1 with Sarah", 2, 15, 0, 30);
+    ev("Design review", 1, 16, 0, 45);
+    ev("Release sync", 4, 15, 30, 30);
+    ev("Lunch with Dev", 3, 13, 0, 60);
+  }
 }
