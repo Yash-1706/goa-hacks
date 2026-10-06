@@ -47,16 +47,16 @@ const SESSIONS: Sess[] = [
   ] },
   { id: "seed-keys", hoursAgo: 26, device: "pocket", activity: "vehicle", say: [
     { t: "Remember to rotate the staging keys on Friday", whisper: true },
-    { t: "and tell Dev the staging URL will change after the rotation", gap: 5200 },
+    { t: "and tell Dev the cart service staging URL will change after the rotation", gap: 5200 },
   ] },
   { id: "seed-retry-1", hoursAgo: 20, device: "desk", activity: "desk", say: [
-    { t: "Maybe retry with exponential backoff and jitter for the webhook sender" },
+    { t: "Maybe retry with exponential backoff and jitter for the cart service webhook sender" },
     { t: "wrap fetch in a helper", gap: 1500 },
   ] },
   { id: "seed-cache", hoursAgo: 9, device: "pocket", activity: "walking", say: [
     { t: "What if we cached the embeddings on disk" },
     { t: "keep the hot ones in memory, an LRU with a size cap", gap: 1900 },
-    { t: "maybe five thousand entries is enough", gap: 1400, whisper: true },
+    { t: "maybe five thousand entries is enough, same for the discount code lookups in the cart service", gap: 1400, whisper: true },
   ] },
   { id: "seed-auth-decision", hoursAgo: 5, device: "desk", activity: "desk", say: [
     { t: "Hmm, the auth module needs a decision" },
