@@ -21,6 +21,7 @@ import { seedCalendar } from "./integrations/calendar";
 import { Outbox } from "./integrations/outbox";
 import { ClaudeCortex } from "./llm/anthropic";
 import { DeepLlm } from "./llm/deep";
+import { FailoverBackend } from "./llm/failover";
 import { GroqCortex } from "./llm/groq";
 import { GroqClient } from "./llm/groq-client";
 import { log } from "./log";
@@ -168,7 +169,13 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
       : groq
         ? new GroqCortex({ client: groq, model: cfg.llm.fast, fallback: mock, outputMode: cfg.llm.groq.outputMode, pseudonymNames, onCloudCall })
         : null;
-  const backend = opts.backend ?? new RoutingBackend(() => (privacy.localOnly || !live ? mock : live));
+  // two Groq models with separate budgets: when the fast one is out for the day (or the minute) the other answers instead of the offline cortex
+  const spare =
+    groq && live instanceof GroqCortex && cfg.llm.deep !== cfg.llm.fast
+      ? new GroqCortex({ client: groq, model: cfg.llm.deep, fallback: mock, outputMode: cfg.llm.groq.outputMode, pseudonymNames, onCloudCall })
+      : null;
+  const liveBackend: CortexBackend | null = live instanceof GroqCortex && spare ? new FailoverBackend(live, spare) : live;
+  const backend = opts.backend ?? new RoutingBackend(() => (privacy.localOnly || !liveBackend ? mock : liveBackend));
   const deep = new DeepLlm(cfg, { isLocalOnly: () => privacy.localOnly, pseudonymNames, onCloudCall, groq: groq ?? undefined });
 
   const wispr = new WisprService({ cfg, store, clock, anyListening: () => hub.anyListening() });

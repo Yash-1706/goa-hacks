@@ -139,6 +139,15 @@ export class GroqCortex implements CortexBackend {
     return this.mode;
   }
 
+  get model(): string {
+    return this.opts.model;
+  }
+
+  /** this model is paused after a 429 (Groq meters per model: another one may still answer) */
+  get cooling(): boolean {
+    return this.opts.client.disabledReasonFor(this.opts.model) === "rate_limit";
+  }
+
   private warnOnce(key: string, msg: string): void {
     if (this.warned.has(key)) return;
     this.warned.add(key);
@@ -182,7 +191,7 @@ export class GroqCortex implements CortexBackend {
   private async run(input: CortexInput, onPartial: PartialCallback | undefined): Promise<CortexOutput> {
     const t0 = performance.now();
     const client = this.opts.client;
-    const off = client.disabledReason;
+    const off = client.disabledReasonFor(this.opts.model);
     if (off === "auth") return this.degrade(input, "llm_disabled");
     if (off === "rate_limit") return this.degrade(input, "rate_limit");
     if (off === "network") return this.degrade(input, "network");

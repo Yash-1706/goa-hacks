@@ -83,7 +83,7 @@ export class DeepLlm {
 
   get available(): boolean {
     if (this.cfg.llm.mode !== "live" || this.opts.isLocalOnly()) return false;
-    if (this.cfg.llm.provider === "groq") return Boolean(this.groq && this.groq.hasKey && this.groq.disabledReason === null);
+    if (this.cfg.llm.provider === "groq") return Boolean(this.groq && this.groq.hasKey && this.groq.disabledReasonFor(this.cfg.llm.deep) === null);
     return Date.now() >= this.disabledUntil;
   }
 

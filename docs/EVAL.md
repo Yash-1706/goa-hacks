@@ -1,8 +1,8 @@
 # Evaluation report
 
-Generated 2026-10-06T18:08:18.318Z · cortex: **offline mock (heuristics + local triage)** · embeddings: MiniLM (local) · node v25.2.1 · AMD Ryzen 5 6600H with Radeon Graphics         
+Generated 2026-10-10T15:27:23.209Z · cortex: **offline mock (heuristics + local triage)** · embeddings: MiniLM (local) · node v25.2.1 · AMD Ryzen 5 6600H with Radeon Graphics         
 
-> **Mock mode**: this measures the offline fallback path. Run `pnpm eval --live` with an `ANTHROPIC_API_KEY` for the real model numbers.
+> **Mock mode**: this measures the offline fallback path. Run `pnpm eval --live` with an `ANTHROPIC_API_KEY` (or a `GROQ_API_KEY`) for real model numbers.
 
 ## 1a. Intent classification: held-out set (phrasings that are not in the classifier's exemplars)
 

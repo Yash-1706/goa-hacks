@@ -13,8 +13,9 @@ import { log } from "../log";
  *      the server's own `x-ratelimit-remaining-tokens` header corrects the bucket when the key is shared.
  *   2. COUNTS requests (a local per-UTC-day safety cap, plus the server's remaining-requests header) so a long eval cannot
  *      burn the daily quota.
- *   3. NEVER retries on its own: a 429 starts a cool-down that honours `retry-after`; an auth failure disables the client for
- *      60 s; a dead connection or a timeout skips the cloud for 4 s. Callers decide about repair retries.
+ *   3. NEVER retries on its own: a 429 pauses THAT MODEL for as long as `retry-after` says (two minutes at most; up to half an
+ *      hour for a daily limit), while the other models stay available; an auth failure disables the client for 60 s; a dead
+ *      connection or a timeout skips the cloud for 4 s. Callers decide about repair retries and about another model.
  * Privacy: nothing here logs prompts or completions, and error messages carry only the HTTP status and Groq's error code
  * (never the response text, which can echo the model's output, and never the API key).
  * ========================================================================== */
@@ -138,8 +139,10 @@ export interface GroqStats {
   /** HTTP 429s received */
   rateLimited: number;
   lastStatus: number | null;
-  /** epoch ms until which the client refuses calls (auth failure or 429 cool-down), 0 when active */
+  /** epoch ms until which some call is refused (auth failure, a lost connection or a model's 429 pause), 0 when none */
   disabledUntil: number;
+  /** per model: when its 429 pause ends (only the models paused right now) */
+  cooling: Record<string, number>;
 }
 
 export interface GroqClientOpts {
@@ -162,6 +165,8 @@ const CHARS_PER_TOKEN = 3.3; // measured: 3.4 to 3.9 for this prompt family; the
 const AUTH_DISABLE_MS = 60_000;
 /** after a dead socket or a timeout, skip the cloud for a moment so each new fragment is not held for a whole timeout on a flaky network */
 const NETWORK_COOL_MS = 4_000;
+/** the longest a model is left alone after a tokens-per-day or requests-per-day refusal (the pause otherwise tops out at two minutes) */
+const DAILY_COOL_MAX_MS = 30 * 60_000;
 
 /** Rough token count for pacing (the settled usage replaces it). */
 export function estimateTokens(text: string): number {
@@ -316,8 +321,10 @@ export class GroqClient {
   private rateLimited = 0;
   private lastStatus: number | null = null;
   private authUntil = 0;
-  private coolUntil = 0;
-  private coolReason: "rate_limit" | "network" = "rate_limit";
+  /** a failed or timed-out connection pauses every model: the problem is the link, not a limit */
+  private networkUntil = 0;
+  /** a 429 pauses only the model that was refused: Groq meters tokens and requests per model, so another model can still answer */
+  private readonly modelCool = new Map<string, number>();
   /** per bucket: serialises budget decisions so callers of one model are served in order and never double-spend, while a deep call waiting for ITS budget cannot hold up the hot path's */
   private gates = new WeakMap<TokenBucket, Promise<unknown>>();
   private warned = new Set<string>();
@@ -336,17 +343,38 @@ export class GroqClient {
     return Boolean(this.opts.apiKey);
   }
 
-  /** epoch ms until which calls are refused outright (auth failure window, 429 cool-down), or 0 */
-  get disabledUntil(): number {
-    return Math.max(this.authUntil, this.coolUntil) > this.now() ? Math.max(this.authUntil, this.coolUntil) : 0;
+  /** end of the 429 pause of `model`, or of the longest one when no model is named; 0 when none */
+  private rateUntil(model?: string): number {
+    if (model !== undefined) return this.modelCool.get(model) ?? 0;
+    return Math.max(0, ...this.modelCool.values());
   }
 
-  /** why the client is refusing calls right now, if it is */
-  get disabledReason(): "auth" | "rate_limit" | "network" | null {
+  /** epoch ms until which calls to `model` are refused outright (auth window, connection pause, that model's 429 pause); with no model, until the last pause of any kind ends. 0 when none */
+  disabledUntilFor(model?: string): number {
+    const u = Math.max(this.authUntil, this.networkUntil, this.rateUntil(model));
+    return u > this.now() ? u : 0;
+  }
+
+  /** why calls to `model` are refused right now (with no model: whether any pause is running), if they are */
+  disabledReasonFor(model?: string): "auth" | "rate_limit" | "network" | null {
     const t = this.now();
     if (this.authUntil > t) return "auth";
-    if (this.coolUntil > t) return this.coolReason;
-    return null;
+    if (this.networkUntil > t) return "network";
+    return this.rateUntil(model) > t ? "rate_limit" : null;
+  }
+
+  get disabledUntil(): number {
+    return this.disabledUntilFor();
+  }
+
+  get disabledReason(): "auth" | "rate_limit" | "network" | null {
+    return this.disabledReasonFor();
+  }
+
+  /** the models whose 429 pause is running, each with the epoch ms it ends */
+  cooling(): Record<string, number> {
+    const t = this.now();
+    return Object.fromEntries([...this.modelCool].filter(([, until]) => until > t));
   }
 
   stats(): GroqStats {
@@ -365,6 +393,7 @@ export class GroqClient {
       rateLimited: this.rateLimited,
       lastStatus: this.lastStatus,
       disabledUntil: this.disabledUntil,
+      cooling: this.cooling(),
     };
   }
 
@@ -475,22 +504,20 @@ export class GroqClient {
     return new GroqError("server", what, status);
   }
 
-  private afterError(e: GroqError): void {
+  private afterError(e: GroqError, model?: string): void {
     if (e.kind === "auth") {
       this.authUntil = this.now() + AUTH_DISABLE_MS;
       this.warnOnce("auth", "Groq auth failed: check GROQ_API_KEY. The live path is off for 60 s; falling back to the local cortex.");
     } else if (e.kind === "rate_limit") {
       this.rateLimited++;
-      const wait = Math.min(Math.max(e.retryAfterMs ?? 5000, 1000), 120_000);
-      this.coolUntil = this.now() + wait;
-      this.coolReason = "rate_limit";
-      this.warnOnce("rate", `${e.message}: live calls pause ${Math.round(wait / 1000)} s (retry-after honoured, no retries)`);
+      // a DAILY limit (tokens or requests) does not clear in two minutes: stay off that model for as long as the server says, up to half an hour
+      const daily = /\((TPD|RPD)\)/.test(e.message);
+      const wait = Math.min(Math.max(e.retryAfterMs ?? 5000, 1000), daily ? DAILY_COOL_MAX_MS : 120_000);
+      if (model !== undefined) this.modelCool.set(model, this.now() + wait);
+      const secs = Math.round(wait / 1000);
+      this.warnOnce(`rate:${model ?? ""}:${daily}`, `${model ? `${model}: ` : ""}${e.message}: ${model ? "that model is" : "live calls are"} paused for ${secs >= 120 ? `${Math.round(secs / 60)} min` : `${secs} s`} (retry-after honoured, no retries)`);
     } else if (e.kind === "network" || e.kind === "timeout") {
-      const until = this.now() + NETWORK_COOL_MS;
-      if (until > this.coolUntil) {
-        this.coolUntil = until;
-        this.coolReason = "network";
-      }
+      this.networkUntil = Math.max(this.networkUntil, this.now() + NETWORK_COOL_MS);
     } else if (e.kind === "too_large") {
       this.warnOnce("large", "Groq rejected a request as too large for the tokens-per-minute limit: the prompt must stay under it.");
     }
@@ -506,7 +533,7 @@ export class GroqClient {
       this.opts.onTrace?.({ model: req.model, estimatedPromptTokens: estPrompt, streamed: stream, ...t });
     // a refusal made here (cool-down, budget, cap) has no side effects; an error that CAME from the server starts the windows
     const fail = (e: GroqError, extra: Partial<GroqTrace> = {}, fromServer = true): never => {
-      if (fromServer) this.afterError(e);
+      if (fromServer) this.afterError(e, req.model);
       trace({ ok: false, status: e.status ?? 0, kind: e.kind, ms: this.now() - startedAt, remainingTokens: this.remainingTokens, bucketTokens: Math.round(this.bucketOf(req.model).available()), retryAfterMs: e.retryAfterMs, limits: e.limits, ...extra });
       throw e;
     };
@@ -515,10 +542,10 @@ export class GroqClient {
       this.paced++;
       return fail(new GroqError("daily_cap", `local cap of ${this.maxPerDay} requests per day reached`), {}, false);
     }
-    const off = this.disabledReason;
+    const off = this.disabledReasonFor(req.model);
     if (off === "auth") return fail(new GroqError("auth", "disabled after an authentication failure"), {}, false);
-    if (off === "rate_limit") return fail(new GroqError("rate_limit", "cooling down after HTTP 429", undefined, this.coolUntil - this.now()), {}, false);
-    if (off === "network") return fail(new GroqError("network", "skipping the cloud for a moment after a failed connection", undefined, this.coolUntil - this.now()), {}, false);
+    if (off === "rate_limit") return fail(new GroqError("rate_limit", `${req.model} is cooling down after HTTP 429`, undefined, this.rateUntil(req.model) - this.now()), {}, false);
+    if (off === "network") return fail(new GroqError("network", "skipping the cloud for a moment after a failed connection", undefined, this.networkUntil - this.now()), {}, false);
 
     // reserve the prompt plus the whole completion allowance: that is what Groq checks at admission (measured: a request is
     // refused with 429 when remaining tokens < prompt + max_completion_tokens), then it charges what was really used
