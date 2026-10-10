@@ -17,7 +17,8 @@ import type { Activity, FragmentFinal } from "@synapse/shared";
  * Refuses to run while the server is up (it holds the database); --reset deletes the existing memory first.
  */
 const { flags } = parseArgs(process.argv.slice(2));
-const cfg = loadConfig();
+// always the offline cortex, whatever .env says for the server: seeding is deterministic, offline and free (dozens of fragments)
+const cfg = loadConfig({ LLM_MODE: "mock" });
 if (await serverUp(`http://127.0.0.1:${cfg.port}`)) {
   console.error(`✖ a Synapse server is running on :${cfg.port}. Stop it first (it owns the database), then run seed again.`);
   process.exit(1);

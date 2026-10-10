@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { intFlag, liveEnv, liveProvider, patience, sharedGroqClient, spreadBy } from "../src/cli/common";
+import { ephemeralApp, intFlag, liveEnv, liveProvider, patience, sharedGroqClient, spreadBy } from "../src/cli/common";
 import { GroqClient } from "../src/llm/groq-client";
 import { startFakeGroq, type FakeGroq } from "./fake-groq";
 
@@ -12,9 +13,9 @@ import { startFakeGroq, type FakeGroq } from "./fake-groq";
  */
 
 const serverDir = path.resolve(import.meta.dirname, "..");
-const saved = { groq: process.env.GROQ_API_KEY, anthropic: process.env.ANTHROPIC_API_KEY, provider: process.env.LLM_PROVIDER, local: process.env.LOCAL_ONLY };
+const saved = { groq: process.env.GROQ_API_KEY, anthropic: process.env.ANTHROPIC_API_KEY, provider: process.env.LLM_PROVIDER, local: process.env.LOCAL_ONLY, mode: process.env.LLM_MODE, base: process.env.GROQ_BASE_URL };
 afterEach(() => {
-  for (const [k, v] of [["GROQ_API_KEY", saved.groq], ["ANTHROPIC_API_KEY", saved.anthropic], ["LLM_PROVIDER", saved.provider], ["LOCAL_ONLY", saved.local]] as const) {
+  for (const [k, v] of [["GROQ_API_KEY", saved.groq], ["ANTHROPIC_API_KEY", saved.anthropic], ["LLM_PROVIDER", saved.provider], ["LOCAL_ONLY", saved.local], ["LLM_MODE", saved.mode], ["GROQ_BASE_URL", saved.base]] as const) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
@@ -46,6 +47,32 @@ describe("which provider a --live run uses", () => {
     expect(liveEnv("groq", 80)).toEqual({ GROQ_MAX_WAIT_MS: "300000", GROQ_MAX_REQUESTS_PER_DAY: "80" });
     expect(liveEnv("anthropic", 80)).toEqual({});
     expect(liveEnv(undefined)).toEqual({});
+  });
+});
+
+describe("offline tools never go live because .env turned the live model on for the server", () => {
+  it("ephemeralApp (replay --local, eval, bench) is the offline cortex whatever the environment says, and live only when asked", async () => {
+    setEnv({ GROQ_API_KEY: "gsk_test_key_not_real_0000000000", LLM_MODE: "live", GROQ_BASE_URL: "http://127.0.0.1:1/openai/v1" });
+    const off = await ephemeralApp({});
+    try {
+      expect(off.cfg.llm).toMatchObject({ mode: "mock", provider: "mock" });
+      expect(off.ctx.live).toBeNull(); // nothing that could reach Groq was even built
+    } finally {
+      await off.stop();
+    }
+    const on = await ephemeralApp({ LLM_MODE: "live" });
+    try {
+      expect(on.cfg.llm).toMatchObject({ mode: "live", provider: "groq" });
+      expect(on.ctx.live?.name).toBe("groq");
+    } finally {
+      await on.stop();
+    }
+  });
+
+  it("pnpm seed pins the offline cortex as well (it writes dozens of fragments through the real pipeline)", () => {
+    const src = fs.readFileSync(path.join(serverDir, "src/cli/seed.ts"), "utf8");
+    expect(src).toMatch(/loadConfig\(\{\s*LLM_MODE:\s*"mock"\s*\}\)/);
+    expect(src).not.toMatch(/loadConfig\(\)/);
   });
 });
 

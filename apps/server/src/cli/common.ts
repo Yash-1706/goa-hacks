@@ -81,12 +81,17 @@ export function liveEnv(provider: "anthropic" | "groq" | undefined, budget?: num
   return { GROQ_MAX_WAIT_MS: "300000", ...(budget ? { GROQ_MAX_REQUESTS_PER_DAY: String(budget) } : {}) };
 }
 
-/** A throw-away in-memory app (mock cortex unless env says otherwise) for replays, benchmarks and evals. */
+/**
+ * A throw-away in-memory app for replays, benchmarks and evals. The offline (mock) cortex unless `env` itself says LLM_MODE=live: a
+ * `.env` that turns the live model on for the server must not leak into an offline tool, whose numbers are only comparable (and
+ * whose runs only free) when nothing leaves the machine.
+ */
 export async function ephemeralApp(env: Record<string, string> = {}, opts: AppOptions = {}): Promise<{ ctx: AppCtx; cfg: Config; stop: () => Promise<void> }> {
   const cfg = loadConfig({
     DATA_DIR: path.join(os.tmpdir(), `synapse-cli-${randomBytes(4).toString("hex")}`),
     REQUIRE_PAIRING: "0",
     PORT: "0",
+    LLM_MODE: "mock",
     ...env,
   });
   const { ctx, stop } = await createApp(cfg, { dbFile: ":memory:", kek: randomBytes(32), quiet: true, ...opts });
