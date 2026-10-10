@@ -747,3 +747,15 @@
     padding: 0.7rem;
   }
 }
+
+/* Desk: one-line explanation of what Synapse does and which speech engine is active */
+.about-strip {
+  margin: 0.5rem 1rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--dim, #9aa3b2);
+}
+.about-strip b {
+  color: inherit;
+  font-weight: 600;
+}

@@ -6,7 +6,7 @@ export function AboutStrip() {
   const cfg = useSettings((s) => s.config);
   const speech = speechLabel(cfg?.wisprMode, cfg?.sttProvider);
   return (
-    <p className="about-strip" role="note" style={{ margin: "0.5rem 1rem", fontSize: "0.85rem", opacity: 0.8 }}>
+    <p className="about-strip" role="note">
       Synapse turns what you say into cards. Speech: <b>{speech.long}</b>. Audio goes {speech.audio}. Memory is forgotten by default.
     </p>
   );
