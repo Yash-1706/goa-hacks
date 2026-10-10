@@ -23,6 +23,7 @@ export function Nav() {
     <nav className="nav" aria-label="Main">
       <div className="nav__brand" aria-hidden>
         <img src="/icon.svg" alt="" />
+        <span className="nav__word">Synapse</span>
       </div>
       <div className="nav__list">
         {ITEMS.map(({ to, label, Icon, end }) => (

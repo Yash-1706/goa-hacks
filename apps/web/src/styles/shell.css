@@ -86,7 +86,7 @@
   box-shadow: 0 0 22px -6px rgba(109, 140, 255, 0.55);
 }
 .nav__item[aria-current="page"] svg {
-  color: #c4b5fd;
+  color: #a9bcff;
   filter: drop-shadow(0 0 6px rgba(109, 140, 255, 0.8));
 }
 .nav__badge {
@@ -577,4 +577,17 @@ html.lg .hide-md {
 .empty svg {
   color: var(--faint);
   opacity: 0.7;
+}
+
+/* ---- wide screens: full sidebar with wordmark and labels ---------------- */
+.nav__word { display: none; }
+@media (min-width: 1100px) {
+  :root { --nav-w: 216px; }
+  .nav { padding: 1.1rem 0.8rem; }
+  .nav__brand { display: flex; place-items: unset; align-items: center; gap: 0.65rem; padding: 0 0.4rem; height: 2.8rem; margin-bottom: 1.1rem; }
+  .nav__word { display: block; font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .nav__item { flex-direction: row; justify-content: flex-start; gap: 0.8rem; padding: 0.7rem 0.9rem; font-size: 0.9rem; font-weight: 500; }
+  .nav__item svg { flex: none; }
+  .nav__badge { top: 50%; right: 0.9rem; transform: translateY(-50%); }
+  .nav__foot { align-items: flex-start; padding: 0 0.4rem; }
 }
