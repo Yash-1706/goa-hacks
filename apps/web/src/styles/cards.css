@@ -21,7 +21,7 @@
   bottom: 0;
   width: 3px;
   background: var(--cat);
-  box-shadow: 0 0 22px 1px var(--cat);
+  box-shadow: none;
   opacity: 0.95;
 }
 .tcard::after {
@@ -29,7 +29,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(62% 46% at 0% 0%, color-mix(in srgb, var(--cat) 15%, transparent), transparent 70%);
+  background: radial-gradient(62% 46% at 0% 0%, color-mix(in srgb, var(--cat) 6%, transparent), transparent 70%);
 }
 .tcard > * {
   position: relative;
@@ -114,7 +114,7 @@
   color: var(--cat);
   background: color-mix(in srgb, var(--cat) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--cat) 38%, transparent);
-  box-shadow: 0 0 24px -6px var(--cat);
+  box-shadow: none;
 }
 .tcard__titles {
   flex: 1;
@@ -252,7 +252,7 @@
   height: 2px;
   border-radius: 2px;
   background: var(--danger);
-  box-shadow: 0 0 8px var(--danger);
+  box-shadow: none;
   transform-origin: left;
   transform: scaleX(0);
   animation: strike 0.55s 0.35s var(--ease) forwards;
@@ -267,7 +267,7 @@
   color: #86efc5;
   background: rgba(52, 211, 153, 0.12);
   border: 1px solid rgba(52, 211, 153, 0.4);
-  box-shadow: 0 0 18px -6px rgba(52, 211, 153, 0.8);
+  box-shadow: none;
   animation: pop-in 0.5s 0.8s var(--ease) both;
 }
 .repair__label {
@@ -313,8 +313,8 @@
   gap: 0.45rem;
   padding: 0.35rem 0.6rem;
   border-radius: 10px;
-  background: rgba(45, 212, 191, 0.07);
-  border: 1px solid rgba(45, 212, 191, 0.22);
+  background: rgba(244, 179, 147, 0.07);
+  border: 1px solid rgba(244, 179, 147, 0.22);
   color: #a5f3fc;
   font-size: 0.84rem;
 }
@@ -510,8 +510,8 @@
 .ab__answer {
   padding: 0.55rem 0.75rem;
   border-radius: 12px;
-  background: rgba(129, 140, 248, 0.09);
-  border: 1px solid rgba(129, 140, 248, 0.28);
+  background: rgba(255, 106, 61, 0.09);
+  border: 1px solid rgba(255, 106, 61, 0.28);
 }
 .ab__checks,
 .ab__bullets {
@@ -752,7 +752,7 @@
   height: 2px;
   border-radius: 2px;
   background: var(--danger);
-  box-shadow: 0 0 8px var(--danger);
+  box-shadow: none;
   transform-origin: left;
   transform: scaleX(0);
   animation: strike 0.55s 0.35s var(--ease) forwards;
@@ -765,7 +765,7 @@
   color: #86efc5;
   background: rgba(52, 211, 153, 0.11);
   border-color: rgba(52, 211, 153, 0.5);
-  box-shadow: 0 0 26px -8px rgba(52, 211, 153, 0.8);
+  box-shadow: none;
   animation: pop-in 0.5s 0.85s var(--ease) both;
 }
 .opt--open {
@@ -813,7 +813,7 @@
   font-family: inherit;
 }
 .tk-keyword {
-  color: #c4b5fd;
+  color: #f4b393;
 }
 .tk-string {
   color: #86efc5;

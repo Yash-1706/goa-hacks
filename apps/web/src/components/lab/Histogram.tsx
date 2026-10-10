@@ -81,8 +81,8 @@ export const Histogram = memo(function Histogram({
       <svg className="lab-hist__svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${name}. ${total ? describeHistogram(counts) : "No per-fragment samples"}`} onPointerLeave={() => setHover(null)}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#2dd4bf" />
-            <stop offset="1" stopColor="#6d8cff" />
+            <stop offset="0" stopColor="#f4b393" />
+            <stop offset="1" stopColor="#ff6a3d" />
           </linearGradient>
         </defs>
         <line className="lab-hist__base" x1="0" x2={W} y1={BASE + 0.5} y2={BASE + 0.5} />

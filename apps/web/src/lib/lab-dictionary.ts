@@ -21,7 +21,7 @@ export interface KindMeta {
 
 export const KIND_META: Record<DictKind, KindMeta> = {
   person: { label: "person", plural: "People", tint: "#e879f9", gloss: "Names Wispr should spell right" },
-  component: { label: "component", plural: "Components", tint: "#2dd4bf", gloss: "Services, modules, endpoints" },
+  component: { label: "component", plural: "Components", tint: "#f4b393", gloss: "Services, modules, endpoints" },
   technology: { label: "technology", plural: "Technologies", tint: "#a78bfa", gloss: "Frameworks, protocols, tools" },
   project: { label: "project", plural: "Projects", tint: "#fb923c", gloss: "Things you are building" },
   jargon: { label: "jargon", plural: "Jargon", tint: "#94a3b8", gloss: "Words you keep repeating" },

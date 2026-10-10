@@ -28,7 +28,7 @@ function TimingBars({ t }: { t: ThoughtView["timing"] }) {
   const items: Array<[string, number | undefined, string]> = [
     ["Wispr (commit → final)", t.wisprMs, "#818cf8"],
     ["Embed", t.embedMs, "#38bdf8"],
-    ["Local triage", t.triageMs, "#2dd4bf"],
+    ["Local triage", t.triageMs, "#f4b393"],
     ["Fragment → first paint", t.fragToFirstPaintMs, "#34d399"],
     ["Model call", t.llmMs, "#a78bfa"],
     ["Fragment → artifact", t.fragToArtifactMs, "#e879f9"],

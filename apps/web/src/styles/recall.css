@@ -13,8 +13,8 @@
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .rc-ask:focus-within {
-  border-color: rgba(45, 212, 191, 0.6);
-  box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.1), var(--shadow);
+  border-color: rgba(244, 179, 147, 0.6);
+  box-shadow: 0 0 0 4px rgba(244, 179, 147, 0.1), var(--shadow);
 }
 .rc-ask__icon {
   flex: none;
@@ -54,8 +54,8 @@
 }
 .rc-history .chip[data-active="true"] {
   color: var(--ink);
-  border-color: rgba(129, 140, 248, 0.6);
-  background: rgba(129, 140, 248, 0.14);
+  border-color: rgba(255, 106, 61, 0.6);
+  background: rgba(255, 106, 61, 0.14);
 }
 .rc-result {
   margin-top: 1.4rem;
@@ -72,9 +72,9 @@
   width: 2.2rem;
   height: 2.2rem;
   border-radius: 11px;
-  color: #a5b4fc;
-  background: rgba(129, 140, 248, 0.14);
-  border: 1px solid rgba(129, 140, 248, 0.38);
+  color: #f4b393;
+  background: rgba(255, 106, 61, 0.14);
+  border: 1px solid rgba(255, 106, 61, 0.38);
 }
 .rc-qtext {
   flex: 1;
@@ -124,11 +124,11 @@
 .rc-answer {
   padding: 0.95rem 1.15rem;
   border-radius: 18px;
-  border: 1px solid rgba(129, 140, 248, 0.32);
-  background: linear-gradient(180deg, rgba(129, 140, 248, 0.11), rgba(129, 140, 248, 0.03));
+  border: 1px solid rgba(255, 106, 61, 0.32);
+  background: linear-gradient(180deg, rgba(255, 106, 61, 0.11), rgba(255, 106, 61, 0.03));
   font-size: 1.02rem;
   line-height: 1.65;
-  box-shadow: 0 16px 48px -26px rgba(129, 140, 248, 0.7);
+  box-shadow: none;
 }
 .rc-answer p {
   margin: 0;
@@ -154,7 +154,7 @@
   width: 0.4rem;
   height: 0.4rem;
   border-radius: 50%;
-  background: #a5b4fc;
+  background: #f4b393;
   animation: rc-bounce 1s ease-in-out infinite;
 }
 .rc-think i:nth-child(2) {
@@ -185,8 +185,8 @@
   margin: 0 0.1rem;
   padding: 0.02rem 0.5rem;
   border-radius: 999px;
-  border: 1px solid rgba(129, 140, 248, 0.55);
-  background: rgba(129, 140, 248, 0.18);
+  border: 1px solid rgba(255, 106, 61, 0.55);
+  background: rgba(255, 106, 61, 0.18);
   color: #c7d2fe;
   font-size: 0.72rem;
   cursor: pointer;
@@ -194,7 +194,7 @@
   transition: background 0.15s, color 0.15s, transform 0.12s;
 }
 .rc-cite:hover {
-  background: rgba(129, 140, 248, 0.38);
+  background: rgba(255, 106, 61, 0.38);
   color: #fff;
   transform: translateY(-1px);
 }
@@ -224,11 +224,11 @@
   bottom: 0;
   width: 3px;
   background: var(--cat);
-  box-shadow: 0 0 16px var(--cat);
+  box-shadow: none;
 }
 .rc-src--cited {
   border-color: color-mix(in srgb, var(--cat) 55%, transparent);
-  box-shadow: 0 0 34px -14px var(--cat);
+  box-shadow: none;
 }
 .rc-src.flash,
 .rc-src--hot {
@@ -324,9 +324,9 @@
   height: 4.6rem;
   border-radius: 50%;
   color: #c7d2fe;
-  background: radial-gradient(circle at 32% 26%, rgba(199, 210, 254, 0.5), rgba(129, 140, 248, 0.25) 55%, rgba(129, 140, 248, 0.08));
-  border: 1px solid rgba(129, 140, 248, 0.4);
-  box-shadow: 0 0 50px -8px rgba(129, 140, 248, 0.7);
+  background: rgba(255, 106, 61, 0.1);
+  border: 1px solid rgba(255, 106, 61, 0.4);
+  box-shadow: none;
 }
 
 @media (max-width: 760px) {

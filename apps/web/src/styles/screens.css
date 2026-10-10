@@ -61,13 +61,13 @@
   border-radius: 50%;
   color: #05251a;
   background: radial-gradient(circle at 32% 26%, #d1fae5, #34d399 55%, #059669);
-  box-shadow: 0 0 44px -4px rgba(52, 211, 153, 0.75), inset 0 -10px 20px rgba(0, 0, 0, 0.25);
+  box-shadow: none;
   transition: background 0.4s, box-shadow 0.4s, color 0.4s;
 }
 .pv-kill[data-paused="true"] .pv-kill__core {
   color: #ffe4e8;
   background: radial-gradient(circle at 32% 26%, #4b1d28, #170d12 72%);
-  box-shadow: 0 0 40px -6px rgba(251, 113, 133, 0.65), inset 0 0 0 2px rgba(251, 113, 133, 0.5);
+  box-shadow: none;
 }
 .pv-hero__text {
   min-width: 0;
@@ -123,15 +123,15 @@
   text-align: center;
 }
 .pv-node--local {
-  border-color: rgba(45, 212, 191, 0.28);
+  border-color: rgba(244, 179, 147, 0.28);
 }
 .pv-node--wispr {
-  border-color: rgba(45, 212, 191, 0.5);
-  background: rgba(45, 212, 191, 0.07);
+  border-color: rgba(244, 179, 147, 0.5);
+  background: rgba(244, 179, 147, 0.07);
 }
 .pv-node--server {
-  border-color: rgba(109, 140, 255, 0.45);
-  background: rgba(109, 140, 255, 0.06);
+  border-color: rgba(255, 106, 61, 0.45);
+  background: rgba(255, 106, 61, 0.06);
 }
 .pv-node--cloud {
   border-color: rgba(232, 121, 249, 0.45);
@@ -150,7 +150,7 @@
   color: var(--cyan);
 }
 .pv-node--server .pv-node__icon {
-  color: #c4b5fd;
+  color: #f4b393;
 }
 .pv-node--cloud .pv-node__icon {
   color: #f0abfc;
@@ -197,7 +197,7 @@
   height: 6px;
   border-radius: 50%;
   background: currentColor;
-  box-shadow: 0 0 10px currentColor;
+  box-shadow: none;
   animation: pv-flow 2.4s linear infinite;
 }
 @keyframes pv-flow {
@@ -339,9 +339,9 @@
   font-size: 0.74rem;
 }
 .pv-key--ltm {
-  border-color: rgba(109, 140, 255, 0.45);
-  background: rgba(109, 140, 255, 0.09);
-  color: #c4b5fd;
+  border-color: rgba(255, 106, 61, 0.45);
+  background: rgba(255, 106, 61, 0.09);
+  color: #f4b393;
 }
 .pv-key__s {
   font-size: 0.62rem;
@@ -648,7 +648,7 @@
   border: 1px solid rgba(52, 211, 153, 0.45);
   background: linear-gradient(90deg, rgba(52, 211, 153, 0.16), rgba(52, 211, 153, 0.04));
   color: #bbf7d9;
-  box-shadow: 0 0 40px -14px rgba(52, 211, 153, 0.7);
+  box-shadow: none;
 }
 .au-result--bad {
   border: 1px solid rgba(251, 113, 133, 0.5);

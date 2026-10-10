@@ -22,12 +22,12 @@ export function Trend({ values, width = 96, height = 30, limit }: { values: read
     <svg className="lab-trend" width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden>
       <defs>
         <linearGradient id={`${gid}-s`} x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" stopColor="#6d8cff" />
-          <stop offset="1" stopColor="#2dd4bf" />
+          <stop offset="0" stopColor="#ff6a3d" />
+          <stop offset="1" stopColor="#f4b393" />
         </linearGradient>
         <linearGradient id={`${gid}-a`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#2dd4bf" stopOpacity="0.16" />
-          <stop offset="1" stopColor="#2dd4bf" stopOpacity="0" />
+          <stop offset="0" stopColor="#f4b393" stopOpacity="0.16" />
+          <stop offset="1" stopColor="#f4b393" stopOpacity="0" />
         </linearGradient>
       </defs>
       {g.ly !== null ? <line className="lab-trend__limit" x1="0" x2={width} y1={g.ly} y2={g.ly} /> : null}

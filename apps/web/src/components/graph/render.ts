@@ -101,9 +101,9 @@ function glowSprite(color: string): HTMLCanvasElement {
     if (g) {
       const [r, gg, b] = hexToRgb(color);
       const grad = g.createRadialGradient(48, 48, 0, 48, 48, 48);
-      grad.addColorStop(0, `rgba(${r},${gg},${b},0.9)`);
-      grad.addColorStop(0.16, `rgba(${r},${gg},${b},0.5)`);
-      grad.addColorStop(0.42, `rgba(${r},${gg},${b},0.16)`);
+      grad.addColorStop(0, `rgba(${r},${gg},${b},0.4)`);
+      grad.addColorStop(0.16, `rgba(${r},${gg},${b},0.2)`);
+      grad.addColorStop(0.42, `rgba(${r},${gg},${b},0.06)`);
       grad.addColorStop(0.75, `rgba(${r},${gg},${b},0.04)`);
       grad.addColorStop(1, `rgba(${r},${gg},${b},0)`);
       g.fillStyle = grad;
@@ -466,8 +466,8 @@ export class GraphRenderer {
       const dim = f ? (f.nodes.has(s.id) ? 1 : f.strength === "selected" ? 0.25 : 0.6) : 1;
       const [r, g, b] = hexToRgb(s.color);
       const grad = ctx.createRadialGradient(s.x, s.y, s.r * 0.6, s.x, s.y, R);
-      grad.addColorStop(0, `rgba(${r},${g},${b},${0.2 * dim})`);
-      grad.addColorStop(0.55, `rgba(${r},${g},${b},${0.075 * dim})`);
+      grad.addColorStop(0, `rgba(${r},${g},${b},${0.07 * dim})`);
+      grad.addColorStop(0.55, `rgba(${r},${g},${b},${0.025 * dim})`);
       grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -639,8 +639,8 @@ export class GraphRenderer {
 
     if (bridge) {
       // bridging entities are hubs: a violet-cyan halo and a slowly turning dashed ring
-      glow(ctx, x, y, half * 4.4, "#6d8cff", 0.5 * alpha);
-      if (px >= 4) glow(ctx, x, y, half * 3.1, "#2dd4bf", 0.32 * alpha);
+      glow(ctx, x, y, half * 4.4, "#ff6a3d", 0.5 * alpha);
+      if (px >= 4) glow(ctx, x, y, half * 3.1, "#f4b393", 0.32 * alpha);
     } else if (q.halos) glow(ctx, x, y, half * 2.9, color, 0.3 * alpha);
 
     const s = half * 2;
@@ -679,7 +679,7 @@ export class GraphRenderer {
       const by = y - half * 0.95;
       const br = Math.max(4.2, 5.2 / Math.sqrt(scale));
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = "#6d8cff";
+      ctx.fillStyle = "#ff6a3d";
       ctx.beginPath();
       ctx.arc(bx, by, br, 0, TAU);
       ctx.fill();
