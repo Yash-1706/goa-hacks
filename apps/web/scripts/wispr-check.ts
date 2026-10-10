@@ -7,6 +7,7 @@
  * apps/web/src/audio/README.md that can be tested from Node is reported as PASS / FAIL / UNKNOWN with evidence.
  *
  *   1. put WISPR_API_KEY=... and WISPR_MODE=client in .env, start the server:  pnpm dev:server
+ *      (WISPR_MODE=local checks the ON-DEVICE engine instead: real Whisper on this machine, no key, nothing leaves it)
  *   2. pnpm wispr:check            (about 15 s; speaks a sentence with the Windows voice, nothing is recorded)
  *
  * Options
@@ -162,7 +163,7 @@ function tokenFromSynapse(server: string, origin: string, code?: string): (opts?
         } else if (m.type === "wispr.token") {
           clearTimeout(timer);
           ws.close();
-          resolve({ mode: m.mode as WisprTokenInfo["mode"], ...(m.token ? { token: String(m.token) } : {}), ...(m.expiresAt ? { expiresAt: Number(m.expiresAt) } : {}), ...(m.wsUrl ? { wsUrl: String(m.wsUrl) } : {}), ...(m.restUrl ? { restUrl: String(m.restUrl) } : {}), ...(m.error ? { error: String(m.error) } : {}) });
+          resolve({ mode: m.mode as WisprTokenInfo["mode"], ...(m.token ? { token: String(m.token) } : {}), ...(m.expiresAt ? { expiresAt: Number(m.expiresAt) } : {}), ...(m.wsUrl ? { wsUrl: String(m.wsUrl) } : {}), ...(m.restUrl ? { restUrl: String(m.restUrl) } : {}), ...(m.error ? { error: String(m.error) } : {}), ...(m.note ? { note: String(m.note) } : {}) });
         }
       };
       ws.onerror = () => {
@@ -176,11 +177,11 @@ async function main(): Promise<number> {
   const a = parseArgs(process.argv.slice(2));
   const log = (s: string): void => console.log(s);
 
-  // 0. the server must be in client mode, otherwise there is nothing to check
+  // 0. the server must be using a speech engine (Wispr, or the on-device one: WISPR_MODE=local), otherwise there is nothing to check
   const httpBase = a.server.replace(/^ws/, "http").replace(/\/ws$/, "");
   try {
     const h = (await (await fetch(`${httpBase}/api/health`)).json()) as { modes?: { wispr?: string } };
-    if (h.modes?.wispr !== "client") {
+    if (h.modes?.wispr !== "client" && h.modes?.wispr !== "local") {
       log(`The Synapse server is running with WISPR_MODE=${h.modes?.wispr ?? "?"}.\nPut WISPR_API_KEY=<your key> and WISPR_MODE=client in D:\\goa-hack\\.env, restart the server (pnpm dev:server), then run this again.`);
       return 2;
     }
@@ -213,6 +214,7 @@ async function main(): Promise<number> {
 
   const report = await runWisprCheck({
     getToken: tokenFromSynapse(a.server, a.origin, a.code),
+    origin: httpBase, // the on-device engine hands out relative endpoints: they resolve to the server itself
     pcm,
     ...(spoken ? { expect: spoken } : {}),
     pace: a.pace,

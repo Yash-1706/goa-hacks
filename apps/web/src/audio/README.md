@@ -24,6 +24,16 @@ getUserMedia (inside the tap) ─▶ AudioContext ─▶ Silero v5 (vad-driver.t
 | `pcm.ts` `levels.ts` `stats.ts` `fragment.ts` `clock.ts` | float→int16/base64/WAV, noise floor/whisper/orb level/energy gate, Battery-Lab counters, fragment builder, injectable time |
 | `test-*.ts`, `*.test.ts` | doubles (fake clock/socket/mic, a VAD double that runs the REAL vad-web `FrameProcessor`) and tests |
 
+## The on-device engine: same streamer, different address
+
+When the server says `mode: "local"` in the `wispr.token` message (WISPR_MODE=local, local-only mode, or the opt-in STT_FALLBACK), the streamer is unchanged: it is simply handed `/local-stt/client_ws` and `/local-stt/client_api`, which speak Wispr's own client protocol (server side: `apps/server/src/wispr/local-ws.ts`, Whisper behind it). Three small things differ:
+
+- **Relative endpoints.** The server cannot know which address the browser reached it by, so `toTokenState(info, now, origin)` resolves a path against the page origin (`ws:`/`wss:` for `http:`/`https:`); the engine passes `origin` from the controller (`location.origin`). Wispr's absolute URLs pass through. Vite proxies `/local-stt` (WebSocket upgrade included) so phones and HTTPS tunnels work.
+- **Labelling.** Transcripts from those sockets and that REST route carry `transport: "local_stt"` (the Lab says "on-device", the Trail "local STT").
+- **`reconnect()`.** When local-only is switched on or off the server broadcasts `config.update`; the controller calls `engine.reconnectSpeech()` → `WisprStreamer.reconnect()`: the utterance being streamed is aborted (not one more packet to the engine just turned off, no "failed" tick), every socket closes, the token is dropped (the next request is `force`), and the standby reconnects to whichever engine the server now hands out. The mic and VAD are untouched.
+
+The egress audit (`egress.test.ts`) still holds: this module is the only one that opens connections, and only to what the server handed out.
+
 ## Behaviour worth knowing (and where it differs from a naive reading of the contract)
 
 - **`onLevel(level)` is already normalised 0..1** (0 at the calibrated noise floor, 1 at +36 dB, fast attack / slow release, ~15 Hz), not a raw RMS.

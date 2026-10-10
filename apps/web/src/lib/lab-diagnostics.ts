@@ -44,7 +44,8 @@ export function describeDiagnostic(d: StampedDiagnostic): DiagLine {
     case "latency": {
       const ms = Math.round(d.commitToFinalMs);
       const tone: DiagTone = ms <= 600 ? "ok" : ms <= 1500 ? "info" : "warn";
-      return { at: d.at, kind: d.kind, label: "Wispr", text: `Commit → final text ${ms} ms (${d.transport === "wispr_ws" ? "websocket" : "REST"})`, tone };
+      const local = d.transport === "local_stt";
+      return { at: d.at, kind: d.kind, label: local ? "On-device" : "Wispr", text: `Commit → final text ${ms} ms (${local ? "on-device Whisper" : d.transport === "wispr_ws" ? "websocket" : "REST"})`, tone };
     }
     case "calibrated":
       return { at: d.at, kind: d.kind, label: "Calibrated", text: `Noise floor measured: ${noiseFloorText(d.noiseFloor)}`, tone: "ok" };

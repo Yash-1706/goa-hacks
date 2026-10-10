@@ -14,7 +14,7 @@
 | ☐ | **Dogfood**: run Pocket mode on a phone while you build, so there is *real* memory from "earlier in the hackathon" (≥5 sessions across desk and walks) | Pocket screen |
 | ☐ | Room check: sit quiet 3 s (noise-floor calibration), then whisper a test sentence and confirm a card appears | Desk screen |
 | ☐ | Lab screen: Wispr = client, cortex = live, latency p50 visible, battery lab populated from the phone | `/lab` |
-| ☐ | **No keys / no mic?** `pnpm seed --reset` (server stopped) writes 8 backdated sessions, restart the server, and everything below works from typed input: press **K** on the Desk, type a line, **Shift+Enter** for the next fragment (it arrives after a natural pause), **Enter** to send. The seeded memory is what beat ① answers from (Sarah's OAuth2 thought) and contradicts (the earlier lean towards JWT) | Desk screen |
+| ☐ | **No keys / no mic?** `pnpm seed --reset` (server stopped) writes 8 backdated sessions, restart the server, and everything below works from typed input: press **K** on the Desk, type a line, **Shift+Enter** for the next fragment (it arrives after a natural pause), **Enter** to send. The seeded memory is what beat ① answers from (Sarah's OAuth2 thought) and contradicts (the earlier lean towards JWT). **No key but a microphone?** Put `WISPR_MODE=local` in `.env` for a real voice path with no key and no internet (Whisper runs on the laptop; about 40 MB downloaded once, then it loads in under 2 s): tap the orb and talk. It is a beat slower than Wispr (cards appear 1.5 to 2 s after you stop), and it is English only by default | Desk screen |
 | ☐ | Fallbacks ready: phone hotspot; `pnpm replay scripts/replay/s1_bug.json` plays a ramble into the running server | terminal |
 | ☐ | Warn bystanders that the demo records audio (recording-consent norms) | in person |
 
@@ -33,7 +33,7 @@
 
 | Failure | What you do | What the audience sees |
 |---|---|---|
-| Wispr unreachable / key not approved | Click the **keyboard icon**, type the same lines, or run `pnpm replay scripts/replay/s1_bug.json` | Everything downstream still works; the header says "typed input" |
+| Wispr unreachable / key not approved | Switch **Local-only** on in the Privacy Center (speech moves to Whisper on the laptop at once, and the page says so), or start with `STT_FALLBACK=1` (the same, automatically, when the token request fails). Otherwise click the **keyboard icon**, type the same lines, or run `pnpm replay scripts/replay/s1_bug.json` | Voice keeps working, a little slower; the header says "on-device" (or "typed input"); everything downstream still works |
 | Claude slow / rate-limited | Nothing: cards come from the local cortex, badged "degraded" | Provisional → local card; the badge is honest |
 | Loud room, whisper not detected | Lapel/directional mic; press **Pause** on screen as the always-available fallback | — |
 | Judge speaks Hindi/Hinglish | Keep going: Wispr auto-detects (set `WISPR_LANGUAGES=en,hi` for code-switching) | Cards in English from mixed speech |

@@ -5,6 +5,7 @@ import { redact } from "../gate/redact";
 import { log } from "../log";
 import type { MemoryStore } from "../memory/store";
 import { LIMITS } from "../thresholds";
+import type { LocalStt, LocalSttAuth } from "./local-stt";
 
 /* ============================================================================
  * Wispr Flow API plumbing (TRD §5.5). Contract verified against api-docs.wisprflow.ai.
@@ -13,6 +14,9 @@ import { LIMITS } from "../thresholds";
  *   (self-healing dictionary + the last few fragments).
  * Privacy rules: never send screenshot / content_text / content_html; conversation is capped at 6
  * redacted fragments; the API key never leaves this process.
+ *
+ * On-device engine: the same token message can point the browser at this machine instead (mode "local", see local-stt.ts):
+ * WISPR_MODE=local, local-only mode while Wispr is configured, or (opt-in STT_FALLBACK) when Wispr cannot be reached.
  * ========================================================================== */
 
 type TokenMsg = Extract<ServerMessage, { type: "wispr.token" }>;
@@ -24,11 +28,38 @@ export class WisprService {
   lastWarm?: { at: number; ok: boolean; ms: number };
 
   constructor(
-    private d: { cfg: Config; store: MemoryStore; clock: Clock; anyListening: () => boolean },
+    private d: {
+      cfg: Config;
+      store: MemoryStore;
+      clock: Clock;
+      anyListening: () => boolean;
+      /** the on-device engine, when this setup can use one (WISPR_MODE=local or client) */
+      local?: { stt: LocalStt; auth: LocalSttAuth; isLocalOnly: () => boolean };
+    },
   ) {}
 
-  get mode(): "client" | "proxy" | "mock" {
-    return this.d.cfg.wispr.mode;
+  /** the speech engine in effect right now ("local" also while local-only mode overrides a configured Wispr) */
+  get mode(): "client" | "proxy" | "mock" | "local" {
+    return this.usesLocal() ? "local" : this.d.cfg.wispr.mode;
+  }
+
+  /** the browser is being pointed at the on-device engine: WISPR_MODE=local, or local-only mode with a Wispr setup */
+  usesLocal(): boolean {
+    const { cfg, local } = this.d;
+    if (!local) return false;
+    return cfg.wispr.mode === "local" || (cfg.wispr.mode === "client" && local.isLocalOnly());
+  }
+
+  /** the on-device endpoints may take audio: it is in use, or the opt-in fallback is on */
+  localAllowed(): boolean {
+    return Boolean(this.d.local) && (this.usesLocal() || (this.d.cfg.wispr.mode === "client" && this.d.cfg.stt.fallback));
+  }
+
+  /** a token for the on-device endpoints (relative URLs: the browser resolves them against the origin it loaded the app from) */
+  private localToken(deviceId: string, note?: string): TokenMsg {
+    const { cfg, clock, local } = this.d;
+    const { token, expiresAt } = (local as NonNullable<typeof local>).auth.mint(deviceId, cfg.wispr.tokenTtlSecs * 1000, clock.now());
+    return { type: "wispr.token", mode: "local", token, expiresAt, wsUrl: "/local-stt/client_ws", restUrl: "/local-stt/client_api", ...(note ? { note } : {}) };
   }
 
   private authHeader(): string {
@@ -51,6 +82,7 @@ export class WisprService {
   async token(deviceId: string, force = false): Promise<TokenMsg> {
     const { cfg, clock } = this.d;
     if (cfg.wispr.mode === "mock") return { type: "wispr.token", mode: "mock" };
+    if (this.usesLocal()) return this.localToken(deviceId);
     if (cfg.wispr.mode === "proxy") return { type: "wispr.token", mode: "proxy", error: "proxy mode is not implemented in this build; use WISPR_MODE=client" };
 
     const cached = this.cache.get(deviceId);
@@ -68,7 +100,7 @@ export class WisprService {
       if (!res.ok) {
         const detail = res.status === 401 ? "Wispr rejected the API key (401)" : `Wispr token request failed (${res.status})`;
         log.warn("wispr", detail);
-        return { type: "wispr.token", mode: "client", error: detail };
+        return this.fallbackToken(deviceId, detail) ?? { type: "wispr.token", mode: "client", error: detail };
       }
       const j = (await res.json()) as { access_token: string; expires_in: number };
       const expiresAt = now + (j.expires_in ?? cfg.wispr.tokenTtlSecs) * 1000;
@@ -77,14 +109,21 @@ export class WisprService {
     } catch (err) {
       const msg = `Wispr token request failed: ${(err as Error).message}`;
       log.warn("wispr", msg);
-      return { type: "wispr.token", mode: "client", error: msg };
+      return this.fallbackToken(deviceId, msg) ?? { type: "wispr.token", mode: "client", error: msg };
     }
+  }
+
+  /** STT_FALLBACK: Wispr cannot be used, so the same token request is answered with the on-device engine (and says why) */
+  private fallbackToken(deviceId: string, why: string): TokenMsg | null {
+    if (!this.d.local || !this.d.cfg.stt.fallback) return null;
+    log.warn("wispr", "using on-device speech instead of Wispr");
+    return this.localToken(deviceId, `Wispr unavailable (${why}): on-device speech is active`);
   }
 
   /** Pre-allocates server resources on Wispr's side so the first utterance is not cold. */
   async warmup(): Promise<void> {
     const { cfg, clock } = this.d;
-    if (cfg.wispr.mode !== "client") return;
+    if (cfg.wispr.mode !== "client" || this.usesLocal()) return; // local-only mode: not even a warm-up leaves the machine
     const t0 = performance.now();
     try {
       const res = await fetch(`${cfg.wispr.base}/warmup_dash`, { headers: { Authorization: this.authHeader() }, signal: AbortSignal.timeout(5000) });

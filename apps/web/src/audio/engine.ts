@@ -357,6 +357,10 @@ class MicEngine implements AudioEngine {
     return Math.max(this.lastInjectEnd, this.core?.lastSpeechEnd ?? 0);
   }
 
+  reconnectSpeech(): void {
+    this.streamer?.reconnect?.();
+  }
+
   recalibrate(): void {
     this.core?.recalibrate();
   }
@@ -484,7 +488,7 @@ class MicEngine implements AudioEngine {
     try {
       const info = await withTimeout(this.opts.requestWisprToken(), this.tokenTimeoutMs, this.clock, "token request");
       if (info.mode === "proxy") return { kind: "proxy" };
-      if (info.mode === "client") {
+      if (info.mode === "client" || info.mode === "local") {
         if (info.error) return { kind: "error", reason: info.error };
         if (!info.token || !info.wsUrl) return { kind: "error", reason: "token response incomplete" };
         return { kind: "client", info };
@@ -502,6 +506,7 @@ class MicEngine implements AudioEngine {
       sessionId: this.opts.sessionId,
       getToken: (o) => withTimeout(this.opts.requestWisprToken(o), this.tokenTimeoutMs, this.clock, "token request"),
       getContext: () => this.opts.getWisprContext(),
+      ...(this.opts.origin ? { origin: this.opts.origin } : {}),
       clock: this.clock,
       ...(this.d.createSocket ? { createSocket: this.d.createSocket } : {}),
       ...(this.d.fetch ? { fetch: this.d.fetch } : {}),

@@ -26,6 +26,7 @@ cp .env.example .env     # then edit (never commit it)
 | Variable | Needed for |
 |---|---|
 | `WISPR_API_KEY` + `WISPR_MODE=client` | live microphone transcription (API access is by approval from Wispr: ask the organizers) |
+| `WISPR_MODE=local` (no key) | a real voice path with no key and no cloud: Whisper on this machine (see *On-device speech* below) |
 | `ANTHROPIC_API_KEY` + `LLM_MODE=live` | the real cortex (Haiku 4.5 hot path, Opus 5.5 recall/brief) |
 | `GROQ_API_KEY` + `LLM_MODE=live` | the same pipeline on Groq's free tier when there is no Anthropic key (gpt-oss hot path and recall/brief; see *Groq notes* below). `LLM_PROVIDER=auto` (default) prefers Anthropic when both keys exist; force one with `LLM_PROVIDER=anthropic` or `groq` |
 | `GITHUB_TOKEN` + `GITHUB_REPO` (`owner/repo`) | real GitHub issues (otherwise clearly-labelled simulation) |
@@ -53,6 +54,16 @@ What the free tier means in practice (measured on a free key):
 - **Watching it:** `/api/health` → `groq` (requests today, tokens left this minute, per-model buckets) and the Lab's System panel. `pnpm eval --live --limit 5 --budget 36` and `pnpm bench --live --limit 4 --runs 1 --budget 10` write `docs/EVAL.groq.md` / `docs/LATENCY.groq.md` and label the provider and model in the header (so far only a small, diluted eval run exists: `docs/EVAL.groq.md`; the Groq bench has not been run); the committed `docs/EVAL.md` and `docs/LATENCY.md` stay the offline numbers. A live run builds ONE client for all its apps (the budget belongs to the key), waits out cool-downs instead of racing through them, and on Groq seeds the recall section's memories with the local cortex (`--live-recall` for live seeding) to save ~14 requests.
 - **Switching back:** unset `GROQ_API_KEY` or set `LLM_PROVIDER=anthropic`; nothing else changes.
 
+### On-device speech (no key, no cloud)
+
+Wispr Flow is the primary speech engine, but a real voice path also works with **no Wispr key and no internet**: Whisper (`Xenova/whisper-tiny.en`, ONNX, on the CPU through transformers.js) runs inside the server, on the machine you run it on.
+
+- **Turn it on:** `WISPR_MODE=local` in `.env` (nothing else; the model is about 40 MB, downloaded once into `data/models`, then loaded in under 2 s). Tap the orb and talk. Check it with `pnpm wispr:check` (the same first-run tool, now reporting the on-device engine: it speaks a sentence, streams it through the real browser streamer and prints what Whisper heard, the latency and the PASS/FAIL list).
+- **Local-only mode uses it too.** With Wispr configured, switching **Local-only** on in the Privacy Center moves speech to this machine at once on every device (the server broadcasts a `config.update`; a listening microphone drops its Wispr connection, aborts whatever it was streaming and reconnects to the on-device engine, without re-opening the mic). Not one more packet, token or warm-up goes to Wispr; switching it off moves back. Local-only used to cut off only the cloud model; now nothing leaves the machine.
+- **Optional automatic fallback** (`STT_FALLBACK=1`, off by default): when Wispr rejects the key or cannot be reached, the same token request is answered by the on-device engine and the app says why. It is off by default because it is the only case in which, with Wispr configured, audio reaches this server.
+- **How it is built:** the server exposes `/local-stt/client_ws` and `/local-stt/client_api`, which speak Wispr's own client protocol, so the browser's streamer (VAD, packetizer, standby sockets, REST fallback, kill switch) is used unchanged and only the token it is handed points at this machine. The endpoints refuse audio unless the on-device engine is in use; audio lives in memory for one utterance, is transcribed one at a time, and is zero-filled afterwards; nothing is written to disk (`no-audio.test.ts` audits that, and confines it to two modules).
+- **What it costs:** Whisper always reads a 30 s window, so a transcript takes about **0.6 to 1.2 s** after the pause whatever the length (Wispr is faster; the card then appears 0.2 to 0.3 s later). English only with the default model; `STT_MODEL=Xenova/whisper-base.en` is more accurate and about 40 % slower (measured on clean synthetic speech; real accents and rooms are untested).
+
 ### Phone ("Pocket mode")
 Phones need HTTPS for the microphone. In PowerShell: `$env:HTTPS=1; pnpm dev:web`, open `https://<laptop-ip>:5173/pocket`, accept the self-signed certificate warning once, and enter the **6-digit pairing code** printed in the server console (a paired phone stays paired across restarts). Capture is foreground-only (iOS/Android suspend web audio in the background), so Pocket keeps the screen awake.
 
@@ -77,7 +88,7 @@ Phones need HTTPS for the microphone. In PowerShell: `$env:HTTPS=1; pnpm dev:web
 
 **Not verifiable without credentials/devices, and therefore labelled unverified:** the real Claude API behaviour and latency (`pnpm eval --live`, `pnpm bench --live` with an Anthropic key; with only a Groq key they produce the clearly labelled `*.groq.md` reports instead), the real Wispr WebSocket (assumptions listed in `apps/web/src/audio/README.md`), microphone/VAD behaviour on real whispers, phone background behaviour, real battery deltas.
 
-**Designed but not built:** on-device keyword spotting for an instant local pause, local speech-to-text for `LOCAL_ONLY`, owner-only speaker verification, Google Calendar/Gmail adapters, Wispr `proxy` mode.
+**Designed but not built:** on-device keyword spotting for an instant local pause, owner-only speaker verification, Google Calendar/Gmail adapters, Wispr `proxy` mode.
 
 ## Layout
 

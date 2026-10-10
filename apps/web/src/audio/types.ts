@@ -15,8 +15,11 @@ export type AudioState =
   | "error";
 
 export interface WisprTokenInfo {
-  mode: "client" | "proxy" | "mock";
-  /** short-lived Wispr client JWT (mode=client) */
+  /** "local": the on-device engine on the server's machine; its URLs are relative to the origin the app was loaded from */
+  mode: "client" | "proxy" | "mock" | "local";
+  /** why the on-device engine was handed out although Wispr was wanted (Wispr unreachable) */
+  note?: string;
+  /** short-lived Wispr client JWT (mode=client) or on-device token (mode=local) */
   token?: string;
   expiresAt?: number;
   wsUrl?: string;
@@ -56,7 +59,7 @@ export interface AudioStats {
 export type AudioDiagnostic =
   | { kind: "standby"; state: "connecting" | "ready" | "down"; assumed?: boolean; detail?: string }
   | { kind: "fallback"; reason: string }
-  | { kind: "latency"; commitToFinalMs: number; transport: "wispr_ws" | "wispr_rest" }
+  | { kind: "latency"; commitToFinalMs: number; transport: "wispr_ws" | "wispr_rest" | "local_stt" }
   | { kind: "calibrated"; noiseFloor: number }
   | { kind: "mode"; mode: "normal" | "eco" }
   | { kind: "anomaly"; detail: string };
@@ -130,6 +133,8 @@ export interface AudioEngineOptions {
   onDiagnostic?(d: AudioDiagnostic): void;
   /** tuning overrides (VAD thresholds, Wispr timeouts, ...) */
   tuning?: AudioTuning;
+  /** the origin the app was loaded from: the on-device engine's relative endpoints resolve against it (default: location.origin) */
+  origin?: string;
 }
 
 export interface AudioEngine {
@@ -148,6 +153,11 @@ export interface AudioEngine {
   injectText?(text: string, opts?: { whisper?: boolean; pauseBeforeMs?: number; durationMs?: number }): void;
   /** re-measure the noise floor (call when the room or the input device changes). Mic engine only. */
   recalibrate?(): void;
+  /**
+   * The server switched the speech engine (local-only mode toggled): drop the token and every socket, abort what is being
+   * streamed, and connect to the engine the server hands out next. The microphone stays open. Mic engine only.
+   */
+  reconnectSpeech?(): void;
 }
 
 export type AudioEngineFactory = (opts: AudioEngineOptions) => AudioEngine;

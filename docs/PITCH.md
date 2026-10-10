@@ -30,6 +30,6 @@
 ## Likely judge questions
 
 - **"Isn't this just dictation plus an LLM?"** Dictation returns text. Synapse stitches fragments across pauses, resolves self-repairs and references against days of memory, decides what deserves to exist, and stays silent on the rest. The interaction (think out loud, no commands, forget by default) is impossible without voice.
-- **"What happens offline / when Claude is down?"** A local cortex still classifies, drafts and recalls (see EVAL: offline fallback numbers), and cards are honestly badged "degraded".
-- **"Where does my audio go?"** Browser → Wispr, directly, short-lived token, held in RAM until the final text returns. Our server never sees it.
+- **"What happens offline / when Claude is down?"** A local cortex still classifies, drafts and recalls (see EVAL: offline fallback numbers), and cards are honestly badged "degraded". Voice survives too: with no internet (or Local-only switched on) speech is transcribed by Whisper on the laptop through the same pipeline, so the whole loop, from microphone to card, can run with nothing leaving the machine.
+- **"Where does my audio go?"** Browser → Wispr, directly, short-lived token, held in RAM until the final text returns. Our server never sees it, and its speech endpoints refuse audio unless you choose on-device speech, in which case it goes to Whisper on your own laptop, in memory, zeroed after each utterance.
 - **"Isn't always-on listening creepy?"** That is the design constraint: visible mic, instant pause, nothing stored from asides, 72 h forgetting, draft-first, and a *why* on everything it surfaces.

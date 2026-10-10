@@ -330,6 +330,38 @@ describe("recall", () => {
   });
 });
 
+describe("config.update", () => {
+  const config = (wisprMode: "client" | "local", localOnly: boolean) => ({ wisprMode, languages: ["en"], llmMode: "mock" as const, localOnly, autonomyLevel: 2, pauseWindowSecs: 30, ttlHours: 72, userFirstName: "Rio", timezone: "Asia/Kolkata", hackathonStart: 0, embeddings: "model" as const, threadCloseMs: 6000, dev: true, integrations: { github: false, jira: false } });
+
+  it("replaces the stored config, and tells the audio controller only when the speech engine changed", () => {
+    const { run, deps } = setup();
+    const onChange = vi.fn();
+    (deps as { onSpeechEngineChange?: unknown }).onSpeechEngineChange = onChange;
+    run({ type: "welcome", deviceId: "dev-1", serverTime: 5_000, config: config("client", false), state: snapshot() });
+    expect(useSettings.getState().config?.wisprMode).toBe("client");
+
+    run({ type: "config.update", config: config("local", true) });
+    expect(useSettings.getState().config).toMatchObject({ wisprMode: "local", localOnly: true });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("client", "local");
+
+    run({ type: "config.update", config: config("local", true) }); // the same again (another device's echo): nothing to do
+    expect(onChange).toHaveBeenCalledOnce();
+
+    run({ type: "config.update", config: config("client", false) });
+    expect(onChange).toHaveBeenLastCalledWith("local", "client");
+    expect(useSettings.getState().config).toMatchObject({ wisprMode: "client", localOnly: false });
+  });
+
+  it("before the first welcome there is nothing to compare against, so no switch is announced", () => {
+    const { run, deps } = setup();
+    const onChange = vi.fn();
+    (deps as { onSpeechEngineChange?: unknown }).onSpeechEngineChange = onChange;
+    run({ type: "config.update", config: config("local", true) });
+    expect(useSettings.getState().config?.wisprMode).toBe("local");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
 describe("privacy", () => {
   it("paused: updates the store and tells the audio controller to release the mic", () => {
     const { run, deps } = setup();

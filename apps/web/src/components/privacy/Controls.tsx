@@ -31,8 +31,10 @@ export function Controls({ localOnly, onChanged }: { localOnly: boolean; onChang
     setBusy("local");
     try {
       const r = await api.setLocalOnly(!localOnly);
-      if (cfg) setConfig({ ...cfg, localOnly: r.localOnly });
-      toast.success(r.localOnly ? "Local-only is on: nothing is sent to a cloud model." : "Local-only is off: the cloud cortex may be used again.");
+      // the server also broadcasts the new config (the speech engine switches with this setting): merge into what the store holds NOW, not into the copy captured when this view rendered
+      const cur = useSettings.getState().config ?? cfg;
+      if (cur) setConfig({ ...cur, localOnly: r.localOnly });
+      toast.success(r.localOnly ? "Local-only is on: nothing is sent to the cloud. Models run offline and speech is transcribed on this machine." : "Local-only is off: the cloud cortex and Wispr may be used again.");
       onChanged();
     } catch (err) {
       toast.warn(`Could not change local-only: ${(err as Error).message}`);
@@ -96,7 +98,7 @@ export function Controls({ localOnly, onChanged }: { localOnly: boolean; onChang
             <div className="pv-ctl__t">
               <Laptop size={14} aria-hidden style={{ display: "inline", verticalAlign: "-2px" }} /> Local-only mode
             </div>
-            <div className="pv-ctl__d">Disables every cloud model call. Synapse falls back to on-device heuristics: you still get classified fragments and notes, with less polish.</div>
+            <div className="pv-ctl__d">Nothing leaves this machine: no cloud model calls, and spoken audio is transcribed here (on-device Whisper) instead of by Wispr. Synapse falls back to on-device heuristics: you still get classified fragments and notes, with less polish.</div>
           </div>
           <button type="button" role="switch" aria-checked={localOnly} aria-label="Local-only mode" className="switch" disabled={busy !== null} onClick={() => void toggleLocal()} />
         </div>

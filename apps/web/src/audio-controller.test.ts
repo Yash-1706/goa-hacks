@@ -64,6 +64,7 @@ function fakeMic(behaviour: { failWith?: string; withInject?: boolean } = {}) {
     });
     stop = vi.fn(async () => this.set("off"));
     pause = vi.fn(async (_via: string) => this.set("paused"));
+    reconnectSpeech = vi.fn();
     injectText = behaviour.withInject === false ? undefined : vi.fn();
     constructor(readonly opts: AudioEngineOptions) {}
     set(s: AudioState, detail?: string): void {
@@ -257,6 +258,76 @@ describe("remote pause / resume", () => {
     await controller.start();
     controller.onRemoteResume();
     expect(useAudioUi.getState().resumeHint).toBe(false);
+  });
+});
+
+describe("the speech engine switches (local-only mode, or Wispr unreachable)", () => {
+  it("a listening mic reconnects to the new engine at once, and the user is told which one it is", async () => {
+    const mic = fakeMic();
+    const { controller } = setup("client", mic.factory);
+    await controller.start();
+    controller.onSpeechEngineChange("client", "local");
+    expect(mic.last().reconnectSpeech).toHaveBeenCalledOnce();
+    expect(useNotices.getState().toasts.some((t) => /transcribed on this machine/.test(t.text))).toBe(true);
+    controller.onSpeechEngineChange("local", "client");
+    expect(mic.last().reconnectSpeech).toHaveBeenCalledTimes(2);
+    expect(useNotices.getState().toasts.some((t) => /Wispr Flow again/.test(t.text))).toBe(true);
+    expect(mic.last().stop).not.toHaveBeenCalled(); // the microphone stays open: only the connection moves
+    expect(mic.made).toHaveLength(1);
+  });
+
+  it("does nothing when nothing is listening, when paused, or with the typed-input engine", async () => {
+    const mic = fakeMic();
+    const idle = setup("client", mic.factory);
+    idle.controller.onSpeechEngineChange("client", "local"); // never started
+    expect(mic.made).toHaveLength(0);
+
+    await idle.controller.start();
+    await idle.controller.toggle(); // paused: the mic is released
+    useNotices.getState().clear?.();
+    const before = useNotices.getState().toasts.length;
+    idle.controller.onSpeechEngineChange("client", "local");
+    expect(mic.last().reconnectSpeech).not.toHaveBeenCalled();
+    expect(useNotices.getState().toasts).toHaveLength(before);
+
+    const typed = setup("mock");
+    await typed.controller.start();
+    expect(() => typed.controller.onSpeechEngineChange("mock", "local")).not.toThrow();
+  });
+
+  it("hands the engine the page origin, which is what resolves the on-device endpoints", async () => {
+    vi.stubGlobal("location", { origin: "https://192.168.1.20:5173" });
+    try {
+      const mic = fakeMic();
+      const { controller } = setup("local", mic.factory);
+      await controller.start();
+      expect(mic.lastOpts().origin).toBe("https://192.168.1.20:5173");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    const mic2 = fakeMic();
+    const again = setup("local", mic2.factory);
+    await again.controller.start();
+    expect(mic2.lastOpts().origin).toBeUndefined(); // no page, no origin: nothing invented
+  });
+
+  it("'local' is a speech mode: the mic engine is used, not typed input", async () => {
+    const mic = fakeMic();
+    const { controller } = setup("local", mic.factory);
+    await controller.start();
+    expect(useAudioUi.getState()).toMatchObject({ state: "listening", engine: "mic" });
+  });
+
+  it("says once why Wispr was replaced when the server falls back to the on-device engine", async () => {
+    const mic = fakeMic();
+    const { controller, requestToken } = setup("client", mic.factory);
+    const note = "Wispr unavailable (Wispr rejected the API key (401)): on-device speech is active";
+    requestToken.mockResolvedValue({ mode: "local" as never, token: "lt1.a.b", wsUrl: "/local-stt/client_ws", restUrl: "/local-stt/client_api", note } as never);
+    await controller.start();
+    const o = mic.lastOpts();
+    await o.requestWisprToken();
+    await o.requestWisprToken({ force: true });
+    expect(useNotices.getState().toasts.filter((t) => t.text === note)).toHaveLength(1);
   });
 });
 

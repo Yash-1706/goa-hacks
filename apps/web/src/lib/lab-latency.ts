@@ -40,9 +40,9 @@ export interface StageDef {
 export const STAGE_DEFS: readonly StageDef[] = [
   {
     key: "wispr",
-    label: "Wispr transcription",
+    label: "Speech transcription",
     span: "commit sent → final text",
-    blurb: "How long Wispr takes to turn the sentence into text after you pause. Wispr's clock, reported as measured.",
+    blurb: "How long the speech engine (Wispr Flow, or Whisper on this machine when it is the on-device engine) takes to turn the sentence into text after you pause. Its own clock, reported as measured.",
     feel: false,
     empty: "Appears once a spoken fragment has been transcribed.",
   },

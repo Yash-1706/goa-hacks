@@ -52,6 +52,15 @@ const EnvSchema = z.object({
   WISPR_STANDBY_MAX_AGE_MS: num(45_000),
   WISPR_WARMUP_INTERVAL_S: num(120),
 
+  // On-device speech to text (Whisper via transformers.js, on the machine that runs this server): WISPR_MODE=local, local-only
+  // mode while a Wispr setup is configured, and (STT_FALLBACK) when Wispr cannot be reached.
+  STT_MODEL: str("Xenova/whisper-tiny.en"),
+  STT_DTYPE: str("q8"),
+  // 1: load the model when the server starts; 0: on first use; auto: at start when WISPR_MODE=local
+  STT_PRELOAD: str("auto"),
+  // 1: when Wispr rejects the key or cannot be reached, transcribe on this machine instead (the audio then reaches this server, in memory only)
+  STT_FALLBACK: bool(false),
+
   LLM_MODE: str("mock"),
   // auto | anthropic | groq. auto: Anthropic when its key is set, else Groq when its key is set, else mock.
   LLM_PROVIDER: str("auto"),
@@ -116,7 +125,7 @@ export interface Config {
   user: { firstName: string; role: string; team: TeamMember[] };
   hackathonStart: number;
   wispr: {
-    mode: "client" | "proxy" | "mock";
+    mode: "client" | "proxy" | "mock" | "local";
     apiKey: string;
     base: string;
     languages: string[];
@@ -125,6 +134,8 @@ export interface Config {
     standbyMaxAgeMs: number;
     warmupIntervalS: number;
   };
+  /** on-device speech to text */
+  stt: { model: string; dtype: string; preload: boolean; fallback: boolean; cacheDir: string };
   llm: {
     mode: "live" | "mock";
     /** the provider that serves the live paths; "mock" whenever `mode` is "mock" */
@@ -170,9 +181,10 @@ export interface Config {
 export function loadConfig(overrides: Record<string, string | undefined> = {}): Config {
   const raw = EnvSchema.parse({ ...process.env, ...overrides });
 
-  const wisprMode = (["client", "proxy", "mock"].includes(raw.WISPR_MODE) ? raw.WISPR_MODE : "mock") as Config["wispr"]["mode"];
-  // client/proxy need a key to mint tokens or to proxy; without one we fall back to mock.
-  const effectiveWispr = wisprMode !== "mock" && !raw.WISPR_API_KEY ? "mock" : wisprMode;
+  const wisprMode = (["client", "proxy", "mock", "local"].includes(raw.WISPR_MODE) ? raw.WISPR_MODE : "mock") as Config["wispr"]["mode"];
+  // client/proxy need a key to mint tokens or to proxy; without one we fall back to mock. "local" needs no key at all.
+  const effectiveWispr = wisprMode === "client" || wisprMode === "proxy" ? (raw.WISPR_API_KEY ? wisprMode : "mock") : wisprMode;
+  const preloadAsked = raw.STT_PRELOAD.toLowerCase();
 
   // LLM provider. LLM_MODE=mock and LOCAL_ONLY always win. An explicit LLM_PROVIDER=anthropic keeps the original
   // semantics (live even without a key: the call fails with an auth error and degrades). `auto` and `groq` need a key.
@@ -217,6 +229,14 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
       finalTimeoutMs: raw.WISPR_FINAL_TIMEOUT_MS,
       standbyMaxAgeMs: raw.WISPR_STANDBY_MAX_AGE_MS,
       warmupIntervalS: raw.WISPR_WARMUP_INTERVAL_S,
+    },
+    stt: {
+      model: raw.STT_MODEL,
+      dtype: raw.STT_DTYPE,
+      preload: ["1", "true", "yes", "on"].includes(preloadAsked) || (!["0", "false", "no", "off"].includes(preloadAsked) && effectiveWispr === "local"),
+      fallback: raw.STT_FALLBACK,
+      // the (non-sensitive) model cache is shared with the embeddings
+      cacheDir: raw.MODEL_CACHE_DIR ? path.resolve(REPO_ROOT, raw.MODEL_CACHE_DIR) : path.resolve(REPO_ROOT, "data"),
     },
     llm: {
       mode: effectiveLlm,

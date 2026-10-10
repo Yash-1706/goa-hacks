@@ -35,11 +35,13 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
   app.get("/api/health", async () => ({
     ok: true,
     uptimeS: Math.round(process.uptime()),
-    modes: { wispr: cfg.wispr.mode, llm: privacy.localOnly ? "local-only" : cfg.llm.mode, embeddings: ctx.embedder.mode, kek: ctx.vault.kekSource },
+    modes: { wispr: ctx.wispr.mode, llm: privacy.localOnly ? "local-only" : cfg.llm.mode, embeddings: ctx.embedder.mode, kek: ctx.vault.kekSource },
     llmProvider: cfg.llm.provider,
     models: { fast: cfg.llm.fast, deep: cfg.llm.deep, embed: ctx.embedder.name },
     // free-tier bookkeeping (counters and pacing state only, never content); null unless the provider is groq
     groq: ctx.groq ? ctx.groq.stats() : null,
+    // on-device speech (model state and timings only); null when this setup cannot use it
+    stt: ctx.localStt ? { ...ctx.localStt.stats(), active: ctx.wispr.usesLocal(), fallback: cfg.stt.fallback } : null,
     paused: privacy.isPaused(),
     memory: store.stats(),
   }));
@@ -51,7 +53,7 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
     autonomyLevel: autonomy.level,
     localOnly: privacy.localOnly,
     llmMode: cfg.llm.mode,
-    wisprMode: cfg.wispr.mode,
+    wisprMode: ctx.wispr.mode,
     ttlHours: cfg.memory.ttlHours,
     pauseWindowSecs: cfg.memory.pauseWindowSecs,
     promoteThreshold: cfg.memory.promoteThreshold,
@@ -64,7 +66,10 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
   app.post("/api/settings", async (req) => {
     const b = z.object({ autonomyLevel: z.number().int().min(0).max(3).optional(), localOnly: z.boolean().optional() }).parse(req.body);
     if (b.autonomyLevel !== undefined) autonomy.setLevel(b.autonomyLevel);
-    if (b.localOnly !== undefined) privacy.setLocalOnly(b.localOnly);
+    if (b.localOnly !== undefined) {
+      privacy.setLocalOnly(b.localOnly);
+      ctx.hub.broadcast({ type: "config.update", config: ctx.clientConfig() }); // the speech engine may change with it
+    }
     ctx.hub.broadcast({ type: "notice", level: "info", text: `Settings updated${b.localOnly !== undefined ? `: local-only ${b.localOnly ? "on" : "off"}` : ""}`, at: clock.now() });
     return { ok: true, autonomyLevel: autonomy.level, localOnly: privacy.localOnly };
   });
@@ -189,6 +194,7 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
   app.post("/api/privacy/local-only", async (req) => {
     const b = z.object({ on: z.boolean() }).parse(req.body);
     privacy.setLocalOnly(b.on);
+    ctx.hub.broadcast({ type: "config.update", config: ctx.clientConfig() }); // every device follows, the speech engine included
     return { localOnly: privacy.localOnly };
   });
   app.get("/api/privacy/export", async (_req, reply) => reply.header("content-disposition", 'attachment; filename="synapse-export.json"').send(privacy.exportAll()));

@@ -21,6 +21,8 @@ export interface HealthResponse {
   models: { fast: string; deep: string; embed: string };
   /** free-tier counters; null unless the live provider is Groq (absent from older servers) */
   groq?: { requestsToday: number; remainingTokensLastSeen: number | null; remainingRequestsLastSeen?: number | null; tpmBudget?: number } | null;
+  /** on-device speech (model state and timings only); null when this setup cannot use it (absent from older servers) */
+  stt?: { model: string; state: "idle" | "loading" | "ready" | "error"; loadMs: number | null; calls: number; lastAudioMs: number | null; lastMs: number | null; active: boolean; fallback: boolean; error?: string } | null;
   paused: boolean;
   memory: { thoughts: number; promoted: number; fragments: number; entities: number; edges: number; artifacts: number };
 }
@@ -36,7 +38,7 @@ export interface SettingsResponse {
   autonomyLevel: number;
   localOnly: boolean;
   llmMode: "live" | "mock";
-  wisprMode: "client" | "proxy" | "mock";
+  wisprMode: "client" | "proxy" | "mock" | "local";
   ttlHours: number;
   pauseWindowSecs: number;
   promoteThreshold: number;

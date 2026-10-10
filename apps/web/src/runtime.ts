@@ -49,6 +49,7 @@ const handlers = createHandlers({
   afterPaint,
   onRemotePause: () => controller.onRemotePause(),
   onRemoteResume: () => controller.onRemoteResume(),
+  onSpeechEngineChange: (from, to) => controller.onSpeechEngineChange(from, to),
 });
 
 export const controller = new AudioController({

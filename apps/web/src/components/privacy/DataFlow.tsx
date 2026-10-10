@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
-import { Ban, Brain, Cloud, Mic, Server, ShieldCheck, Waves } from "lucide-react";
+import { Ban, Brain, Cloud, Cpu, Mic, Server, ShieldCheck, Waves } from "lucide-react";
 import { llmLabel, type LlmLabel } from "@/lib/llm-provider";
+import { isOnDevice } from "@/lib/speech-engine";
 import { useSettings } from "@/state/settings";
 import { useThoughts } from "@/state/thoughts";
 
@@ -12,12 +13,14 @@ interface Node {
   tone: "local" | "wispr" | "server" | "cloud";
 }
 
-/** the last stop is whichever provider the server is configured with (Claude unless it says otherwise) */
-const nodesFor = (llm: LlmLabel): Node[] => [
+/** the last stop is whichever provider the server is configured with (Claude unless it says otherwise); the speech stop is Wispr, or this machine when the on-device engine is in use */
+const nodesFor = (llm: LlmLabel, onDevice: boolean): Node[] => [
   { icon: <Mic size={20} />, name: "Microphone", where: "this device", note: "The OS mic indicator is the truth.", tone: "local" },
   { icon: <Waves size={20} />, name: "Voice detector", where: "this device", note: "Silence is dropped here. It never leaves.", tone: "local" },
-  { icon: <Cloud size={20} />, name: "Wispr Flow", where: "transcription", note: "Receives audio only while you speak, directly from your browser.", tone: "wispr" },
-  { icon: <Server size={20} />, name: "Your Synapse", where: "your laptop", note: "Text only, encrypted at rest. Audio never arrives.", tone: "server" },
+  onDevice
+    ? { icon: <Cpu size={20} />, name: "On-device Whisper", where: "your laptop", note: "Receives audio only while you speak, in memory for one utterance, then zeroes it.", tone: "server" }
+    : { icon: <Cloud size={20} />, name: "Wispr Flow", where: "transcription", note: "Receives audio only while you speak, directly from your browser.", tone: "wispr" },
+  { icon: <Server size={20} />, name: "Your Synapse", where: "your laptop", note: onDevice ? "Text only, encrypted at rest. Audio is zeroed after each transcript." : "Text only, encrypted at rest. Audio never arrives.", tone: "server" },
   { icon: <Brain size={20} />, name: llm.provider, where: llm.model ? `reasoning · ${llm.model}` : "reasoning", note: "Sees redacted text. Emails, numbers and keys are masked first.", tone: "cloud" },
 ];
 
@@ -34,7 +37,7 @@ function Link({ kind, label }: { kind: "audio" | "text" | "redacted"; label: str
 export const DataFlow = memo(function DataFlow() {
   const cfg = useSettings((s) => s.config);
   const llmName = llmLabel(cfg);
-  const nodes = nodesFor(llmName);
+  const nodes = nodesFor(llmName, isOnDevice(cfg?.wisprMode));
   const byId = useThoughts((s) => s.byId);
   const redactions = useMemo(() => Object.values(byId).reduce((n, t) => n + (t.redactions ?? 0), 0), [byId]);
   const thoughtsWithCloud = useMemo(() => Object.values(byId).filter((t) => t.source === "llm").length, [byId]);
@@ -66,11 +69,27 @@ export const DataFlow = memo(function DataFlow() {
       <div className="pv-flow__cols">
         <div className="pv-flow__col">
           <div className="eyebrow">Audio</div>
-          <p>
-            <b>Only to Wispr Flow</b>, straight from your browser with a short-lived token, and only while the detector hears speech. It never reaches this server, never touches a disk, and is zero-filled in memory the moment the transcript returns.
-          </p>
-          <span className={`chip chip-tint ${wispr === "client" ? "chip-cyan" : "chip-warn"}`}>
-            <span>{wispr === "client" ? "live: streaming to Wispr while you speak" : wispr === "mock" ? "mock mode: typed input, no audio leaves at all" : "proxy mode"}</span>
+          {wispr === "local" ? (
+            <p>
+              <b>Stays on this machine.</b> From your browser to this laptop&apos;s own server, only while the detector hears speech, held in memory for one utterance, transcribed by Whisper on the CPU and zero-filled afterwards. It reaches no third party and is never written to a disk.
+            </p>
+          ) : (
+            <p>
+              <b>Only to Wispr Flow</b>, straight from your browser with a short-lived token, and only while the detector hears speech. It never reaches this server, never touches a disk, and is zero-filled in memory the moment the transcript returns.
+            </p>
+          )}
+          <span className={`chip chip-tint ${wispr === "client" ? "chip-cyan" : wispr === "local" ? "chip-ok" : "chip-warn"}`}>
+            <span>
+              {wispr === "client"
+                ? "live: streaming to Wispr while you speak"
+                : wispr === "local"
+                  ? localOnly
+                    ? "local-only: speech is transcribed on this machine, nothing is sent out"
+                    : "on-device: speech is transcribed on this machine"
+                  : wispr === "mock"
+                    ? "mock mode: typed input, no audio leaves at all"
+                    : "proxy mode"}
+            </span>
           </span>
         </div>
         <div className="pv-flow__col">

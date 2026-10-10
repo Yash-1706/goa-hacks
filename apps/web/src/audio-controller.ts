@@ -1,4 +1,4 @@
-import type { Activity, ClientMessage, FragmentFinal } from "@synapse/shared";
+import type { Activity, ClientConfig, ClientMessage, FragmentFinal } from "@synapse/shared";
 import {
   createTextEngine,
   loadMicEngine,
@@ -77,6 +77,7 @@ export class AudioController {
   private degradeTimer: ReturnType<typeof setTimeout> | null = null;
   private lastBatterySent = { level: -1, charging: false };
   private batteryStop: Stop | null = null;
+  private lastEngineNote = "";
 
   constructor(private d: ControllerDeps) {}
 
@@ -257,6 +258,19 @@ export class AudioController {
     this.endSpeech();
     this.releaseResources();
     this.d.send({ type: "context.update", listening: false });
+  }
+
+  /**
+   * The speech engine changed on the server (local-only mode was switched, here or on another device). A listening mic drops its
+   * connection to the old engine at once, whatever it was streaming, and connects to the new one: audio must not keep flowing to
+   * an engine the user has just turned off. The microphone itself stays open.
+   */
+  onSpeechEngineChange(from: ClientConfig["wisprMode"], to: ClientConfig["wisprMode"]): void {
+    const e = this.engine;
+    if (!e || !e.running || !e.reconnectSpeech) return;
+    e.reconnectSpeech();
+    this.lastEngineNote = "";
+    toast.info(to === "local" ? "Speech is now transcribed on this machine (on-device Whisper)." : from === "local" ? "Speech goes to Wispr Flow again." : "The speech engine changed.");
   }
 
   /** The server resumed. Resuming the MIC is a deliberate tap (PRV-3): just tell the user to tap. */
@@ -489,6 +503,8 @@ export class AudioController {
       deviceId: conn.deviceId,
       sessionId,
       deviceKind: conn.deviceKind,
+      // the on-device engine's endpoints are relative to wherever this page was loaded from (localhost, a LAN address, a tunnel)
+      ...(typeof location !== "undefined" ? { origin: location.origin } : {}),
 
       onFragment: (msg: FragmentFinal) => {
         this.d.tracker()?.noteLocal(msg.fragmentId, msg.t.wisprFinal ?? this.now());
@@ -556,7 +572,13 @@ export class AudioController {
 
       requestWisprToken: async (opts?: { force?: boolean }): Promise<WisprTokenInfo> => {
         try {
-          return await this.d.requestToken(opts);
+          const info = await this.d.requestToken(opts);
+          // Wispr could not be used and the server (STT_FALLBACK) answered with the on-device engine: say so, once per reason
+          if (info.note && info.note !== this.lastEngineNote) {
+            this.lastEngineNote = info.note;
+            toast.info(info.note);
+          }
+          return info;
         } catch (err) {
           const mode = useSettings.getState().config?.wisprMode ?? "mock";
           this.noteDegraded("Wispr token unavailable");

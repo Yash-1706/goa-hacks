@@ -47,6 +47,7 @@ const WISPR_NOTE: Record<string, string> = {
   client: "Audio streams from this browser straight to Wispr with a short-lived token. It never reaches the Synapse server.",
   proxy: "The server relays audio to Wispr. It is held in memory only and never written to disk.",
   mock: "Typed or replayed transcripts: no Wispr key, and no audio leaves the browser.",
+  local: "Whisper runs on the machine that runs the server. Audio goes from the browser to that machine only, is held in memory for one utterance and zeroed. Nothing leaves it.",
 };
 
 const KEK_NOTE: Record<string, string> = {
@@ -114,9 +115,27 @@ export const SystemPanel = memo(function SystemPanel({ health, settings }: { hea
             <Mode
               icon={<Mic size={16} />}
               label="Transcription"
-              badge={wispr ? <B kind={wispr === "mock" ? "mock" : "live"}>{wispr === "client" ? "Wispr · client" : wispr === "proxy" ? "Wispr · proxy" : "mock"}</B> : <B kind="off">–</B>}
+              badge={wispr ? <B kind={wispr === "mock" ? "mock" : wispr === "local" ? "ok" : "live"}>{wispr === "client" ? "Wispr · client" : wispr === "proxy" ? "Wispr · proxy" : wispr === "local" ? "on-device" : "mock"}</B> : <B kind="off">–</B>}
             >
               {wispr ? WISPR_NOTE[wispr] : "Waiting for the server."}
+              {wispr === "local" && h?.stt ? (
+                <>
+                  {" "}
+                  <span className="mono">{h.stt.model}</span>:{" "}
+                  {h.stt.state === "ready" ? (
+                    <>
+                      ready{h.stt.loadMs !== null ? <> (loaded in <b className="tnum">{(h.stt.loadMs / 1000).toFixed(1)} s</b>)</> : null}
+                      {h.stt.lastMs !== null && h.stt.lastAudioMs !== null ? <>, last utterance <b className="tnum">{(h.stt.lastAudioMs / 1000).toFixed(1)} s</b> of speech in <b className="tnum">{(h.stt.lastMs / 1000).toFixed(1)} s</b></> : null}
+                    </>
+                  ) : h.stt.state === "loading" ? (
+                    "loading the model (the first time it is downloaded, about 40 MB)…"
+                  ) : h.stt.state === "error" ? (
+                    <>could not load{h.stt.error ? `: ${h.stt.error}` : ""}</>
+                  ) : (
+                    "loads on first use."
+                  )}
+                </>
+              ) : null}
             </Mode>
             <Mode
               icon={<Cloud size={16} />}

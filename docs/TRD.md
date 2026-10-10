@@ -271,10 +271,16 @@ Wispr → client: `{"status":"auth"}` · `{"status":"info","message":{"event":"s
 | `wispr_ws` (default) | `WISPR_MODE=client` + key | browser → Wispr | Primary. §5.4–5.5. |
 | `wispr_rest` | WS failure for one utterance | browser → Wispr | Automatic per-utterance fallback. |
 | `wispr_proxy` | `WISPR_MODE=proxy` (no client tokens) | browser → **local** server → Wispr | PCM frames over our WSS as binary. The server uses the API-key socket (msgpack optional). |
-| `local_stt` (P1, CAP-8) | Wispr unreachable or `LOCAL_ONLY=1` | browser → **local** server (laptop) | ONNX ASR in Node via transformers.js (model in §4.1). The card shows a "local STT" badge. Output is rougher, so triage confidence is reduced. |
+| `local_stt` (P1, CAP-8) **built** | `WISPR_MODE=local`; local-only mode while Wispr is configured; opt-in `STT_FALLBACK=1` when Wispr cannot be used | browser → **local** server (laptop), same origin as the page | Whisper (`Xenova/whisper-tiny.en`, q8) through transformers.js in Node, CPU. The server hosts `/local-stt/client_ws` and `/local-stt/client_api`, which speak Wispr's own client protocol, so the browser streamer is reused unchanged: the token message says `mode: "local"` with relative URLs that the browser resolves against its own origin (Vite proxies `/local-stt`). Tokens are `lt1.<payload>.<hmac>` signed with a per-process secret. Transcripts are labelled `local_stt` (Trail: "local STT"). Measured 0.6 to 1.2 s per utterance, whatever its length (Whisper reads a 30 s window). |
 | `mock` / `replay` | No keys, tests, evals | none | Typed input, `/dev/inject`, `pnpm replay`. |
 
 The server never writes audio to disk in any mode. In `proxy` and `local_stt` modes, audio exists only in process memory for the duration of one utterance, then the buffer is zero-filled.
+
+**On-device engine details (as built).**
+- *Refusal by default.* `/local-stt/*` exist whenever `WISPR_MODE` is `client` or `local`, but refuse audio (WebSocket closed 1008, REST 403) unless the engine is in use (`WisprService.localAllowed()`: mode local, local-only on, or STT_FALLBACK on). So with Wispr configured and the fallback off, audio still never reaches this server, and `no-audio.test.ts` asserts the endpoints' behaviour and confines the sample-handling code to `wispr/local-stt.ts` and `wispr/local-ws.ts` (no `fs`, no other network, no child process; the socket module zeroes its buffers).
+- *Live switch.* Toggling local-only broadcasts `{type:"config.update"}` (REST `/api/privacy/local-only` and `/api/settings`); the browser's controller calls `engine.reconnectSpeech()` → `WisprStreamer.reconnect()`, which aborts the utterance in flight, closes every socket, drops the token and asks for a fresh one (now local, or Wispr again). The microphone and VAD are untouched; `warmup_dash` is skipped while local-only is on.
+- *Guards.* Clips under 250 ms or under -56 dBFS are not transcribed; Whisper's "Thank you." on a short, nearly silent clip is dropped; non-speech tags are stripped; one inference at a time; a hung model fails the call after 30 s; an utterance is capped at 120 s; at most 12 sockets.
+- *Verification.* `wispr:check` (the real streamer) passes against it over both WebSocket and REST; a synthetic voice through the real VAD in a real browser was transcribed by the real model (`docs/STATUS.md`).
 
 ### 5.6 Local pause guard (instant kill-switch, client side)
 On every Wispr final, **before** sending `fragment.final`, the client runs `isPauseIntent(text)`:

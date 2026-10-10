@@ -193,7 +193,8 @@ export interface WisprTranscript {
   /** possibly empty (Wispr heard nothing); the caller drops empty transcripts */
   text: string;
   detectedLanguage?: string;
-  transport: "wispr_ws" | "wispr_rest";
+  /** local_stt: the on-device engine answered (over its WebSocket or its REST endpoint) */
+  transport: "wispr_ws" | "wispr_rest" | "local_stt";
   /** when the commit (WS) or the request (REST) went out */
   tCommitSent: number;
   /** when the final text arrived */
@@ -233,6 +234,8 @@ export interface StreamerLike {
   checkFreshness(): void;
   /** network is back / tab visible again: reconnect the standby now instead of waiting for the backoff */
   kick?(): void;
+  /** the server switched the speech engine: drop the token and every socket, abort what is in flight, connect to the new one */
+  reconnect?(): void;
   primeToken(info: WisprTokenInfo): void;
   readonly standbyReady: boolean;
 }
@@ -246,6 +249,8 @@ export interface WisprStreamerConfig {
   clock: Clock;
   createSocket?: WsFactory;
   fetch?: typeof fetch;
+  /** the origin the app was loaded from, which the on-device engine's relative URLs resolve against (default: location.origin) */
+  origin?: string;
   /** WISPR_FINAL_TIMEOUT_MS (default 4000) */
   finalTimeoutMs?: number;
   /** WISPR_STANDBY_MAX_AGE_MS (default 45000) */
@@ -288,6 +293,8 @@ interface TokenState {
   token: string;
   wsUrl: string;
   restUrl?: string;
+  /** the on-device engine (its sockets and REST calls are labelled local_stt) */
+  local: boolean;
   expiresAt: number;
   /** after this the token is < 20 % from expiry and should be replaced */
   refreshAt: number;
@@ -297,21 +304,37 @@ interface TokenState {
  * Normalise a server token message. `expiresAt` is the SERVER's clock, so it is sanity-checked against ours: anything
  * outside (5 s, 2 h) is treated as clock skew and replaced by the default 900 s lifetime counted from receipt.
  */
-export function toTokenState(info: WisprTokenInfo, now: number): TokenState {
+export function toTokenState(info: WisprTokenInfo, now: number, origin?: string): TokenState {
   if (info.mode === "proxy") throw new WisprUnavailableError("proxy mode not supported in this build");
-  if (info.mode !== "client") throw new WisprUnavailableError("no Wispr key");
+  if (info.mode !== "client" && info.mode !== "local") throw new WisprUnavailableError("no Wispr key");
   if (info.error) throw new WisprUnavailableError(info.error);
   if (!info.token || !info.wsUrl) throw new WisprUnavailableError("token response incomplete");
   let ttl = typeof info.expiresAt === "number" ? info.expiresAt - now : DEFAULT_TOKEN_TTL_MS;
   if (!(ttl > 5_000 && ttl < 2 * 3_600_000)) ttl = DEFAULT_TOKEN_TTL_MS;
+  const local = info.mode === "local";
   const state: TokenState = {
     token: info.token,
-    wsUrl: info.wsUrl,
+    wsUrl: resolveEndpoint(info.wsUrl, origin, true),
     expiresAt: now + ttl,
     refreshAt: now + Math.min(ttl * 0.8, MAX_REFRESH_AFTER_MS),
+    local,
   };
-  if (info.restUrl) state.restUrl = info.restUrl;
+  if (info.restUrl) state.restUrl = resolveEndpoint(info.restUrl, origin, false);
   return state;
+}
+
+/**
+ * The on-device engine's URLs come as paths ("/local-stt/client_ws"): the server cannot know which address the browser reached it
+ * by (localhost, a LAN address, an HTTPS tunnel), so they are resolved against the origin the app was loaded from. Wispr's own
+ * URLs are absolute and pass through untouched.
+ */
+export function resolveEndpoint(url: string, origin: string | undefined, socket: boolean): string {
+  if (!url.startsWith("/")) return url;
+  const base = origin ?? (typeof location !== "undefined" ? location.origin : undefined);
+  if (!base) throw new WisprUnavailableError("no page origin to resolve the on-device endpoint against");
+  const u = new URL(url, base);
+  if (socket) u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+  return u.toString();
 }
 
 /* ------------------------------------------------------------------ connection */
@@ -326,6 +349,8 @@ interface Conn {
   readyAt: number;
   ctxSig: number;
   tokenRefreshAt: number;
+  /** this socket talks to the on-device engine */
+  local: boolean;
   owner: Utterance | null;
   connectTimer: TimerId | null;
   ackTimer: TimerId | null;
@@ -404,7 +429,7 @@ export class WisprStreamer implements StreamerLike {
   /** seed the token cache with the response the engine already fetched */
   primeToken(info: WisprTokenInfo): void {
     try {
-      this.token = toTokenState(info, this.clock.now());
+      this.token = toTokenState(info, this.clock.now(), this.cfg.origin);
     } catch {
       /* not a usable client token: ignore, getToken() will be asked later */
     }
@@ -495,6 +520,27 @@ export class WisprStreamer implements StreamerLike {
     this.ensureStandby();
   }
 
+  /**
+   * The speech engine changed on the server (local-only mode was switched): forget the token, close every socket, abort any
+   * utterance in flight (the user has just turned an engine off: not one more packet of audio goes to it), and connect to whatever
+   * the server hands out next. The microphone and the VAD are untouched.
+   */
+  reconnect(): void {
+    if (!this.active) return;
+    for (const s of [...this.sessions]) s.abort("speech engine changed");
+    for (const c of [...this.conns]) this.closeConn(c, "speech engine changed");
+    this.standby = null;
+    this.opening = null;
+    if (this.retryTimer !== null) {
+      this.clock.clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    this.failures = 0;
+    this.tokenInFlight = null;
+    this.invalidateToken();
+    this.ensureStandby();
+  }
+
   /* ---------------------------------------------------------------- standby management */
 
   private ensureStandby(): void {
@@ -565,6 +611,7 @@ export class WisprStreamer implements StreamerLike {
       readyAt: 0,
       ctxSig: 0,
       tokenRefreshAt: Number.POSITIVE_INFINITY,
+      local: false,
       owner: null,
       connectTimer: null,
       ackTimer: null,
@@ -588,6 +635,7 @@ export class WisprStreamer implements StreamerLike {
       const ctx = this.cfg.getContext(); // one snapshot: the signature must describe what is actually sent
       c.ctxSig = contextSignature(ctx);
       c.tokenRefreshAt = tok.refreshAt;
+      c.local = tok.local;
       const ws = this.createSocket(buildWsUrl(tok.wsUrl, tok.token));
       c.ws = ws;
       c.connectTimer = this.clock.setTimeout(() => {
@@ -748,7 +796,7 @@ export class WisprStreamer implements StreamerLike {
       try {
         const force = this.forceNextToken;
         const info = await (force ? this.cfg.getToken({ force: true }) : this.cfg.getToken());
-        const st = toTokenState(info, this.clock.now());
+        const st = toTokenState(info, this.clock.now(), this.cfg.origin);
         this.token = st;
         this.forceNextToken = false;
         return st;
@@ -771,7 +819,7 @@ export class WisprStreamer implements StreamerLike {
   /* ---------------------------------------------------------------- REST fallback */
 
   /** POST the retained PCM as a WAV to the client REST endpoint */
-  async restTranscribe(packets: readonly Int16Array[], signal: AbortSignal): Promise<{ text: string; lang?: string }> {
+  async restTranscribe(packets: readonly Int16Array[], signal: AbortSignal): Promise<{ text: string; lang?: string; local?: boolean }> {
     // snapshot the audio synchronously: the caller may zero-fill its buffers while we await the network
     const pcm = concatInt16(packets);
     const wav = wrapWav(pcm);
@@ -801,8 +849,9 @@ export class WisprStreamer implements StreamerLike {
       if (!res.ok) throw new Error(`REST HTTP ${res.status}`);
       const json: unknown = await res.json();
       const rec = (json && typeof json === "object" ? json : {}) as Record<string, unknown>;
-      const out: { text: string; lang?: string } = { text: typeof rec.text === "string" ? rec.text : "" };
+      const out: { text: string; lang?: string; local?: boolean } = { text: typeof rec.text === "string" ? rec.text : "" };
       if (typeof rec.detected_language === "string") out.lang = rec.detected_language;
+      if (tok.local) out.local = true;
       return out;
     }
   }
@@ -847,7 +896,7 @@ interface UtteranceHost {
   onBytes(chars: number): void;
   closeConn(c: Conn, why: string): void;
   sessionDone(u: Utterance): void;
-  rest(packets: readonly Int16Array[], signal: AbortSignal): Promise<{ text: string; lang?: string }>;
+  rest(packets: readonly Int16Array[], signal: AbortSignal): Promise<{ text: string; lang?: string; local?: boolean }>;
 }
 
 class Utterance implements UtteranceHandle {
@@ -951,7 +1000,7 @@ class Utterance implements UtteranceHandle {
     const body = msg.body && typeof msg.body === "object" ? (msg.body as Record<string, unknown>) : {};
     const text = typeof body.text === "string" ? body.text : "";
     const lang = typeof body.detected_language === "string" ? body.detected_language : undefined;
-    this.settleOk(text, lang, "wispr_ws", this.commitSentAt, this.host.clock.now());
+    this.settleOk(text, lang, this.conn?.local ? "local_stt" : "wispr_ws", this.commitSentAt, this.host.clock.now());
   }
 
   /* ---- sending ---- */
@@ -1043,7 +1092,7 @@ class Utterance implements UtteranceHandle {
     try {
       const res = await this.host.rest(this.packets, ctrl.signal);
       if (this.state === "settled") return;
-      this.settleOk(res.text, res.lang, "wispr_rest", sentAt, this.host.clock.now());
+      this.settleOk(res.text, res.lang, res.local ? "local_stt" : "wispr_rest", sentAt, this.host.clock.now());
     } catch (e) {
       if (this.state === "settled") return;
       this.settleFail(`rest fallback failed: ${errMsg(e)}`);
@@ -1055,7 +1104,7 @@ class Utterance implements UtteranceHandle {
 
   /* ---- settling ---- */
 
-  private settleOk(text: string, lang: string | undefined, transport: "wispr_ws" | "wispr_rest", tCommit: number, tFinal: number): void {
+  private settleOk(text: string, lang: string | undefined, transport: WisprTranscript["transport"], tCommit: number, tFinal: number): void {
     if (this.state === "settled") return;
     this.finish();
     this.host.emit({ kind: "latency", commitToFinalMs: Math.max(0, tFinal - tCommit), transport });

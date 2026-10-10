@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage } from "@synapse/shared";
+import type { ClientConfig, ClientMessage, ServerMessage } from "@synapse/shared";
 import { setDisplayTimezone } from "@/lib/format";
 import { LatencyTracker, afterPaint as realAfterPaint } from "@/lib/latency";
 import { useAudioUi } from "@/state/audio";
@@ -30,6 +30,8 @@ export interface HandlerDeps {
   onRemotePause: () => void;
   /** the server resumed memory: do NOT restart the mic (resume is a deliberate tap) */
   onRemoteResume: () => void;
+  /** the speech engine in effect changed (local-only mode toggled on any device): a listening mic reconnects to the new engine at once */
+  onSpeechEngineChange?: (from: ClientConfig["wisprMode"], to: ClientConfig["wisprMode"]) => void;
 }
 
 export const REMOVAL_ANIMATION_MS = 1500;
@@ -66,6 +68,14 @@ export function createHandlers(deps: HandlerDeps): Handlers {
         useMetrics.getState().setSummary(state.metrics);
         useCalendar.getState().set(state.calendar);
         useConnection.getState().set({ deviceId: msg.deviceId, welcomeAt: now });
+        return;
+      }
+
+      case "config.update": {
+        const before = useSettings.getState().config;
+        useSettings.getState().setConfig(msg.config);
+        setDisplayTimezone(msg.config.timezone);
+        if (before && before.wisprMode !== msg.config.wisprMode) deps.onSpeechEngineChange?.(before.wisprMode, msg.config.wisprMode);
         return;
       }
 

@@ -7,7 +7,7 @@ Problem Statement 4 · Ambient Cognitive Offloading. Companion docs: [PRD](./PRD
 
 ```mermaid
 flowchart LR
-  subgraph DEV["Device: desk browser / phone PWA (audio never leaves here except to Wispr)"]
+  subgraph DEV["Device: desk browser / phone PWA (audio never leaves here except to Wispr, or to your own laptop in on-device mode)"]
     MIC["Microphone"] --> GATE["Energy pre-gate"] --> VAD["Silero VAD v5 (on-device, whisper-tuned)"]
     VAD -->|"speech frames + 320 ms pre-roll"| STREAM["Wispr streamer<br/>standby socket, 1 session per utterance"]
     STREAM -->|"final text"| KILL["Local kill switch<br/>'pause memory' → mic released"]
@@ -18,6 +18,7 @@ flowchart LR
   end
 
   STREAM <==>|"wss client_ws · 16 kHz int16 PCM base64<br/>JWT minted by our server"| WISPR[("Wispr Flow API<br/>auto-edit · 100+ languages · dictionary_context")]
+  STREAM <-.->|"same protocol, same streamer: only when on-device speech is in use<br/>(WISPR_MODE=local · local-only mode · STT_FALLBACK)<br/>/local-stt/client_ws · memory only, zeroed per utterance"| LSTT
 
   subgraph BRAIN["Synapse server (the brain, runs on the laptop)"]
     HUB["Gateway: WS hub + REST<br/>pairing · clock sync · speech-aware quiet"]
@@ -38,6 +39,7 @@ flowchart LR
     PRIV["Guardian: pause · forget · purge<br/>hash-chained audit"] <--> MEM
     OUT["Outbox + autonomy ladder<br/>GitHub · Jira · calendar · mailto"]
     WTOK["Wispr service: mint tokens,<br/>warm-up, context"]
+    LSTT["On-device speech (Whisper tiny.en, CPU)<br/>Wispr-compatible endpoints · refuses audio<br/>unless in use · never touches disk"]
   end
 
   WS <--> HUB
@@ -128,4 +130,4 @@ Timing, measured per stage, is in [LATENCY.md](./LATENCY.md).
 | Structured output | `zodOutputFormat` | own strict schema + SDK fallback | SDK drops `enum`/`const` |
 | Thought versions table | stored | not built | not needed for the demo |
 | Local pause accelerator (KWS) | P1 | not built; pause is on Wispr's final text (phrase match + server semantic backstop) | scope; see FAILURE_MODES |
-| Local STT fallback | P1 | not built | scope |
+| Local STT fallback | P1 | **built** (`wispr/local-stt.ts`, `local-ws.ts`): Whisper-tiny on the server's CPU behind Wispr-compatible endpoints, so the browser streamer is reused unchanged; `WISPR_MODE=local`, local-only mode, opt-in `STT_FALLBACK` | the TRD placed it in the server too; reusing Wispr's protocol meant no second audio path in the browser |

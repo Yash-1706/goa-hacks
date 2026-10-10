@@ -10,9 +10,15 @@ import { makeApp } from "./app-helper";
  * The browser streams audio straight to Wispr (client mode); the server only ever sees text. These tests make
  * that claim checkable: nothing on disk looks like audio, the server has no audio-shaped endpoint or message,
  * and no server/shared source touches audio capture or encoding APIs.
+ *
+ * The ONE exception is the opt-in on-device engine (WISPR_MODE=local, local-only mode, STT_FALLBACK; test/local-stt.test.ts):
+ * audio then reaches this server, in memory, for one utterance. It is confined to two modules that are audited below to touch
+ * no disk, no other network and nothing else, and its endpoints refuse audio unless the engine is in use.
  */
 
 const here = import.meta.dirname;
+/** the only modules that may see audio samples (memory only, one utterance at a time) */
+const ON_DEVICE = ["apps/server/src/wispr/local-stt.ts", "apps/server/src/wispr/local-ws.ts"];
 const tmpDirs: string[] = [];
 afterAll(() => {
   for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true });
@@ -74,7 +80,7 @@ describe("audio never persists", () => {
     expect(db).not.toContain("discount code");
   });
 
-  it("the server has no audio, speech-to-text or upload endpoint and the wire protocol has no audio message", async () => {
+  it("the server has no audio, speech-to-text or upload endpoint and the wire protocol has no audio message (unless on-device speech is configured)", async () => {
     const app = await makeApp();
     try {
       const routes = app.ctx.fastify.printRoutes({ commonPrefix: false });
@@ -106,8 +112,27 @@ describe("audio never persists", () => {
       ["raw PCM / waveform", /\b(pcm|pcm16|waveform)\b/i],
     ];
     for (const f of files) {
+      const rel = path.relative(path.resolve(here, "../../.."), f).replaceAll("\\", "/");
       const src = stripComments(fs.readFileSync(f, "utf8"));
-      for (const [what, re] of forbidden) expect(src, `${path.relative(path.resolve(here, "../../.."), f)}: ${what}`).not.toMatch(re);
+      for (const [what, re] of forbidden) {
+        if (what === "raw PCM / waveform" && ON_DEVICE.includes(rel)) continue; // the on-device engine is the one module family that handles samples
+        expect(src, `${rel}: ${what}`).not.toMatch(re);
+      }
     }
+  });
+
+  it("the on-device engine is confined to two modules that keep audio in memory: no disk, no other network, no child process, and they zero what they hold", () => {
+    const root = path.resolve(here, "../../..");
+    for (const rel of ON_DEVICE) {
+      const src = stripComments(fs.readFileSync(path.join(root, rel), "utf8"));
+      expect(src, `${rel} must not import the file system`).not.toMatch(/from\s+["'](node:)?(fs|fs\/promises)["']|require\(["'](node:)?fs/);
+      expect(src, `${rel} must not write files`).not.toMatch(/\b(writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|mkdtemp|mkdtempSync)\b/);
+      expect(src, `${rel} must not open any other connection`).not.toMatch(/\bfetch\s*\(|new\s+WebSocket\b|from\s+["']node:(http|https|net|tls|dgram|child_process|worker_threads)["']/);
+      // the socket module owns the buffers (the engine only borrows an utterance for one call), so it is the one that must wipe them
+      if (rel.endsWith("local-ws.ts")) expect(src, `${rel} must zero the audio it holds`).toMatch(/\.fill\(0\)/);
+    }
+    // and no OTHER module may handle samples: the audit above forbids pcm/waveform everywhere else
+    const others = walk(path.resolve(here, "../src")).filter((f) => f.endsWith(".ts") && !ON_DEVICE.includes(path.relative(root, f).replaceAll("\\", "/")));
+    for (const f of others) expect(stripComments(fs.readFileSync(f, "utf8")), path.relative(root, f)).not.toMatch(/\bpcm16ToFloat\b|\bdecodeWav\b/);
   });
 });

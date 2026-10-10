@@ -46,6 +46,8 @@ export interface CheckOptions {
   /** keep an authenticated socket idle for this long before speaking (tests the server's idle timeout) */
   idleSecs?: number;
   language?: string[];
+  /** where the on-device engine's relative endpoints resolve (the server's own HTTP origin); Wispr's absolute URLs ignore it */
+  origin?: string;
   createSocket?: WsFactory;
   fetchImpl?: typeof fetch;
   clock?: Clock;
@@ -122,6 +124,7 @@ export async function runWisprCheck(o: CheckOptions): Promise<CheckReport> {
     sessionId: `check-${Date.now().toString(36)}`,
     getToken,
     getContext: () => ({ ...CONTEXT, language: o.language ?? [] }),
+    ...(o.origin ? { origin: o.origin } : {}),
     clock,
     ...(o.forceRest
       ? {
@@ -153,6 +156,8 @@ export async function runWisprCheck(o: CheckOptions): Promise<CheckReport> {
   };
 
   // ---- 1. token + standby socket
+  /** the server pointed the browser at the on-device engine instead of Wispr */
+  let local = false;
   let ackSeen: "yes" | "assumed" | "no" = "no";
   let standbyError = "";
   const standbyEvents = (): AudioDiagnostic[] => diagnostics.filter((d) => d.kind === "standby");
@@ -172,10 +177,11 @@ export async function runWisprCheck(o: CheckOptions): Promise<CheckReport> {
     }
     const ready = standbyEvents().filter((d) => d.kind === "standby" && d.state === "ready");
     ackSeen = !streamer.standbyReady ? "no" : ready.some((d) => d.kind === "standby" && !d.assumed) ? "yes" : "assumed";
-    if (!tokenInfo) return fail("no token was requested: the Synapse server did not hand out a Wispr token");
+    if (!tokenInfo) return fail("no token was requested: the Synapse server did not hand out a speech token");
     const tok = tokenInfo;
-    if (tok.mode !== "client" || !tok.token) return fail(`token mode is "${tok.mode}"${tok.error ? ` (${tok.error})` : ""}: set WISPR_MODE=client and WISPR_API_KEY on the server`);
-    add("token", "server mints a short-lived client token", "pass", `ttl ${tok.expiresAt ? Math.round((tok.expiresAt - clock.now()) / 1000) : "?"} s, wsUrl host ${hostOf(tok.wsUrl)}`);
+    if ((tok.mode !== "client" && tok.mode !== "local") || !tok.token) return fail(`token mode is "${tok.mode}"${tok.error ? ` (${tok.error})` : ""}: set WISPR_MODE=client and WISPR_API_KEY on the server (or WISPR_MODE=local for on-device speech)`);
+    local = tok.mode === "local";
+    add("token", local ? "server hands out a short-lived on-device token" : "server mints a short-lived client token", "pass", `ttl ${tok.expiresAt ? Math.round((tok.expiresAt - clock.now()) / 1000) : "?"} s, ${local ? `endpoint ${tok.wsUrl ?? "?"}${tok.note ? ` (${tok.note})` : ""}` : `wsUrl host ${hostOf(tok.wsUrl)}`}`);
     if (ackSeen === "yes") add("A1+A5", 'client_ws accepts auth (token also in the auth message) and answers {"status":"auth"}', "pass", "the explicit auth acknowledgement arrived");
     else if (ackSeen === "assumed") add("A1+A5", 'client_ws accepts auth and answers {"status":"auth"}', "unknown", "the socket stayed open but Wispr never sent an auth acknowledgement: it was only ASSUMED ready after the 3 s timeout (harmless, but the streamer is relying on a guess)");
     else add("A1+A5", "client_ws accepts auth", "fail", standbyError ? `the socket was rejected or closed: ${standbyError}. Check that the JWT is also sent in auth.access_token, and the key is approved` : "the standby socket never became ready within 12 s");
@@ -241,17 +247,21 @@ export async function runWisprCheck(o: CheckOptions): Promise<CheckReport> {
   log("speaking one utterance ...");
   const main = await speak(o.pcm, "speech");
   const tr = main.transcript;
+  local = (tokenInfo as WisprTokenInfo | undefined)?.mode === "local"; // also right for the REST-only check, which never inspected the token above
+  const who = local ? "the on-device engine" : "Wispr";
+  /** the answer came over REST (forced, a fallback after the socket failed, or Wispr's own REST label): the on-device engine reports one transport for both */
+  const overRest = o.forceRest === true || tr?.transport === "wispr_rest" || diagnostics.some((d) => d.kind === "fallback");
   if (main.failed || !tr) {
-    add("A3", `Wispr accepts ${o.packetFormat === "wav" ? "per-packet WAV" : "raw int16 PCM packets"} and returns text`, "fail", `${main.failed ?? "no transcript"}.${o.packetFormat === "wav" ? "" : " If Wispr rejected the packets, rerun with --packets wav (per-packet RIFF header) and set WISPR_PACKET_FORMAT=wav"}`);
+    add("A3", `${who} accepts ${o.packetFormat === "wav" ? "per-packet WAV" : "raw int16 PCM packets"} and returns text`, "fail", `${main.failed ?? "no transcript"}.${o.packetFormat === "wav" ? "" : " If Wispr rejected the packets, rerun with --packets wav (per-packet RIFF header) and set WISPR_PACKET_FORMAT=wav"}`);
   } else {
     const latency = Math.round(tr.tFinal - tr.tCommitSent);
     const fell = diagnostics.find((d) => d.kind === "fallback");
-    const wsRescued = !o.forceRest && tr.transport === "wispr_rest";
-    const what = o.forceRest ? "REST accepts a 16 kHz mono WAV and returns text" : `Wispr accepts ${o.packetFormat === "wav" ? "per-packet WAV" : "raw int16 PCM packets"} and returns text`;
+    const wsRescued = !o.forceRest && overRest;
+    const what = o.forceRest ? "REST accepts a 16 kHz mono WAV and returns text" : `${who} accepts ${o.packetFormat === "wav" ? "per-packet WAV" : "raw int16 PCM packets"} and returns text`;
     if (wsRescued) add("A3", what, "fail", `the WebSocket path FAILED (${fell && fell.kind === "fallback" ? fell.reason : "no final text"}); only the REST fallback produced text.${o.packetFormat === "wav" ? "" : " If Wispr rejected the packets, rerun with --packets wav (per-packet RIFF header) and set WISPR_PACKET_FORMAT=wav"}`);
-    else add("A3", what, tr.text.trim() ? "pass" : "unknown", tr.text.trim() ? `${tr.transport === "wispr_rest" ? "over REST" : "over the WebSocket"}, ${main.packets} packets` : "an empty transcript came back for speech: the audio may be too quiet or the voice unintelligible");
-    add("A4", "commit → final latency", "info", `${latency} ms over ${tr.transport === "wispr_rest" ? "REST" : "the WebSocket"}${tr.transport === "wispr_ws" ? " (the pre-authenticated standby removes connect+auth from this path)" : ""}`);
-    if (o.forceRest) add("REST", "REST fallback works", tr.transport === "wispr_rest" && tr.text.trim() ? "pass" : "fail", `transport ${tr.transport}`);
+    else add("A3", what, tr.text.trim() ? "pass" : "unknown", tr.text.trim() ? `${overRest ? "over REST" : "over the WebSocket"}, ${main.packets} packets` : "an empty transcript came back for speech: the audio may be too quiet or the voice unintelligible");
+    add("A4", "commit → final latency", "info", `${latency} ms over ${overRest ? "REST" : "the WebSocket"}${local ? " (Whisper on this machine: the encoder always reads a 30 s window, so expect 0.6 to 1.5 s whatever the length)" : tr.transport === "wispr_ws" ? " (the pre-authenticated standby removes connect+auth from this path)" : ""}`);
+    if (o.forceRest) add("REST", "REST fallback works", (tr.transport === "wispr_rest" || tr.transport === "local_stt") && tr.text.trim() ? "pass" : "fail", `transport ${tr.transport}`);
     if (o.expect && tr.text.trim()) {
       const sim = similarity(o.expect, tr.text);
       add("heard", "what was heard", sim >= 0.6 ? "pass" : "unknown", `"${tr.text.trim()}" (word overlap with what was spoken: ${Math.round(sim * 100)} %)`);
@@ -270,7 +280,8 @@ export async function runWisprCheck(o: CheckOptions): Promise<CheckReport> {
   }
 
   // ---- 5. things that cannot be checked from Node
-  add("A7", "browser CORS / Origin rules for client_ws and the REST fallback", "unknown", "Node has no CORS. Confirm in the browser: Lab → Audio diagnostics shows no 'fallback' events during a real mic run");
+  if (local) add("A7", "browser origin rules", "info", "the on-device endpoints are served from the same origin as the page (through the Vite proxy), so CORS is not involved; the server still refuses an origin that is not local or on a private network");
+  else add("A7", "browser CORS / Origin rules for client_ws and the REST fallback", "unknown", "Node has no CORS. Confirm in the browser: Lab → Audio diagnostics shows no 'fallback' events during a real mic run");
   add("A10", "whispered speech is segmented and transcribed", "unknown", "needs a real voice in a real room (say a whispered sentence on the Desk)");
 
   streamer.stop();

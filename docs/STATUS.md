@@ -4,7 +4,7 @@
 
 **Legend** · ✅ the acceptance criterion is verified in this repo (automated test or a generated report, named in the last column) · 🔶 built and unit-tested, but the criterion itself needs a live key, a real voice or a real phone · ⬜ designed, not built
 
-**Test inventory** (`pnpm test`): `@synapse/server` 241 tests in 21 files · `@synapse/web` 669 tests in 42 files · typecheck clean on all three packages (`pnpm typecheck`). The tests that guard the claims most likely to be doubted were checked the hard way: the local-only test fails when the local-only router is removed, the GitHub test fails when an API header is changed, and the audio tests run against a fake Wispr that is itself proven to reject protocol violations (`fake-wispr.integration.test.ts`).
+**Test inventory** (`pnpm test`): `@synapse/server` 271 tests in 22 files · `@synapse/web` 683 tests in 43 files · typecheck clean on all three packages (`pnpm typecheck`). The tests that guard the claims most likely to be doubted were checked the hard way: the local-only test fails when the local-only router is removed, the GitHub test fails when an API header is changed, and the audio tests run against a fake Wispr that is itself proven to reject protocol violations (`fake-wispr.integration.test.ts`).
 
 ## What a human has to add (nothing below can be done from inside this repository)
 
@@ -39,7 +39,7 @@ Everything else (the whole pipeline, memory, recall, proactivity, privacy contro
 | Recall demo | `/recall` screen; the recall beat in `docs/DEMO_SCRIPT.md` → "The 3 minutes" | ✅ typed and spoken-question paths · 🔶 spoken answer (TTS) on a real device |
 | Architecture diagram | `docs/ARCHITECTURE.md` (mermaid) | ✅ |
 | Latency benchmark | `docs/LATENCY.md`, `docs/latency.csv`, `pnpm bench` | ✅ pipeline stages measured (first paint p50 12 ms) · 🔶 Wispr and Claude stages need keys |
-| 1-page failure-mode analysis | `docs/FAILURE_MODES.md` (20 modes, each marked ✅/🟡/❌) | ✅ |
+| 1-page failure-mode analysis | `docs/FAILURE_MODES.md` (24 modes, each marked ✅/🟡/❌) | ✅ |
 | 3-minute pitch | `docs/PITCH.md` | ✅ |
 
 ## What was exercised end to end (mock mode, typed input, in a browser)
@@ -54,6 +54,9 @@ Everything below was run against the real server and the real UI, not mocks, wit
 - **Network:** from a LAN address every route except `/api/health` answers 401 until paired; dev routes answer 401/404 off-loopback; a public website origin gets 403; the HTTPS dev mode serves pages, proxies the API and upgrades WebSockets; the production build's service worker is valid and precaches 34 files that all exist.
 - **Voice path without a key:** `pnpm wispr:check` ran the real streamer, over a real socket, through the real server token path against the strict fake: PASS on every item that can be tested from Node.
 - **Voice path in a real browser (synthetic voice, still no Wispr key):** a Windows-generated voice played into the page as the "microphone" (`apps/web/scripts/voice-smoke/`) and the strict fake Wispr behind the real server. The real Silero VAD (WASM) caught a 3.2 s and a 6.3 s sentence (102 and 198 packets of 32 ms, 1,024 bytes each, one `commit` with the matching total) and the same sentence at −31 dBFS, which the Stream tagged `WHISPER`; silence sent nothing; the fake counted **0 protocol violations**. Cards appeared 203–414 ms after the final text (first paint p50 203 ms, finished card p50 264 ms, speech → card p50 1.06 s with a 300 ms fake Wispr). The problem statement's mumbled bug report, spoken as four bursts with 1.3, 1.1 and 0.9 s pauses (measured by the client's VAD timeline and shown in the Stream), became **one** thought ("Null pointer in cart-service ×4") with a GitHub-issue draft: 4 commits, 4 finals, 0 violations. Restarting the upstream was recovered by the standby socket; with a silent socket the app waited out the 4 s timeout, fell back to REST (a WAV the strict fake accepts) and still produced the card; a spoken "pause memory" released the mic, closed every Wispr socket, paused the server and was never stored (811 ms by the app's own clock). **Not covered:** a physical microphone, room acoustics, real whispers, the real Wispr service.
+
+- **On-device speech, end to end in a real browser (real Whisper, synthetic voice):** with `WISPR_MODE=local`, a Windows voice played into the page as the mic went through the real Silero VAD and the on-device endpoint into the real model, which returned the sentence exactly ("Remind me to email the team about the delay." / "That bug from yesterday, the null pointer in the cart service, probably the discount code."); the cards followed 282 and 301 ms after the final text, a whisper-level version was transcribed and tagged `WHISPER`. Whisper took 0.8 to 1.1 s per utterance (commit → final, any length under 30 s); speech → finished card 1.5 to 1.9 s. The Lab names the engine ("on-device", model state, load time 1.8 s from the cache) and the transport is `local_stt`. `pnpm wispr:check` against the on-device server: PASS, "Hello Synapse. Remind me to email the team about the delay, and ask Sarah about the OAuth 2 decision." (94 % word overlap), 1.2 s for 7.9 s of speech.
+- **Local-only switched on while the mic is live (Wispr stand-in configured):** the server broadcast `config.update`, the page opened a socket to `/local-stt/client_ws` on its own origin, toasted "Speech is now transcribed on this machine", and the next sentence was transcribed by Whisper (not by the stand-in); the stand-in received **0 packets, 0 tokens and 0 warm-ups** after the toggle. Switching it off sent the next sentence to Wispr again (98 packets, 1 final).
 
 ### Bugs this pass found (each fixed, each with a regression test)
 
@@ -85,7 +88,7 @@ Everything below was run against the real server and the real UI, not mocks, wit
 | CAP-5 per-fragment features | P0 | ✅ | `FragmentFinal` schema validated on every emitted fragment; activity from motion sensors is 🔶 (real phone) |
 | CAP-6 multilingual passthrough | P1 | 🔶 | language list passes through to Wispr; a real Hinglish utterance was not tried |
 | CAP-7 injector / replay | P0 | ✅ | typed-input engine, `injectText`, `pnpm replay` (8 scenario scripts) |
-| CAP-8 local STT fallback | P1 | ⬜ | designed in TRD; today an unreachable Wispr degrades to REST, then to typed input |
+| CAP-8 local STT fallback | P1 | ✅ | built: Whisper-tiny on the server's CPU behind Wispr-compatible endpoints (`wispr/local-stt.ts`, `local-ws.ts`), so the browser streamer is reused unchanged. `WISPR_MODE=local` (no key, no internet), local-only mode (switches a live mic over at once), opt-in `STT_FALLBACK`. `local-stt.test.ts` (29 tests incl. the real `WisprStreamer` against the real endpoints over WebSocket and REST), `audio/wispr.test.ts`, `no-audio.test.ts`; verified with the real model on a synthetic voice through the real VAD in a browser (evidence log). Accuracy on real accents and rooms is unmeasured |
 | CAP-9 Wispr context minimisation | P0 | ✅ | `audio/wispr.test.ts` "NEVER sends screenshot / content_text / content_html" |
 
 ### Fragment intelligence: "Cortex"
@@ -145,7 +148,7 @@ Everything below was run against the real server and the real UI, not mocks, wit
 | PRV-7 memory ledger | P0 | ✅ | `/privacy` (browser-verified): data-flow diagram, retention and key list (destroyed day keys), controls, export, pairing, a ledger of every stored item with its expiry countdown, delete and why-kept, and the audit chain with a Verify button ("Chain intact. All 11 events re-hashed") |
 | PRV-8 hash-chained audit | P1 | ✅ | verifies; detects a rewritten or deleted row; survives restart |
 | PRV-9 owner-only speaker verification | P2 | ⬜ | not built (declared in the whitepaper and failure modes) |
-| PRV-10 local-only mode | P1 | ✅ | `local-only.test.ts` |
+| PRV-10 local-only mode | P1 | ✅ | `local-only.test.ts`; and since on-device speech exists, local-only also moves a Wispr setup's speech onto this machine (`local-stt.test.ts`: not one token, packet or warm-up reaches a counting Wispr stand-in afterwards; seen in a browser) |
 | PRV-11 cascade deletion | P0 | ✅ | no row or index entry references a deleted thought |
 | PRV-12 no sensitive inference | P0 | ✅ | `no-sensitive-inference.test.ts` |
 
@@ -179,6 +182,6 @@ Everything below was run against the real server and the real UI, not mocks, wit
 - **Never run against the real Wispr or Anthropic services** (no keys were available). The Wispr client was built from the documented wire protocol and checked against a strict fake that rejects protocol violations; Claude was checked against a fake that speaks the real streaming protocol. Item 3 of the table at the top turns this into a measurement.
 - Intent accuracy and latency numbers in `docs/` are for the **offline** cortex and say so in their first lines.
 - Weak spots in the offline classifier: *decision* vs *idea* (hedged choices), and *idea* itself. The live model's few-shot prompt covers these better; unmeasured.
-- Designed but not built: on-device keyword spotting for the pause phrase, local speech-to-text, owner-only speaker verification, Google Calendar and Gmail adapters, Wispr proxy mode.
+- Designed but not built: on-device keyword spotting for the pause phrase, owner-only speaker verification, Google Calendar and Gmail adapters, Wispr proxy mode.
 - Phones can only listen in the foreground (web platform limit; wake lock + black Pocket screen).
 - Node 25 (EOL) and `node:sqlite` (experimental) are in use; both work and are pinned by the lockfile.

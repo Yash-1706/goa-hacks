@@ -61,7 +61,7 @@ export default defineConfig(async () => {
         globPatterns: ["**/*.{js,css,html,svg,png,webmanifest}"],
         globIgnores: ["vad/**", "**/*.wasm", "**/*.onnx"],
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\//, /^\/ws/, /^\/vad\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/ws/, /^\/vad\//, /^\/local-stt\//],
         cleanupOutdatedCaches: true,
       },
       devOptions: { enabled: false },
@@ -87,6 +87,8 @@ export default defineConfig(async () => {
         // xfwd: the API server decides trust (localhost vs paired device) from the real client IP
         "/api": { target: server, xfwd: true },
         "/ws": { target: server, ws: true, xfwd: true },
+        // the on-device speech endpoints (a WebSocket and a REST route), same origin as the page so phones and HTTPS tunnels work
+        "/local-stt": { target: server, ws: true, xfwd: true },
       },
     },
     // pre-bundle the VAD on startup so Vite doesn't re-optimise (and reload the page) the first time the mic is used

@@ -41,6 +41,8 @@ describe("describeDiagnostic", () => {
     expect(describeDiagnostic(d({ kind: "latency", commitToFinalMs: 420.4, transport: "wispr_ws" }))).toMatchObject({ tone: "ok", text: "Commit → final text 420 ms (websocket)" });
     expect(describeDiagnostic(d({ kind: "latency", commitToFinalMs: 1200, transport: "wispr_rest" })).tone).toBe("info");
     expect(describeDiagnostic(d({ kind: "latency", commitToFinalMs: 2500, transport: "wispr_rest" }))).toMatchObject({ tone: "warn", text: expect.stringContaining("REST") });
+    // the on-device engine is named as such, not as Wispr
+    expect(describeDiagnostic(d({ kind: "latency", commitToFinalMs: 900, transport: "local_stt" }))).toMatchObject({ label: "On-device", tone: "info", text: "Commit → final text 900 ms (on-device Whisper)" });
   });
 
   it("reports calibration and mode changes", () => {

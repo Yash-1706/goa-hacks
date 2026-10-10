@@ -1101,3 +1101,103 @@ describe("kick() (network is back / tab visible again)", () => {
     expect(FakeWs.instances).toHaveLength(n);
   });
 });
+
+/* ======================================================================== the on-device engine (mode "local") */
+
+describe("the on-device engine: the same protocol, a different address", () => {
+  const ORIGIN = "http://localhost:5173";
+  const LOCAL: Partial<WisprTokenInfo> = { mode: "local", wsUrl: "/local-stt/client_ws", restUrl: "/local-stt/client_api" };
+
+  it("resolves the server's relative endpoints against the page origin: ws for http, wss for https, absolute Wispr URLs untouched", () => {
+    const now = 1_000_000;
+    const base: WisprTokenInfo = { mode: "local", token: "lt1.a.b", wsUrl: "/local-stt/client_ws", restUrl: "/local-stt/client_api", expiresAt: now + 900_000 };
+    const http = toTokenState(base, now, "http://localhost:5173");
+    expect(http).toMatchObject({ wsUrl: "ws://localhost:5173/local-stt/client_ws", restUrl: "http://localhost:5173/local-stt/client_api", local: true });
+    const https = toTokenState(base, now, "https://192.168.1.20:5173");
+    expect(https).toMatchObject({ wsUrl: "wss://192.168.1.20:5173/local-stt/client_ws", restUrl: "https://192.168.1.20:5173/local-stt/client_api" });
+    // Wispr's own URLs pass through, and are not "local"
+    expect(toTokenState({ mode: "client", token: "t", wsUrl: WS_URL, restUrl: REST_URL }, now, ORIGIN)).toMatchObject({ wsUrl: WS_URL, restUrl: REST_URL, local: false });
+    // a relative endpoint with nothing to resolve it against is an error, not a guess
+    expect(() => toTokenState(base, now)).toThrow(/page origin/);
+    expect(() => toTokenState({ ...base, error: "on-device speech is off" }, now, ORIGIN)).toThrow(/on-device speech is off/);
+  });
+
+  it("connects to the resolved address with the token the server issued, and the transcript says local_stt", async () => {
+    const h = harness({ origin: ORIGIN }, LOCAL);
+    const ws = await h.standbyUp();
+    expect(ws.url).toBe(`ws://localhost:5173/local-stt/client_ws?client_key=Bearer%20jwt-1`);
+    expect(ws.ofType("auth")[0]!.access_token).toBe("jwt-1"); // repeated in the auth message, like Wispr's
+
+    const u = h.claim();
+    u.pushPreroll(Array.from({ length: 3 }, (_, i) => ({ pcm: frame(i + 1), rms: 0.1 })));
+    u.commit();
+    ws.serverSend({ status: "info", message: { event: "commit_received" } });
+    ws.serverSend({ status: "text", position: 3, final: true, body: { text: "remind me to email the team", detected_language: "en" } });
+    await flush();
+    expect(h.transcripts).toHaveLength(1);
+    expect(h.transcripts[0]).toMatchObject({ text: "remind me to email the team", transport: "local_stt", detectedLanguage: "en" });
+    expect(h.diags).toContainEqual(expect.objectContaining({ kind: "latency", transport: "local_stt" }));
+  });
+
+  it("the REST fallback goes to the on-device REST route, with the same bearer token, and is labelled local_stt too", async () => {
+    const h = harness({ origin: ORIGIN, finalTimeoutMs: 4000 }, LOCAL);
+    const ws = await h.standbyUp();
+    const u = h.claim();
+    u.pushPreroll(Array.from({ length: 3 }, (_, i) => ({ pcm: frame(i + 1), rms: 0.1 })));
+    u.commit();
+    ws.serverSend({ status: "error", message: "on-device speech failed" });
+    await flush();
+    expect(h.fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = h.fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("http://localhost:5173/local-stt/client_api");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer jwt-1");
+    await flush();
+    expect(h.transcripts).toHaveLength(1);
+    expect(h.transcripts[0]).toMatchObject({ text: "rest text", transport: "local_stt" });
+  });
+
+  it("reconnect(): the engine was switched, so what is being streamed is aborted, every socket closed, and the next one is the NEW engine's", async () => {
+    const h = harness({ origin: ORIGIN }); // starts on Wispr
+    const wisprWs = await h.standbyUp();
+    expect(wisprWs.url.startsWith(WS_URL)).toBe(true);
+    const u = h.claim();
+    u.pushPreroll(Array.from({ length: 5 }, (_, i) => ({ pcm: frame(i + 1), rms: 0.1 })));
+    expect(wisprWs.ofType("append")).toHaveLength(1);
+
+    // the user turns local-only on: the server now hands out the on-device engine
+    h.getToken.mockImplementation(async () => ({ mode: "local", token: "lt1.local", expiresAt: h.clock.now() + 900_000, wsUrl: "/local-stt/client_ws", restUrl: "/local-stt/client_api" }) as WisprTokenInfo);
+    h.streamer.reconnect();
+    await flush();
+
+    // nothing more goes to Wispr: not the rest of this utterance, not a commit
+    const appendsBefore = wisprWs.ofType("append").length;
+    u.push(frame(9), 0.1);
+    u.push(frame(9), 0.1);
+    u.push(frame(9), 0.1);
+    u.push(frame(9), 0.1);
+    expect(wisprWs.ofType("append")).toHaveLength(appendsBefore);
+    expect(wisprWs.ofType("commit")).toHaveLength(0);
+    expect(wisprWs.closeCalls.length).toBeGreaterThan(0);
+    expect(u.state).toBe("settled");
+    expect(h.transcripts).toHaveLength(0);
+    expect(h.failures).toHaveLength(0); // aborted on purpose: no "failed" red tick either
+
+    // the replacement was asked for with force (a fresh token), and it is the on-device socket
+    expect(h.getToken).toHaveBeenLastCalledWith({ force: true });
+    const next = FakeWs.instances[FakeWs.instances.length - 1]!;
+    expect(next).not.toBe(wisprWs);
+    expect(next.url).toBe("ws://localhost:5173/local-stt/client_ws?client_key=Bearer%20lt1.local");
+    next.open();
+    next.serverSend({ status: "auth" });
+    await flush();
+    expect(h.streamer.standbyReady).toBe(true);
+  });
+
+  it("reconnect() on a streamer that is not running does nothing", async () => {
+    const h = harness({ origin: ORIGIN });
+    h.streamer.reconnect();
+    await flush();
+    expect(FakeWs.instances).toHaveLength(0);
+    expect(h.getToken).not.toHaveBeenCalled();
+  });
+});

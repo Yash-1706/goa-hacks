@@ -189,7 +189,8 @@ export type ClientMessageType = ClientMessage["type"];
 // ------------------------------------------------------------ server → client
 
 export interface ClientConfig {
-  wisprMode: "client" | "proxy" | "mock";
+  /** the speech engine in effect right now: "local" is on-device Whisper on the server's machine (WISPR_MODE=local, or local-only mode with a Wispr setup) */
+  wisprMode: "client" | "proxy" | "mock" | "local";
   languages: string[];
   llmMode: "live" | "mock";
   /** which provider serves the live cortex and its hot-path model (absent while mock or local-only; the UI says "Claude" when absent) */
@@ -240,14 +241,19 @@ export type ServerMessage =
   | { type: "state.update"; paused: boolean; pausedAt?: number; pausedBy?: string; devices: DeviceInfo[] }
   | {
       type: "wispr.token";
-      mode: "client" | "proxy" | "mock";
+      /** "local": a token for the on-device engine; the URLs are relative to the server's own origin */
+      mode: "client" | "proxy" | "mock" | "local";
       token?: string;
       expiresAt?: number;
       wsUrl?: string;
       restUrl?: string;
       /** set when the token could not be minted (UI falls back to mock/typed input) */
       error?: string;
+      /** why this is the on-device engine although Wispr was wanted (Wispr unreachable); the UI says so */
+      note?: string;
     }
+  /** the client config changed (local-only toggled): every device follows, the speech engine included */
+  | { type: "config.update"; config: ClientConfig }
   | {
       type: "wispr.context";
       dictionary: string[];

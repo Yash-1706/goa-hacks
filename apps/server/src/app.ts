@@ -36,6 +36,8 @@ import { Consolidator } from "./consolidate/engine";
 import { AutonomyPolicy } from "./proactive/autonomy";
 import { ProactiveEngine } from "./proactive/engine";
 import { RecallEngine } from "./recall/engine";
+import { LocalStt, LocalSttAuth, type SttBackend } from "./wispr/local-stt";
+import { registerLocalStt } from "./wispr/local-ws";
 import { WisprService } from "./wispr/service";
 
 export interface AppOptions {
@@ -55,6 +57,8 @@ export interface AppOptions {
    * bucket and walk into the server's 429.
    */
   groq?: GroqClient;
+  /** replace the on-device speech model (tests) */
+  sttBackend?: SttBackend;
 }
 
 /** Everything wired together. Services are created in dependency order; the hub is late-bound. */
@@ -87,6 +91,8 @@ export interface AppCtx {
   live: ClaudeCortex | GroqCortex | null;
   /** the shared Groq client (pacing, counters) when LLM_PROVIDER resolves to groq */
   groq: GroqClient | null;
+  /** the on-device speech engine (null when no setup can use one: WISPR_MODE=mock or proxy) */
+  localStt: LocalStt | null;
   asides: { count: number };
   fastify: FastifyInstance;
   clientConfig: () => ClientConfig;
@@ -178,7 +184,16 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   const backend = opts.backend ?? new RoutingBackend(() => (privacy.localOnly || !liveBackend ? mock : liveBackend));
   const deep = new DeepLlm(cfg, { isLocalOnly: () => privacy.localOnly, pseudonymNames, onCloudCall, groq: groq ?? undefined });
 
-  const wispr = new WisprService({ cfg, store, clock, anyListening: () => hub.anyListening() });
+  // on-device speech: nothing is loaded until it is used (or STT_PRELOAD), and its endpoints refuse audio unless it is in use
+  const localStt =
+    cfg.wispr.mode === "local" || cfg.wispr.mode === "client"
+      ? new LocalStt({ model: cfg.stt.model, dtype: cfg.stt.dtype, cacheDir: cfg.stt.cacheDir, languages: cfg.wispr.languages, ...(opts.sttBackend ? { loader: async () => opts.sttBackend as SttBackend } : {}) })
+      : null;
+  const sttAuth = new LocalSttAuth();
+  const wispr = new WisprService({
+    cfg, store, clock, anyListening: () => hub.anyListening(),
+    ...(localStt ? { local: { stt: localStt, auth: sttAuth, isLocalOnly: () => privacy.localOnly } } : {}),
+  });
   const recall = new RecallEngine({ cfg, clock, store, embedder, deep, emit, bus, audit });
 
   // recall answers run on their own after the thought that asked for them; remember them so a run can wait for the last one
@@ -199,7 +214,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   const consolidator = new Consolidator({ cfg, clock, store, embedder, deep, emit, audit, isPaused: () => privacy.isPaused() });
 
   const clientConfig = (): ClientConfig => ({
-    wisprMode: cfg.wispr.mode,
+    wisprMode: wispr.mode,
     languages: cfg.wispr.languages,
     llmMode: privacy.localOnly ? "mock" : cfg.llm.mode,
     ...(!privacy.localOnly && cfg.llm.provider !== "mock" ? { llmProvider: cfg.llm.provider, llmModel: cfg.llm.fast } : {}),
@@ -227,10 +242,11 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   const fastify = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024 });
   await fastify.register(cors, { origin: (origin, cb) => cb(null, isAllowedOrigin(origin ?? undefined)) });
   await hub.register(fastify);
+  if (localStt) registerLocalStt(fastify, { stt: localStt, auth: sttAuth, allowed: () => wispr.localAllowed(), now: () => clock.now() });
 
   const ctx: AppCtx = {
     cfg, clock, bus, db, vault, store, embedder, triager, intents, metrics, battery, audit, trust, privacy, outbox, autonomy, engine,
-    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, asides, fastify, clientConfig,
+    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, localStt, asides, fastify, clientConfig,
     idleRecall: async () => void (await Promise.allSettled([...pendingRecall])),
   };
   registerRoutes(fastify, ctx);
@@ -247,13 +263,14 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
         setInterval(() => metrics.flush(), 5_000),
       );
       wispr.startWarmLoop();
+      if (cfg.stt.preload) void localStt?.warm();
       if (live) {
         void backendWarm();
         timers.push(setInterval(() => void backendWarm(), 40 * 60_000));
       }
     }
     timers.forEach((t) => t.unref?.());
-    banner(cfg, trust.pairingCode, embedder, vault.kekSource, wispr.mode, live ? (cfg.llm.provider === "groq" ? `groq ${cfg.llm.fast}` : cfg.llm.fast) : "mock cortex (no LLM)", clientConfig().integrations);
+    banner(cfg, trust.pairingCode, embedder, vault.kekSource, wispr.mode === "local" ? `local (on-device ${cfg.stt.model})` : wispr.mode, live ? (cfg.llm.provider === "groq" ? `groq ${cfg.llm.fast}` : cfg.llm.fast) : "mock cortex (no LLM)", clientConfig().integrations);
   }
 
   async function backendWarm(): Promise<void> {
@@ -295,7 +312,7 @@ function banner(cfg: Config, code: string, embedder: Embedder, kek: string, wisp
     `  │ server        http://localhost:${cfg.port}   (api + ws)`,
     `  │ web           http://localhost:${cfg.webPort}${lan ? `   ·  phone: https://${lan}:${cfg.webPort}  (HTTPS=1 pnpm dev:web)` : ""}`,
     `  │ pairing code  ${code}   (only needed for non-local devices)`,
-    `  │ wispr         ${wisprMode}${wisprMode === "mock" ? "  (typed input only; set WISPR_MODE=client + WISPR_API_KEY)" : ""}`,
+    `  │ wispr         ${wisprMode}${wisprMode === "mock" ? "  (typed input only; WISPR_MODE=client + WISPR_API_KEY for Wispr, or WISPR_MODE=local for on-device speech)" : ""}`,
     `  │ cortex        ${llm}`,
     `  │ embeddings    ${embedder.mode === "model" ? embedder.name : "hash fallback (offline, lexical)"}`,
     `  │ encryption    AES-256-GCM · master key: ${kek}`,

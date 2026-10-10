@@ -20,6 +20,7 @@ import {
 import type { DeviceInfo } from "@synapse/shared";
 import { formatMs, latencyTone } from "@/lib/format";
 import { llmLabel } from "@/lib/llm-provider";
+import { isOnDevice, speechLabel } from "@/lib/speech-engine";
 import { useAudioUi } from "@/state/audio";
 import { useConnection } from "@/state/connection";
 import { useDevices } from "@/state/devices";
@@ -41,7 +42,7 @@ export const ConnectionChip = memo(function ConnectionChip() {
   const llm = llmLabel(cfg);
   const llmLive = cfg?.llmMode === "live";
   const title = cfg
-    ? `Server link ${live ? "up" : "down"}${rtt !== null && live ? ` · ${Math.round(rtt)} ms round trip` : ""}\nTranscription: ${cfg.wisprMode}\nCortex: ${cfg.llmMode}${llmLive ? ` (${llm.full})` : ""}${cfg.localOnly ? "\nLocal-only mode is ON" : ""}`
+    ? `Server link ${live ? "up" : "down"}${rtt !== null && live ? ` · ${Math.round(rtt)} ms round trip` : ""}\nTranscription: ${speechLabel(cfg.wisprMode).long}\nCortex: ${cfg.llmMode}${llmLive ? ` (${llm.full})` : ""}${cfg.localOnly ? "\nLocal-only mode is ON" : ""}`
     : "Not connected yet";
   const mocked = cfg ? [cfg.wisprMode === "mock" ? "Wispr" : "", cfg.llmMode === "mock" ? llm.provider : ""].filter(Boolean).join(" / ") : "";
 
@@ -139,7 +140,7 @@ export const PrivacyShield = memo(function PrivacyShield() {
       sub = "no microphone";
     } else {
       main = "Listening";
-      sub = "audio never stored";
+      sub = isOnDevice(wispr) ? "on-device · audio never stored" : "audio never stored";
     }
   }
   return (
