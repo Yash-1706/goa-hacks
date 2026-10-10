@@ -219,7 +219,7 @@ export const ThoughtCard = memo(function ThoughtCard({ id, compact = false }: Th
             <Badges t={t} />
           </div>
         </div>
-        <ConfidenceRing value={t.confidence} thinking={analyzing && t.provisional} />
+        <ConfidenceRing value={t.confidence} size={30} thinking={analyzing && t.provisional} />
       </header>
 
       {t.intent && a && a.kind !== "none" && a.kind !== "recall" ? (
@@ -309,29 +309,29 @@ export const ThoughtCard = memo(function ThoughtCard({ id, compact = false }: Th
                 </span>
               ) : null}
               {editable ? (
-                <button type="button" className="btn btn-sm btn-ghost" disabled={analyzing} onClick={() => setEditing((v) => !v)} aria-expanded={editing} title="Edit the draft">
-                  <Pencil size={13} /> Edit
+                <button type="button" className="btn btn-sm btn-ghost btn-icon-sm" disabled={analyzing} onClick={() => setEditing((v) => !v)} aria-expanded={editing} title="Edit the draft">
+                  <Pencil size={14} /> <span className="tcard__lbl">Edit</span>
                 </button>
               ) : null}
               {real && real.status === "executed" ? (
-                <button type="button" className="btn btn-sm btn-ghost" disabled={busy !== null} onClick={() => send("undo")} title="Undo (closes the issue / removes the hold)">
-                  <Undo2 size={13} /> Undo
+                <button type="button" className="btn btn-sm btn-ghost btn-icon-sm" disabled={busy !== null} onClick={() => send("undo")} title="Undo (closes the issue / removes the hold)">
+                  <Undo2 size={14} /> <span className="tcard__lbl">Undo</span>
                 </button>
               ) : null}
               {real && real.status !== "dismissed" && real.status !== "executed" ? (
-                <button type="button" className="btn btn-sm btn-ghost" disabled={busy !== null} onClick={() => send("dismiss")} title="Dismiss this draft (the thought stays in memory until it expires)">
-                  <CircleSlash size={13} /> Dismiss
+                <button type="button" className="btn btn-sm btn-ghost btn-icon-sm" disabled={busy !== null} onClick={() => send("dismiss")} title="Dismiss this draft (the thought stays in memory until it expires)">
+                  <CircleSlash size={14} /> <span className="tcard__lbl">Dismiss</span>
                 </button>
               ) : null}
               <button
                 type="button"
-                className="btn btn-sm btn-ghost"
+                className="btn btn-sm btn-ghost btn-icon-sm"
                 disabled={busy !== null}
                 aria-pressed={t.promoted}
                 onClick={() => (t.promoted ? undefined : send("promote"))}
                 title={t.promoted ? "Pinned in long-term memory" : "Pin: keep this in long-term memory (skips the 72 h expiry)"}
               >
-                {t.promoted ? <PinOff size={13} /> : <Pin size={13} />} {t.promoted ? "Pinned" : "Pin"}
+                {t.promoted ? <PinOff size={14} /> : <Pin size={14} />} <span className="tcard__lbl">{t.promoted ? "Pinned" : "Pin"}</span>
               </button>
               {confirmForget ? (
                 <span className="confirm" role="group" aria-label="Confirm forget">
@@ -343,8 +343,8 @@ export const ThoughtCard = memo(function ThoughtCard({ id, compact = false }: Th
                   </button>
                 </span>
               ) : (
-                <button type="button" className="btn btn-sm btn-ghost" onClick={() => setConfirmForget(true)} title="Forget: delete this thought and everything derived from it">
-                  <Trash2 size={13} /> Forget
+                <button type="button" className="btn btn-sm btn-ghost btn-icon-sm" onClick={() => setConfirmForget(true)} title="Forget: delete this thought and everything derived from it">
+                  <Trash2 size={14} /> <span className="tcard__lbl">Forget</span>
                 </button>
               )}
               <button type="button" className="btn btn-sm btn-ghost trailbtn" aria-expanded={trail} onClick={() => setTrail((v) => !v)} title="The reasoning trail: what was heard, resolved, rejected, and why it is kept">

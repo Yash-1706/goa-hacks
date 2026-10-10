@@ -4,32 +4,19 @@
 
 .tcard {
   --cat: var(--violet);
+  --surface: #141416;
+  --inset: #0e0e10;
   position: relative;
-  padding: 0.95rem 1.1rem 0.8rem 1.3rem;
-  border-radius: 20px;
-  border: 1px solid color-mix(in srgb, var(--cat) 24%, var(--line));
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.025));
-  box-shadow: var(--shadow), 0 0 0 1px rgba(0, 0, 0, 0.22);
+  padding: 1rem 1.1rem 0.75rem;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 12px 28px -22px rgba(0, 0, 0, 0.9);
   overflow: hidden;
-  transition: border-color 0.5s var(--ease), box-shadow 0.5s var(--ease), background 0.5s;
+  transition: border-color 0.25s var(--ease), background 0.25s var(--ease);
 }
-.tcard::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--cat);
-  box-shadow: none;
-  opacity: 0.95;
-}
-.tcard::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(62% 46% at 0% 0%, color-mix(in srgb, var(--cat) 6%, transparent), transparent 70%);
+.tcard:hover {
+  border-color: var(--line-2);
 }
 .tcard > * {
   position: relative;
@@ -41,15 +28,14 @@
 }
 .tcard[data-provisional="true"] {
   border-style: dashed;
-  border-color: color-mix(in srgb, var(--cat) 40%, var(--line));
+  border-color: var(--line-2);
 }
 .tcard[data-analyzing="true"] {
-  border-color: color-mix(in srgb, var(--cat) 45%, var(--line));
-  box-shadow: var(--shadow), 0 0 40px -14px var(--cat);
+  border-color: color-mix(in srgb, var(--cat) 35%, var(--line));
 }
 .tcard[data-fading="true"] .tcard__title {
   text-decoration: line-through;
-  text-decoration-thickness: 2px;
+  text-decoration-thickness: 1.5px;
   text-decoration-color: var(--danger);
   opacity: 0.6;
 }
@@ -57,64 +43,66 @@
 .tcard[data-fading="true"] .tcard__notes,
 .tcard[data-fading="true"] .tcard__foot {
   opacity: 0.25;
-  filter: blur(1.5px);
-  transition: all 0.5s;
+  transition: opacity 0.5s;
 }
+/* indeterminate progress line while the model is working */
 .tcard__scan {
   top: 0;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 1px;
   opacity: 0;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, var(--cat), #fff, var(--cat), transparent);
-  background-size: 45% 100%;
+  background: linear-gradient(90deg, transparent, var(--cat), transparent);
+  background-size: 40% 100%;
   background-repeat: no-repeat;
   transition: opacity 0.3s;
 }
 .tcard[data-analyzing="true"] .tcard__scan {
   opacity: 1;
-  animation: card-scan 1.5s linear infinite;
+  animation: card-scan 1.4s linear infinite;
 }
 @keyframes card-scan {
   from {
-    background-position: -60% 0;
+    background-position: -50% 0;
   }
   to {
-    background-position: 160% 0;
+    background-position: 150% 0;
   }
 }
 .tcard.flash {
-  animation: card-flash 1.5s var(--ease);
+  animation: card-flash 1.4s var(--ease);
 }
 @keyframes card-flash {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--cat) 80%, transparent), var(--shadow);
-  }
-  30% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--cat) 45%, transparent), 0 0 60px -6px var(--cat);
+  0%,
+  35% {
+    border-color: var(--cat);
   }
   100% {
-    box-shadow: 0 0 0 0 transparent, var(--shadow);
+    border-color: var(--line);
   }
 }
 
 .tcard__head {
   display: flex;
   align-items: flex-start;
-  gap: 0.8rem;
+  gap: 0.75rem;
 }
 .tcard__badge {
   flex: none;
   display: grid;
   place-items: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 13px;
+  width: 2rem;
+  height: 2rem;
+  margin-top: 0.05rem;
+  border-radius: 9px;
   color: var(--cat);
-  background: color-mix(in srgb, var(--cat) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--cat) 38%, transparent);
-  box-shadow: none;
+  background: color-mix(in srgb, var(--cat) 10%, var(--inset));
+  border: 1px solid color-mix(in srgb, var(--cat) 18%, var(--line));
+}
+.tcard__badge svg {
+  width: 16px;
+  height: 16px;
 }
 .tcard__titles {
   flex: 1;
@@ -122,32 +110,44 @@
 }
 .tcard__title {
   margin: 0;
-  font-size: 1.12rem;
-  font-weight: 680;
-  letter-spacing: -0.016em;
-  line-height: 1.25;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.3;
+  color: var(--ink);
   overflow-wrap: anywhere;
 }
 .tcard__meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.32rem;
+  gap: 0.35rem 0.45rem;
+  margin-top: 0.3rem;
   font-size: 0.72rem;
   color: var(--faint);
 }
+.tcard__meta .chip {
+  padding: 0.02rem 0.45rem;
+  font-size: 0.66rem;
+}
 .tcard__code {
-  padding: 0.04rem 0.38rem;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--cat) 15%, transparent);
-  color: color-mix(in srgb, var(--cat) 72%, white);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--dim);
   font-size: 0.68rem;
+}
+.tcard__code::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cat);
 }
 .tcard__sep::before {
   content: "·";
-  margin-right: 0.4rem;
-  opacity: 0.6;
+  margin-right: 0.45rem;
+  opacity: 0.5;
 }
 .chip-dashed {
   border-style: dashed;
@@ -155,28 +155,24 @@
 .lat {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.08rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  border: 1px solid transparent;
+  gap: 0.2rem;
+  padding: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-family: var(--mono, ui-monospace, monospace);
   cursor: help;
 }
+.lat svg {
+  opacity: 0.8;
+}
 .lat--good {
-  color: #86efc5;
-  background: rgba(52, 211, 153, 0.12);
-  border-color: rgba(52, 211, 153, 0.35);
+  color: #6ee7a8;
 }
 .lat--ok {
   color: #fcd34d;
-  background: rgba(251, 191, 36, 0.11);
-  border-color: rgba(251, 191, 36, 0.35);
 }
 .lat--bad {
-  color: #fda4b4;
-  background: rgba(251, 113, 133, 0.12);
-  border-color: rgba(251, 113, 133, 0.38);
+  color: #fca5a5;
 }
 .lat__k {
   font-weight: 500;
@@ -184,9 +180,9 @@
 }
 
 .tcard__intent {
-  margin: 0.6rem 0 0;
-  font-size: 0.86rem;
-  line-height: 1.45;
+  margin: 0.65rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
   color: var(--dim);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -194,7 +190,7 @@
   overflow: hidden;
 }
 .tcard__body {
-  margin-top: 0.7rem;
+  margin-top: 0.75rem;
 }
 .tcard__body:empty {
   display: none;
@@ -313,9 +309,9 @@
   gap: 0.45rem;
   padding: 0.35rem 0.6rem;
   border-radius: 10px;
-  background: rgba(244, 179, 147, 0.07);
-  border: 1px solid rgba(244, 179, 147, 0.22);
-  color: #a5f3fc;
+  background: var(--inset, #0e0e10);
+  border: 1px solid var(--line);
+  color: var(--ink);
   font-size: 0.84rem;
 }
 .openq svg {
@@ -330,8 +326,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 0.8rem;
-  margin-top: 0.8rem;
-  padding-top: 0.65rem;
+  margin: 0.85rem -1.1rem 0;
+  padding: 0.6rem 1.1rem 0;
   border-top: 1px solid var(--line);
 }
 .tcard__ret {
@@ -384,7 +380,7 @@
   padding: 0.6rem 0.75rem;
   border-radius: 12px;
   border: 1px solid var(--line-2);
-  background: rgba(16, 19, 27, 0.97);
+  background: #18181b;
   box-shadow: var(--shadow);
   color: var(--dim);
   font-size: 0.76rem;
@@ -425,7 +421,34 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.3rem;
+  gap: 0.15rem;
+}
+/* secondary actions are icon-only; the label stays for screen readers, the title is the tooltip */
+.tcard__actions .btn-icon-sm {
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  justify-content: center;
+  color: var(--faint);
+}
+.tcard__actions .btn-icon-sm:hover:not(:disabled) {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.05);
+}
+.tcard__actions .btn-icon-sm[aria-pressed="true"] {
+  color: var(--violet);
+}
+.tcard__lbl {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.tcard__actions .trailbtn {
+  margin-left: 0.25rem;
+  color: var(--dim);
 }
 .kept {
   display: inline-flex;
@@ -447,8 +470,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(11, 13, 18, 0.72);
-  backdrop-filter: blur(2px);
+  background: rgba(12, 12, 13, 0.8);
 }
 .tcard__tombtxt {
   padding: 0.4rem 0.9rem;
@@ -510,8 +532,9 @@
 .ab__answer {
   padding: 0.55rem 0.75rem;
   border-radius: 12px;
-  background: rgba(255, 106, 61, 0.09);
-  border: 1px solid rgba(255, 106, 61, 0.28);
+  background: var(--inset, #0e0e10);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--violet);
 }
 .ab__checks,
 .ab__bullets {
@@ -548,9 +571,9 @@
 /* github issue */
 .ab__issue {
   padding: 0.65rem 0.8rem 0.8rem;
-  border-radius: 14px;
-  border: 1px solid var(--line-2);
-  background: rgba(8, 10, 16, 0.55);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--inset, #0e0e10);
 }
 .ab__issuehead {
   display: flex;
@@ -586,9 +609,9 @@
 
 /* email */
 .ab__mail {
-  border-radius: 14px;
-  border: 1px solid var(--line-2);
-  background: rgba(8, 10, 16, 0.55);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--inset, #0e0e10);
   overflow: hidden;
 }
 .ab__mailhead {
@@ -646,9 +669,9 @@
   align-items: center;
   gap: 0.85rem;
   padding: 0.65rem 0.8rem;
-  border-radius: 14px;
-  border: 1px solid var(--line-2);
-  background: rgba(8, 10, 16, 0.55);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--inset, #0e0e10);
 }
 .ab__calicon {
   flex: none;
@@ -658,7 +681,7 @@
   width: 3.2rem;
   height: 3.2rem;
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(251, 191, 36, 0.22), rgba(251, 191, 36, 0.08));
+  background: rgba(251, 191, 36, 0.1);
   border: 1px solid rgba(251, 191, 36, 0.4);
   color: #fcd34d;
   line-height: 1;
@@ -699,7 +722,7 @@
 .ab__comment {
   padding: 0.6rem 0.8rem;
   border-radius: 12px;
-  background: rgba(5, 7, 12, 0.7);
+  background: var(--inset, #0e0e10);
   border: 1px solid var(--line-2);
   color: #86efc5;
   font-size: 0.84rem;
@@ -780,9 +803,9 @@
 
 /* ---- code ---------------------------------------------------------------- */
 .codeblock {
-  border-radius: 14px;
-  border: 1px solid var(--line-2);
-  background: rgba(5, 7, 12, 0.72);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--inset, #0e0e10);
   overflow: hidden;
 }
 .codeblock__bar {
@@ -1036,7 +1059,7 @@
   margin-top: 0.75rem;
   padding: 0.8rem;
   border-radius: 14px;
-  background: rgba(8, 10, 16, 0.55);
+  background: var(--inset, #0e0e10);
   border: 1px solid var(--line-2);
 }
 .edit__field {
@@ -1065,15 +1088,17 @@
 
 @media (max-width: 760px) {
   .tcard {
-    padding: 0.85rem 0.85rem 0.7rem 1.05rem;
-    border-radius: 18px;
+    padding: 0.85rem 0.9rem 0.65rem;
+    border-radius: 12px;
   }
-  .tcard__badge {
-    width: 2.1rem;
-    height: 2.1rem;
+  .tcard__foot {
+    margin-left: -0.9rem;
+    margin-right: -0.9rem;
+    padding-left: 0.9rem;
+    padding-right: 0.9rem;
   }
   .tcard__title {
-    font-size: 1.02rem;
+    font-size: 0.97rem;
   }
   .trail__sec {
     grid-template-columns: minmax(0, 1fr);

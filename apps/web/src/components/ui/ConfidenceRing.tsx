@@ -34,7 +34,7 @@ export const ConfidenceRing = memo(function ConfidenceRing({ value, size = 36, t
           strokeDasharray={C}
           strokeDashoffset={C * (1 - v)}
           transform="rotate(-90 17 17)"
-          style={{ transition: "stroke-dashoffset 0.7s cubic-bezier(0.22,1,0.36,1), stroke 0.4s", filter: `drop-shadow(0 0 3px ${color}88)` }}
+          style={{ transition: "stroke-dashoffset 0.7s cubic-bezier(0.22,1,0.36,1), stroke 0.4s" }}
         />
       )}
       {thinking ? null : (
