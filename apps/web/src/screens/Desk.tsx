@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Layers, Sparkles, Waves } from "lucide-react";
+import { AboutStrip } from "@/components/AboutStrip";
 import { CardsColumn } from "@/components/CardsColumn";
 import { FragmentStream } from "@/components/FragmentStream";
 import { KeyboardInput } from "@/components/KeyboardInput";
@@ -66,6 +67,7 @@ export default function Desk() {
       <div className="desk desk--tabs">
         <h1 className="sr-only">Synapse Desk</h1>
         <PausedBanner />
+        <AboutStrip />
         <div className="seg" role="tablist" aria-label="Desk panes">
           {tabs.map((t) => (
             <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className="seg__btn" onClick={() => setTab(t.id)}>
