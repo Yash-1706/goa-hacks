@@ -167,7 +167,7 @@
   align-items: center;
   gap: 0.95rem;
   padding: 0.6rem 0.9rem 0.6rem 0.7rem;
-  border-radius: 20px;
+  border-radius: var(--radius);
 }
 .gx-play {
   flex: none;
@@ -388,7 +388,7 @@
   flex-direction: column;
   width: 18rem;
   max-height: calc(100% - 4.2rem - 6.4rem);
-  border-radius: 18px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 .gx-legend[data-open="false"] {
@@ -694,7 +694,7 @@
   width: var(--gx-panel-w);
   display: flex;
   flex-direction: column;
-  border-radius: 22px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 .gx-panel[data-pinned="false"] {
@@ -959,7 +959,7 @@
 }
 .gx-artifact {
   padding: 0.85rem 0.95rem;
-  border-radius: 16px;
+  border-radius: var(--radius);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -968,7 +968,7 @@
   display: grid;
   gap: 0.6rem;
   padding: 0.9rem 1rem;
-  border-radius: 18px;
+  border-radius: var(--radius);
   border: 1px solid color-mix(in srgb, var(--c) 30%, var(--line));
   background: rgba(255, 255, 255, 0.04);
 }
@@ -1145,7 +1145,7 @@
     max-width: 100%;
     padding: 0.38rem 0.75rem 0.38rem 0.65rem;
     font-size: 0.74rem;
-    border-radius: 16px;
+    border-radius: var(--radius);
   }
   .gx-stats__link {
     padding-left: 0;
@@ -1158,7 +1158,7 @@
     bottom: 0.5rem;
     gap: 0.55rem;
     padding: 0.5rem 0.6rem 0.5rem 0.5rem;
-    border-radius: 18px;
+    border-radius: var(--radius);
   }
   .gx-play {
     width: 2.4rem;

@@ -9,7 +9,7 @@
   align-items: center;
   gap: 0.7rem;
   padding: 0.5rem 0.55rem 0.5rem 1.05rem;
-  border-radius: 22px;
+  border-radius: var(--radius);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .rc-ask:focus-within {
@@ -123,7 +123,7 @@
 }
 .rc-answer {
   padding: 0.95rem 1.15rem;
-  border-radius: 18px;
+  border-radius: var(--radius);
   border: 1px solid rgba(255, 106, 61, 0.32);
   background: linear-gradient(180deg, rgba(255, 106, 61, 0.11), rgba(255, 106, 61, 0.03));
   font-size: 1.02rem;
@@ -210,9 +210,9 @@
   --cat: var(--violet);
   position: relative;
   padding: 0.8rem 0.95rem 0.95rem 1.1rem;
-  border-radius: 16px;
+  border-radius: var(--radius);
   border: 1px solid color-mix(in srgb, var(--cat) 28%, var(--line));
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  background: var(--surface);
   overflow: hidden;
   transition: box-shadow 0.4s, border-color 0.4s;
 }
@@ -337,6 +337,6 @@
     font-size: 1.1rem;
   }
   .rc-ask {
-    border-radius: 18px;
+    border-radius: var(--radius);
   }
 }

@@ -36,7 +36,10 @@
   --grad: linear-gradient(0deg, #ff6a3d, #ff6a3d);
   --grad-soft: linear-gradient(0deg, rgba(255, 106, 61, 0.09), rgba(255, 106, 61, 0.09));
   --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 10px 30px -18px rgba(0, 0, 0, 0.8);
-  --radius: 12px;
+  --radius: 14px;
+  --surface: #141416;
+  --surface-2: #18181b;
+  --inset: #0e0e10;
   --nav-w: 72px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
@@ -187,7 +190,7 @@ a {
   box-shadow: var(--shadow);
 }
 .glass-strong {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
+  background: var(--surface);
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -555,7 +558,7 @@ a.chip:hover {
   padding: 0.7rem 0.85rem;
   border-radius: 14px;
   border: 1px solid var(--line-2);
-  background: rgba(16, 19, 27, 0.96);
+  background: #18181b;
   box-shadow: var(--shadow);
   font-size: 0.78rem;
   color: var(--dim);

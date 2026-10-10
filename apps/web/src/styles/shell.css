@@ -34,7 +34,7 @@
   gap: 0.25rem;
   padding: 0.9rem 0.45rem;
   border-right: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01));
+  background: var(--surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -373,9 +373,9 @@ html.lg .hide-md {
   align-items: flex-start;
   gap: 0.7rem;
   padding: 0.75rem 0.9rem 0.75rem 1rem;
-  border-radius: 16px;
+  border-radius: var(--radius);
   border: 1px solid color-mix(in srgb, var(--t) 38%, transparent);
-  background: linear-gradient(180deg, rgba(24, 28, 40, 0.97), rgba(15, 18, 27, 0.97));
+  background: linear-gradient(180deg, rgba(24, 28, 40, 0.97), #18181b);
   box-shadow: 0 18px 50px -14px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(0, 0, 0, 0.3);
   font-size: 0.84rem;
   line-height: 1.35;
@@ -454,7 +454,7 @@ html.lg .hide-md {
   width: min(26rem, 100%);
   padding: 2rem 1.6rem 1.6rem;
   text-align: center;
-  background: linear-gradient(180deg, rgba(26, 29, 42, 0.96), rgba(15, 17, 26, 0.97));
+  background: linear-gradient(180deg, rgba(26, 29, 42, 0.96), #18181b);
 }
 .pair__code {
   display: flex;
