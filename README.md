@@ -10,18 +10,19 @@ Think out loud: mumble, backtrack, whisper. Synapse stitches the fragments into 
 | Technical spec | [docs/TRD.md](docs/TRD.md) · as-built architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Deliverables | [Architecture diagram](docs/ARCHITECTURE.md) · [Latency benchmark](docs/LATENCY.md) · [Privacy whitepaper](docs/PRIVACY_WHITEPAPER.md) · [Failure modes](docs/FAILURE_MODES.md) · [Eval](docs/EVAL.md) · [Demo script](docs/DEMO_SCRIPT.md) · [Pitch](docs/PITCH.md) |
 
-## Quickstart (works with no keys)
+## Quickstart (no keys, no accounts)
+
+Needs Node 22.12 or newer and pnpm 10. Use Chrome or Edge for the microphone.
 
 ```bash
 pnpm install
+cp .env.example .env     # PowerShell: Copy-Item .env.example .env
 pnpm dev                 # API + WebSocket on :8787, web UI on http://localhost:5173
 ```
 
-With no keys Synapse runs in **mock mode**: type into the collapsed keyboard field (or play a scripted ramble) and the whole pipeline runs with a local classifier and heuristic cortex. Add keys to go live:
+Open **http://localhost:5173**, tap the orb and think out loud. The shipped `.env.example` sets `WISPR_MODE=local`: your speech is transcribed by Whisper **on your own machine** (no key, no account, nothing leaves it). The first start downloads two small models (about 65 MB) into `data/models`; after that it works offline. Try: *"That bug from yesterday... the one with the null pointer... in the cart service... probably the discount code."* and watch the fragments become one GitHub-issue card. No microphone? Press **K** on the Desk and type, or run `pnpm replay scripts/replay/s1_bug.json`. With **no `.env` at all** the app starts in **mock mode** (typed input and a deterministic local cortex), so it always runs.
 
-```bash
-cp .env.example .env     # then edit (never commit it)
-```
+Add keys to go further (edit `.env`, never commit it):
 
 | Variable | Needed for |
 |---|---|
