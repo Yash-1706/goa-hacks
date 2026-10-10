@@ -9,8 +9,8 @@
   --color-ink: #e8eaf0;
   --color-dim: #a4adbd;
   --color-faint: #8590a3;
-  --color-violet: #8b5cf6;
-  --color-cyan: #22d3ee;
+  --color-violet: #0ea5a4;
+  --color-cyan: #f59e0b;
   --color-ok: #34d399;
   --color-warn: #fbbf24;
   --color-danger: #fb7185;
@@ -28,13 +28,13 @@
   --ink: #e8eaf0;
   --dim: #a4adbd;
   --faint: #8590a3;
-  --violet: #8b5cf6;
-  --cyan: #22d3ee;
+  --violet: #0ea5a4;
+  --cyan: #f59e0b;
   --ok: #34d399;
   --warn: #fbbf24;
   --danger: #fb7185;
-  --grad: linear-gradient(135deg, #8b5cf6 0%, #22d3ee 100%);
-  --grad-soft: linear-gradient(135deg, rgba(139, 92, 246, 0.22) 0%, rgba(34, 211, 238, 0.16) 100%);
+  --grad: linear-gradient(135deg, #0ea5a4 0%, #f59e0b 100%);
+  --grad-soft: linear-gradient(135deg, rgba(14, 165, 164, 0.22) 0%, rgba(245, 158, 11, 0.16) 100%);
   --shadow: 0 14px 44px -16px rgba(0, 0, 0, 0.7), 0 2px 10px rgba(0, 0, 0, 0.35);
   --radius: 18px;
   --nav-w: 72px;
@@ -50,7 +50,7 @@
   --c-code: #34d399;
   --c-decision: #e879f9;
   --c-idea: #facc15;
-  --c-question: #22d3ee;
+  --c-question: #f59e0b;
   --c-journal: #94a3b8;
   --c-recall_query: #818cf8;
   --c-aside: #6b7280;
