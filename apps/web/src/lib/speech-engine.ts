@@ -13,7 +13,8 @@ export interface SpeechLabel {
   audio: string;
 }
 
-export function speechLabel(mode: string | undefined): SpeechLabel {
+export function speechLabel(mode: string | undefined, provider?: string): SpeechLabel {
+  if (mode === "local" && provider === "sarvam") return { short: "Sarvam", long: "Sarvam AI speech-to-text (cloud)", audio: "to this laptop's server, which sends it to Sarvam AI for transcription" };
   switch (mode) {
     case "client":
       return { short: "Wispr", long: "Wispr Flow (cloud)", audio: "from your browser straight to Wispr Flow" };
@@ -27,4 +28,4 @@ export function speechLabel(mode: string | undefined): SpeechLabel {
 }
 
 /** true when the audio never leaves the machine that runs the server */
-export const isOnDevice = (mode: string | undefined): boolean => mode === "local";
+export const isOnDevice = (mode: string | undefined, provider?: string): boolean => mode === "local" && provider !== "sarvam";

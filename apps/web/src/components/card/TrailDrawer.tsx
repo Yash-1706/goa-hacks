@@ -10,6 +10,7 @@ const TRANSPORT: Record<FragmentTransport, string> = {
   wispr_rest: "Wispr REST",
   wispr_proxy: "Wispr (proxy)",
   local_stt: "local STT",
+  cloud_stt: "Sarvam (cloud STT)",
   mock: "typed / mock",
   replay: "replay",
 };

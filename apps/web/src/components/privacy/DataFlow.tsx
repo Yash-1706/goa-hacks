@@ -37,7 +37,7 @@ function Link({ kind, label }: { kind: "audio" | "text" | "redacted"; label: str
 export const DataFlow = memo(function DataFlow() {
   const cfg = useSettings((s) => s.config);
   const llmName = llmLabel(cfg);
-  const nodes = nodesFor(llmName, isOnDevice(cfg?.wisprMode));
+  const nodes = nodesFor(llmName, isOnDevice(cfg?.wisprMode, cfg?.sttProvider));
   const byId = useThoughts((s) => s.byId);
   const redactions = useMemo(() => Object.values(byId).reduce((n, t) => n + (t.redactions ?? 0), 0), [byId]);
   const thoughtsWithCloud = useMemo(() => Object.values(byId).filter((t) => t.source === "llm").length, [byId]);
@@ -69,7 +69,11 @@ export const DataFlow = memo(function DataFlow() {
       <div className="pv-flow__cols">
         <div className="pv-flow__col">
           <div className="eyebrow">Audio</div>
-          {wispr === "local" ? (
+          {wispr === "local" && cfg?.sttProvider === "sarvam" ? (
+            <p>
+              <b>To Sarvam AI</b> (cloud speech-to-text), relayed by this laptop&apos;s server while the detector hears speech. Held in memory only and never written to a disk; each call is listed in the audit ledger (length only). Local-only mode switches to on-device Whisper.
+            </p>
+          ) : wispr === "local" ? (
             <p>
               <b>Stays on this machine.</b> From your browser to this laptop&apos;s own server, only while the detector hears speech, held in memory for one utterance, transcribed by Whisper on the CPU and zero-filled afterwards. It reaches no third party and is never written to a disk.
             </p>
@@ -82,7 +86,9 @@ export const DataFlow = memo(function DataFlow() {
             <span>
               {wispr === "client"
                 ? "live: streaming to Wispr while you speak"
-                : wispr === "local"
+                : wispr === "local" && cfg?.sttProvider === "sarvam"
+                  ? "cloud: speech is transcribed by Sarvam AI"
+                  : wispr === "local"
                   ? localOnly
                     ? "local-only: speech is transcribed on this machine, nothing is sent out"
                     : "on-device: speech is transcribed on this machine"

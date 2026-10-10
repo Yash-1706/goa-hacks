@@ -42,7 +42,7 @@ export const ConnectionChip = memo(function ConnectionChip() {
   const llm = llmLabel(cfg);
   const llmLive = cfg?.llmMode === "live";
   const title = cfg
-    ? `Server link ${live ? "up" : "down"}${rtt !== null && live ? ` · ${Math.round(rtt)} ms round trip` : ""}\nTranscription: ${speechLabel(cfg.wisprMode).long}\nCortex: ${cfg.llmMode}${llmLive ? ` (${llm.full})` : ""}${cfg.localOnly ? "\nLocal-only mode is ON" : ""}`
+    ? `Server link ${live ? "up" : "down"}${rtt !== null && live ? ` · ${Math.round(rtt)} ms round trip` : ""}\nTranscription: ${speechLabel(cfg.wisprMode, cfg.sttProvider).long}\nCortex: ${cfg.llmMode}${llmLive ? ` (${llm.full})` : ""}${cfg.localOnly ? "\nLocal-only mode is ON" : ""}`
     : "Not connected yet";
   const mocked = cfg ? [cfg.wisprMode === "mock" ? "Wispr" : "", cfg.llmMode === "mock" ? llm.provider : ""].filter(Boolean).join(" / ") : "";
 
@@ -122,6 +122,7 @@ export const PrivacyShield = memo(function PrivacyShield() {
   const state = useAudioUi((s) => s.state);
   const engine = useAudioUi((s) => s.engine);
   const wispr = useSettings((s) => s.config?.wisprMode);
+  const sttProvider = useSettings((s) => s.config?.sttProvider);
 
   let cls = "tchip";
   let Icon = ShieldCheck;
@@ -140,7 +141,7 @@ export const PrivacyShield = memo(function PrivacyShield() {
       sub = "no microphone";
     } else {
       main = "Listening";
-      sub = isOnDevice(wispr) ? "on-device · audio never stored" : "audio never stored";
+      sub = isOnDevice(wispr, sttProvider) ? "on-device · audio never stored" : "audio never stored";
     }
   }
   return (
