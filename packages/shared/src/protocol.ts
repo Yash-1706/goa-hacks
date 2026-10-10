@@ -30,6 +30,8 @@ export const TransportSchema = z.enum([
   "wispr_rest",
   "wispr_proxy",
   "local_stt",
+  /** the on-server speech endpoint with a cloud engine (Sarvam) behind it: the audio left this machine */
+  "cloud_stt",
   "mock",
   "replay",
 ]);
@@ -191,6 +193,8 @@ export type ClientMessageType = ClientMessage["type"];
 export interface ClientConfig {
   /** the speech engine in effect right now: "local" is on-device Whisper on the server's machine (WISPR_MODE=local, or local-only mode with a Wispr setup) */
   wisprMode: "client" | "proxy" | "mock" | "local";
+  /** with wisprMode "local": the engine behind it right now ("sarvam" is a cloud service; local-only mode always means "whisper") */
+  sttProvider?: "whisper" | "sarvam";
   languages: string[];
   llmMode: "live" | "mock";
   /** which provider serves the live cortex and its hot-path model (absent while mock or local-only; the UI says "Claude" when absent) */
@@ -251,6 +255,8 @@ export type ServerMessage =
       error?: string;
       /** why this is the on-device engine although Wispr was wanted (Wispr unreachable); the UI says so */
       note?: string;
+      /** mode "local": which engine sits behind the endpoint: Whisper on this machine, or Sarvam's cloud API */
+      provider?: "whisper" | "sarvam";
     }
   /** the client config changed (local-only toggled): every device follows, the speech engine included */
   | { type: "config.update"; config: ClientConfig }

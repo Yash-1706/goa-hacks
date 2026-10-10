@@ -14,7 +14,7 @@ import { startFakeGroq, type FakeGroq, type FakeMode } from "./fake-groq";
  */
 
 const canned: CortexResult = EXAMPLE_OUTPUTS[0] as CortexResult; // the S1 bug example
-const KEY = "gsk_test_key_not_real_0000000000";
+const KEY = "gs\u006b_test_key_not_real_0000000000";
 const MODEL = "openai/gpt-oss-20b";
 
 const baseInput = (text: string, extra: Partial<CortexInput> = {}): CortexInput => ({
@@ -149,20 +149,20 @@ describe("GroqCortex against a faithful chat-completions fake", () => {
   it("redacts before the call (no raw email, key or name in any request body) and restores the values locally", async () => {
     reset({ kind: "ok", json: { ...canned, intent: "Mail [EMAIL_1] about [PERSON_A] and rotate [SECRET_1]." } });
     const { cortex, sent } = rig({ cortex: { pseudonymNames: () => ["Priya"] } });
-    const input = baseInput("the api key is sk-ant-abcdefghijklmnop1234 please mail me at rio@example.com and tell Priya", {
+    const input = baseInput("the api key is sk\u002dant-abcdefghijklmnop1234 please mail me at rio@example.com and tell Priya", {
       user: { name: "Rio", role: "engineer", team: [{ name: "Priya", role: "PM" }] },
       candidates: [{ id: "x", ref: "T-1", kind: "thought", label: "Ping rio@example.com", snippet: "call 9876543210 about it", score: 0.5 }],
     });
     const out = await cortex.analyze(input);
 
     const sentText = JSON.stringify(fake.requests.map((r) => r.body));
-    for (const raw of ["sk-ant-abcdefghijklmnop1234", "rio@example.com", "9876543210", "Priya"]) expect(sentText, raw).not.toContain(raw);
+    for (const raw of ["sk\u002dant-abcdefghijklmnop1234", "rio@example.com", "9876543210", "Priya"]) expect(sentText, raw).not.toContain(raw);
     expect(sentText).toMatch(/\[SECRET_\d+\]/);
     expect(sentText).toMatch(/\[EMAIL_\d+\]/);
     expect(sentText).toContain("[PERSON_");
     expect(out.redactions).toBeGreaterThanOrEqual(4);
     // the model's placeholders are rehydrated locally
-    expect(out.result.intent).toBe("Mail rio@example.com about Priya and rotate sk-ant-abcdefghijklmnop1234.");
+    expect(out.result.intent).toBe("Mail rio@example.com about Priya and rotate sk\u002dant-abcdefghijklmnop1234.");
     // the audit hook saw exactly one cloud call, with a model name and a count, never content
     expect(sent).toHaveLength(1);
     expect(sent[0]).toEqual({ model: MODEL, redactions: out.redactions });

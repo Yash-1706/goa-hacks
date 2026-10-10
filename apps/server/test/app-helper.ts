@@ -40,6 +40,8 @@ export async function makeApp(env: Record<string, string> = {}, start = "2026-10
     THREAD_CLOSE_MS: "30000", // never closes by timer inside a test (real timers + a loaded machine = flaky); settle() finalizes explicitly
     LLM_MODE: "mock",
     WISPR_MODE: "mock",
+    SARVAM_API_KEY: "", // a developer's real key in .env must never reach a test (tests that need Sarvam pass a fake key and a fake URL)
+    STT_PROVIDER: "",
     REQUIRE_PAIRING: "0",
     SUGGESTION_MIN_GAP_S: "0",
     ...env,

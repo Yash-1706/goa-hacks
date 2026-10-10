@@ -19,7 +19,8 @@ import { STT_SAMPLE_RATE, type LocalStt, type LocalSttAuth } from "./local-stt";
  * ========================================================================== */
 
 export interface LocalSttRouteDeps {
-  stt: LocalStt;
+  /** the engine for the NEXT utterance (decided at commit time: local-only mode may switch it between two utterances) */
+  stt: () => LocalStt;
   auth: LocalSttAuth;
   /** true while the on-device engine may take audio (WISPR_MODE=local, local-only mode, or STT_FALLBACK) */
   allowed: () => boolean;
@@ -218,7 +219,7 @@ export function registerLocalStt(app: FastifyInstance, deps: LocalSttRouteDeps):
           at += c.length;
         }
         wipe();
-        deps.stt.transcribe(pcm).then(
+        deps.stt().transcribe(pcm).then(
           (r) => {
             pcm.fill(0);
             deps.onUtterance?.({ audioMs: r.audioMs, ms: r.ms, chars: r.text.length, via: "ws" });
@@ -228,7 +229,7 @@ export function registerLocalStt(app: FastifyInstance, deps: LocalSttRouteDeps):
           (err: unknown) => {
             pcm.fill(0);
             log.warn("stt", "on-device transcription failed", { error: err instanceof Error ? err.message.slice(0, 120) : "error" });
-            error("on-device speech failed");
+            error("speech engine failed");
           },
         );
         return;
@@ -255,12 +256,12 @@ export function registerLocalStt(app: FastifyInstance, deps: LocalSttRouteDeps):
     }
     try {
       const t0 = performance.now();
-      const r = await deps.stt.transcribe(pcm);
+      const r = await deps.stt().transcribe(pcm);
       deps.onUtterance?.({ audioMs: r.audioMs, ms: r.ms, chars: r.text.length, via: "rest" });
       return { id: `local-${Date.now().toString(36)}`, text: r.text, detected_language: r.language, total_time: Math.round(performance.now() - t0), generated_tokens: 0 };
     } catch (err) {
       log.warn("stt", "on-device transcription failed", { error: err instanceof Error ? err.message.slice(0, 120) : "error" });
-      return reply.code(500).send({ error: "on-device speech failed" });
+      return reply.code(500).send({ error: "speech engine failed" });
     } finally {
       pcm.fill(0);
     }

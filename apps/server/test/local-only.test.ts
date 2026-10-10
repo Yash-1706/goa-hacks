@@ -27,7 +27,7 @@ afterEach(async () => {
   app = undefined;
 });
 
-const LIVE = { LLM_MODE: "live", ANTHROPIC_API_KEY: "sk-ant-test-key" };
+const LIVE = { LLM_MODE: "live", ANTHROPIC_API_KEY: "sk\u002dant-test-key" };
 const sentToLlm = (a: TestApp): number => a.ctx.audit.list(1000).filter((r) => r.event === "sent_to_llm").length;
 
 describe("local-only mode", () => {

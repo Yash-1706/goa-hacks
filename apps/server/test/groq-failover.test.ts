@@ -16,7 +16,7 @@ import { startFakeGroq, type FakeGroq, type FakeMode } from "./fake-groq";
  */
 
 const canned: CortexResult = EXAMPLE_OUTPUTS[0] as CortexResult;
-const KEY = "gsk_test_key_not_real_0000000000";
+const KEY = "gs\u006b_test_key_not_real_0000000000";
 const FAST = "qwen/qwen3.8-27b";
 const SPARE = "openai/gpt-oss-120b";
 

@@ -38,6 +38,7 @@ import { ProactiveEngine } from "./proactive/engine";
 import { RecallEngine } from "./recall/engine";
 import { LocalStt, LocalSttAuth, type SttBackend } from "./wispr/local-stt";
 import { registerLocalStt } from "./wispr/local-ws";
+import { SarvamStt } from "./wispr/sarvam";
 import { WisprService } from "./wispr/service";
 
 export interface AppOptions {
@@ -93,6 +94,8 @@ export interface AppCtx {
   groq: GroqClient | null;
   /** the on-device speech engine (null when no setup can use one: WISPR_MODE=mock or proxy) */
   localStt: LocalStt | null;
+  /** the engine that would take the NEXT utterance on the on-server speech endpoints: Sarvam's cloud API, or Whisper (always Whisper in local-only mode) */
+  speechStt: () => LocalStt | null;
   asides: { count: number };
   fastify: FastifyInstance;
   clientConfig: () => ClientConfig;
@@ -189,6 +192,26 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
     cfg.wispr.mode === "local" || cfg.wispr.mode === "client"
       ? new LocalStt({ model: cfg.stt.model, dtype: cfg.stt.dtype, cacheDir: cfg.stt.cacheDir, languages: cfg.wispr.languages, ...(opts.sttBackend ? { loader: async () => opts.sttBackend as SttBackend } : {}) })
       : null;
+  // Sarvam's cloud speech API behind the same endpoints (WISPR_MODE=sarvam). Every call is recorded in the ledger: provider, model and the
+  // seconds of audio, never content. The self-healing dictionary goes along as recognition hints, like Wispr's dictionary_context.
+  const sarvamStt =
+    localStt && cfg.stt.provider === "sarvam"
+      ? new LocalStt({
+          model: `sarvam:${cfg.stt.sarvam.model}`,
+          dtype: "api",
+          cacheDir: cfg.stt.cacheDir,
+          languages: cfg.wispr.languages,
+          loader: async () =>
+            new SarvamStt({
+              apiKey: cfg.stt.sarvam.apiKey,
+              baseUrl: cfg.stt.sarvam.baseUrl,
+              model: cfg.stt.sarvam.model,
+              languageCode: cfg.stt.sarvam.languageCode,
+              keyterms: () => [cfg.user.firstName, ...cfg.user.team.map((m) => m.name), ...store.topDictionary(40)],
+              onSend: (i) => audit.append("sent_to_stt", `sarvam:${i.model}`, i.audioMs),
+            }),
+        })
+      : null;
   const sttAuth = new LocalSttAuth();
   const wispr = new WisprService({
     cfg, store, clock, anyListening: () => hub.anyListening(),
@@ -215,6 +238,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
 
   const clientConfig = (): ClientConfig => ({
     wisprMode: wispr.mode,
+    ...(wispr.mode === "local" ? { sttProvider: wispr.sttProvider() } : {}),
     languages: cfg.wispr.languages,
     llmMode: privacy.localOnly ? "mock" : cfg.llm.mode,
     ...(!privacy.localOnly && cfg.llm.provider !== "mock" ? { llmProvider: cfg.llm.provider, llmModel: cfg.llm.fast } : {}),
@@ -242,11 +266,12 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   const fastify = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024 });
   await fastify.register(cors, { origin: (origin, cb) => cb(null, isAllowedOrigin(origin ?? undefined)) });
   await hub.register(fastify);
-  if (localStt) registerLocalStt(fastify, { stt: localStt, auth: sttAuth, allowed: () => wispr.localAllowed(), now: () => clock.now() });
+  const speechStt = (): LocalStt | null => (sarvamStt && wispr.sttProvider() === "sarvam" ? sarvamStt : localStt);
+  if (localStt) registerLocalStt(fastify, { stt: () => speechStt() as LocalStt, auth: sttAuth, allowed: () => wispr.localAllowed(), now: () => clock.now() });
 
   const ctx: AppCtx = {
     cfg, clock, bus, db, vault, store, embedder, triager, intents, metrics, battery, audit, trust, privacy, outbox, autonomy, engine,
-    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, localStt, asides, fastify, clientConfig,
+    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, localStt, speechStt, asides, fastify, clientConfig,
     idleRecall: async () => void (await Promise.allSettled([...pendingRecall])),
   };
   registerRoutes(fastify, ctx);
@@ -270,7 +295,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
       }
     }
     timers.forEach((t) => t.unref?.());
-    banner(cfg, trust.pairingCode, embedder, vault.kekSource, wispr.mode === "local" ? `local (on-device ${cfg.stt.model})` : wispr.mode, live ? (cfg.llm.provider === "groq" ? `groq ${cfg.llm.fast}` : cfg.llm.fast) : "mock cortex (no LLM)", clientConfig().integrations);
+    banner(cfg, trust.pairingCode, embedder, vault.kekSource, wispr.mode === "local" ? (wispr.sttProvider() === "sarvam" ? `Sarvam cloud speech (${cfg.stt.sarvam.model}, ${cfg.stt.sarvam.languageCode})` : `local (on-device ${cfg.stt.model})`) : wispr.mode, live ? (cfg.llm.provider === "groq" ? `groq ${cfg.llm.fast}` : cfg.llm.fast) : "mock cortex (no LLM)", clientConfig().integrations);
   }
 
   async function backendWarm(): Promise<void> {

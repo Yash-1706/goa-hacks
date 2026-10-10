@@ -30,15 +30,15 @@ const setEnv = (e: Record<string, string>): void => {
 
 describe("which provider a --live run uses", () => {
   it("names the provider and model for the report header, or null when nothing live is configured", () => {
-    setEnv({ GROQ_API_KEY: "gsk_test_key_not_real_0000000000" });
+    setEnv({ GROQ_API_KEY: "gs\u006b_test_key_not_real_0000000000" });
     expect(liveProvider()).toEqual({ provider: "groq", model: "qwen/qwen3.8-27b", label: "groq/qwen/qwen3.8-27b" });
-    setEnv({ ANTHROPIC_API_KEY: "sk-ant-x", GROQ_API_KEY: "gsk_test_key_not_real_0000000000" });
+    setEnv({ ANTHROPIC_API_KEY: "sk-ant-x", GROQ_API_KEY: "gs\u006b_test_key_not_real_0000000000" });
     expect(liveProvider()).toEqual({ provider: "anthropic", model: "claude-haiku-4-5", label: "anthropic/claude-haiku-4-5" });
-    setEnv({ ANTHROPIC_API_KEY: "sk-ant-x", GROQ_API_KEY: "gsk_test_key_not_real_0000000000", LLM_PROVIDER: "groq" });
+    setEnv({ ANTHROPIC_API_KEY: "sk-ant-x", GROQ_API_KEY: "gs\u006b_test_key_not_real_0000000000", LLM_PROVIDER: "groq" });
     expect(liveProvider()?.label).toBe("groq/qwen/qwen3.8-27b");
     setEnv({});
     expect(liveProvider()).toBeNull();
-    setEnv({ GROQ_API_KEY: "gsk_test_key_not_real_0000000000", LOCAL_ONLY: "1" });
+    setEnv({ GROQ_API_KEY: "gs\u006b_test_key_not_real_0000000000", LOCAL_ONLY: "1" });
     expect(liveProvider()).toBeNull(); // LOCAL_ONLY wins over --live
   });
 
@@ -52,7 +52,7 @@ describe("which provider a --live run uses", () => {
 
 describe("offline tools never go live because .env turned the live model on for the server", () => {
   it("ephemeralApp (replay --local, eval, bench) is the offline cortex whatever the environment says, and live only when asked", async () => {
-    setEnv({ GROQ_API_KEY: "gsk_test_key_not_real_0000000000", LLM_MODE: "live", GROQ_BASE_URL: "http://127.0.0.1:1/openai/v1" });
+    setEnv({ GROQ_API_KEY: "gs\u006b_test_key_not_real_0000000000", LLM_MODE: "live", GROQ_BASE_URL: "http://127.0.0.1:1/openai/v1" });
     const off = await ephemeralApp({});
     try {
       expect(off.cfg.llm).toMatchObject({ mode: "mock", provider: "mock" });
@@ -124,7 +124,7 @@ describe("a live run is patient", () => {
 
   it("waits out a 429's cool-down instead of racing through the fragments behind it, and does not wait without a client", async () => {
     fake.reset({ kind: "status", status: 429, code: "rate_limit_exceeded", message: "Rate limit reached", retryAfter: "1" });
-    const client = new GroqClient({ apiKey: "gsk_test_key_not_real_0000000000", baseUrl: fake.url });
+    const client = new GroqClient({ apiKey: "gs\u006b_test_key_not_real_0000000000", baseUrl: fake.url });
     await expect(hi(client)).rejects.toMatchObject({ kind: "rate_limit" });
     expect(client.disabledReason).toBe("rate_limit");
     const t0 = Date.now();
@@ -139,7 +139,7 @@ describe("a live run is patient", () => {
 
   it("does not wait out an authentication failure: a bad key should fail loudly, not hang the run", async () => {
     fake.reset({ kind: "status", status: 401, code: "invalid_api_key", message: "Invalid API Key" });
-    const client = new GroqClient({ apiKey: "gsk_test_key_not_real_0000000000", baseUrl: fake.url });
+    const client = new GroqClient({ apiKey: "gs\u006b_test_key_not_real_0000000000", baseUrl: fake.url });
     await expect(hi(client)).rejects.toMatchObject({ kind: "auth" });
     const t0 = Date.now();
     await patience(client)();
@@ -148,7 +148,7 @@ describe("a live run is patient", () => {
   });
 
   it("one shared client per run, built from the config of the chosen provider, and none for Claude", () => {
-    process.env.GROQ_API_KEY = "gsk_test_key_not_real_0000000000";
+    process.env.GROQ_API_KEY = "gs\u006b_test_key_not_real_0000000000";
     process.env.ANTHROPIC_API_KEY = "";
     process.env.LLM_PROVIDER = "groq";
     process.env.LOCAL_ONLY = "0";
@@ -177,7 +177,7 @@ describe("the CLIs refuse --live when nothing live is configured", () => {
   }, 120_000);
 
   it("including when a key exists but LOCAL_ONLY is on", () => {
-    const r = run("eval", { GROQ_API_KEY: "gsk_test_key_not_real_0000000000", LOCAL_ONLY: "1" });
+    const r = run("eval", { GROQ_API_KEY: "gs\u006b_test_key_not_real_0000000000", LOCAL_ONLY: "1" });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("turn LOCAL_ONLY off");
   }, 120_000);

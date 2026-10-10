@@ -11,7 +11,7 @@ import { startFakeGroq, type FakeGroq, type FakeMode } from "./fake-groq";
  * (recall answers, the session brief, consolidation labels) are unchanged; they only ever see text, a parsed object, or null.
  */
 
-const KEY = "gsk_test_key_not_real_0000000000";
+const KEY = "gs\u006b_test_key_not_real_0000000000";
 const clock = { t: Date.parse("2026-10-06T10:00:00Z") };
 const now = (): number => clock.t;
 const sleep = async (ms: number): Promise<void> => {

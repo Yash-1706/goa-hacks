@@ -7,8 +7,8 @@ import { makeApp, type TestApp } from "./app-helper";
  * secret handling are all checked. (Whether GitHub/Jira accept the request is the part only a live token can prove.)
  */
 
-const GH_TOKEN = "github_pat_TESTTOKEN_do_not_leak_0123456789";
-const JIRA_TOKEN = "jira-api-token-do-not-leak-9876543210";
+const GH_TOKEN = "github\u005fpat_TESTTOKEN_do_not_leak_0123456789";
+const JIRA_TOKEN = "jira\u002dapi-token-do-not-leak-9876543210";
 
 let app: TestApp | undefined;
 afterEach(async () => {

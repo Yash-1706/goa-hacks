@@ -4,11 +4,12 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { LocalStt, LocalSttAuth, cleanTranscript, rmsOf, type SttBackend } from "../src/wispr/local-stt";
 import { decodeWav, pcm16ToFloat } from "../src/wispr/local-ws";
 import { makeApp, type TestApp } from "./app-helper";
+import { startFakeSarvam, type FakeSarvam } from "./fake-sarvam";
 
 /**
  * On-device speech (CAP-8). The model is replaced by a faithful fake so everything else is real: the engine's queue and guards,
@@ -387,7 +388,7 @@ describe("WISPR_MODE=local: the token and the WebSocket", () => {
     const packets = packetsOf(tone(1));
     append(c, packets, 0);
     c.send({ type: "commit", total_packets: packets.length });
-    await c.waitFor((m) => m.status === "error" && /on-device speech failed/.test(String(m.message)));
+    await c.waitFor((m) => m.status === "error" && /speech engine failed/.test(String(m.message)));
     await sleep(40);
     expect(backend.calls[0]!.pcm.every((x) => x === 0)).toBe(true);
   });
@@ -619,5 +620,112 @@ describe("the browser's own streamer against the real endpoints", () => {
     expect(viaRest.items.find((i) => i.id === "REST")).toMatchObject({ verdict: "pass" });
     expect(backend.calls).toHaveLength(2);
     for (const c of backend.calls) expect(c.pcm.every((x) => x === 0)).toBe(true); // both utterances were zeroed afterwards
+  });
+});
+
+describe("WISPR_MODE=sarvam: Sarvam's cloud engine behind the same endpoints", () => {
+  const SARVAM_KEY = "sk\u005ftest_sarvam_key_not_real";
+  let sv: FakeSarvam;
+  beforeAll(async () => {
+    sv = await startFakeSarvam({ key: SARVAM_KEY });
+  });
+  afterAll(async () => {
+    await sv.close();
+  });
+  const env = (over: Record<string, string> = {}): Record<string, string> => ({ WISPR_MODE: "sarvam", SARVAM_API_KEY: SARVAM_KEY, SARVAM_BASE_URL: sv.url, ...over });
+
+  /** one utterance over the Wispr-compatible socket; resolves with the final text, or the error that came instead */
+  async function speak(a: TestApp, secs = 1.2): Promise<{ text?: string; language?: string; error?: string; packets: number }> {
+    const tok = await tokenOf(a);
+    const c = await openLocal(tok);
+    c.send({ type: "auth", access_token: tok });
+    await c.waitFor((m) => m.status === "auth");
+    const packets = packetsOf(tone(secs, 0.3));
+    for (let i = 0, pos = 0; i < packets.length; i += 4) {
+      const part = packets.slice(i, i + 4);
+      append(c, part, pos);
+      pos += part.length;
+    }
+    c.send({ type: "commit", total_packets: packets.length });
+    const end = await c.waitFor((m) => (m.status === "text" && m.final === true) || m.status === "error");
+    if (end.status === "error") return { error: String(end.message), packets: packets.length };
+    const body = end.body as { text: string; detected_language?: string };
+    return { text: body.text, ...(body.detected_language ? { language: body.detected_language } : {}), packets: packets.length };
+  }
+
+  it("the token names Sarvam; the utterance is transcribed there (not by Whisper), with the language and hint terms; the ledger records the call without any content", async () => {
+    sv.reset({ kind: "ok", transcript: "namaste team, remind me about the vendor call", language_code: "en-IN" });
+    const a = await boot(env());
+    expect(a.ctx.cfg.wispr.mode).toBe("local");
+    expect(a.ctx.cfg.stt.provider).toBe("sarvam");
+    expect(await a.ctx.wispr.token("dev-1")).toMatchObject({ mode: "local", provider: "sarvam", wsUrl: "/local-stt/client_ws" });
+    expect(a.ctx.clientConfig()).toMatchObject({ wisprMode: "local", sttProvider: "sarvam" });
+
+    const heard = await speak(a);
+    expect(heard).toMatchObject({ text: "namaste team, remind me about the vendor call", language: "en-IN" });
+    expect(backend.calls).toHaveLength(0); // Whisper never ran
+
+    expect(sv.requests).toHaveLength(1);
+    const r = sv.requests[0]!;
+    expect(r.key).toBe(SARVAM_KEY);
+    expect(r.fields).toMatchObject({ model: "saaras:v4", language_code: "en-IN" });
+    expect(JSON.parse(r.fields.keyterms as string)).toEqual(expect.arrayContaining(["Rio", "Sarah"])); // the speaker and the team: the dictionary primes recognition
+    expect(r.wav).toMatchObject({ rate: 16000, channels: 1, bits: 16, samples: heard.packets * 512 });
+
+    const sent = a.ctx.audit.list(100).filter((x) => x.event === "sent_to_stt");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ ref: "sarvam:saaras:v4", count: Math.round(((heard.packets * 512) / 16000) * 1000) });
+    expect(JSON.stringify(a.ctx.audit.list(100))).not.toMatch(/namaste|vendor/i); // the length of the audio, never what was said
+    expect(a.ctx.audit.verify().ok).toBe(true);
+  });
+
+  it("local-only mode switches the engine to on-device Whisper at once (nothing more reaches Sarvam), and switching it off brings Sarvam back", async () => {
+    sv.reset({ kind: "ok", transcript: "from sarvam", language_code: "en-IN" });
+    const a = await boot(env(), "from whisper");
+    expect((await speak(a)).text).toBe("from sarvam");
+    expect(sv.requests).toHaveLength(1);
+
+    await a.ctx.fastify.inject({ method: "POST", url: "/api/privacy/local-only", payload: { on: true } });
+    expect(a.ctx.clientConfig()).toMatchObject({ wisprMode: "local", sttProvider: "whisper", localOnly: true });
+    const update = a.sent.find((m) => m.type === "config.update") as { config: { sttProvider?: string } } | undefined;
+    expect(update?.config.sttProvider).toBe("whisper"); // every device is told
+    expect(await a.ctx.wispr.token("dev-1", true)).toMatchObject({ mode: "local", provider: "whisper" });
+    const local = await speak(a);
+    expect(local.text).toBe("from whisper");
+    expect(backend.calls).toHaveLength(1);
+    expect(sv.requests).toHaveLength(1); // not one more call to Sarvam
+    expect(a.ctx.audit.list(100).filter((x) => x.event === "sent_to_stt")).toHaveLength(1);
+
+    await a.ctx.fastify.inject({ method: "POST", url: "/api/privacy/local-only", payload: { on: false } });
+    expect(a.ctx.clientConfig().sttProvider).toBe("sarvam");
+    expect((await speak(a)).text).toBe("from sarvam");
+    expect(sv.requests).toHaveLength(2);
+  });
+
+  it("a rejected key is reported as a failing speech engine (not a hang), and the audio is not kept; health names the engine", async () => {
+    sv.reset({ kind: "ok", transcript: "never reached" });
+    const a = await boot(env({ SARVAM_API_KEY: "sk\u005fwrong_key_for_this_test" }));
+    const r = await speak(a);
+    expect(r.error).toMatch(/speech engine failed/);
+    expect(r.text).toBeUndefined();
+    expect(sv.requests[0]?.key).toBe("sk\u005fwrong_key_for_this_test"); // it was sent, and refused: nothing else happened
+    const h = (await (await a.ctx.fastify.inject({ method: "GET", url: "/api/health" })).json()) as { modes: { wispr: string }; stt: { model: string; provider: string; active: boolean } };
+    expect(h.modes.wispr).toBe("local");
+    expect(h.stt).toMatchObject({ provider: "sarvam", model: "sarvam:saaras:v4", active: true });
+  });
+
+  it("without a key the mode is plain on-device Whisper, and a key alone never sends audio anywhere", async () => {
+    sv.reset(); // this fake is shared with the tests above: count only what this test sends
+    const a = await boot({ WISPR_MODE: "sarvam" });
+    expect(a.ctx.cfg.stt.provider).toBe("whisper");
+    expect(a.ctx.clientConfig().sttProvider).toBe("whisper");
+    const b = await (async () => {
+      await a.stop();
+      app = undefined;
+      return boot({ WISPR_MODE: "local", SARVAM_API_KEY: SARVAM_KEY, SARVAM_BASE_URL: sv.url });
+    })();
+    expect(b.ctx.cfg.stt.provider).toBe("whisper");
+    expect((await speak(b)).text).toBe("remind me to email the team about the delay");
+    expect(sv.requests).toHaveLength(0);
   });
 });

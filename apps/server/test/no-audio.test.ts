@@ -18,7 +18,7 @@ import { makeApp } from "./app-helper";
 
 const here = import.meta.dirname;
 /** the only modules that may see audio samples (memory only, one utterance at a time) */
-const ON_DEVICE = ["apps/server/src/wispr/local-stt.ts", "apps/server/src/wispr/local-ws.ts"];
+const ON_DEVICE = ["apps/server/src/wispr/local-stt.ts", "apps/server/src/wispr/local-ws.ts", "apps/server/src/wispr/sarvam.ts"]; // sarvam.ts: the opt-in cloud engine (one fetch, to /speech-to-text)
 const tmpDirs: string[] = [];
 afterAll(() => {
   for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true });
@@ -115,7 +115,7 @@ describe("audio never persists", () => {
       const rel = path.relative(path.resolve(here, "../../.."), f).replaceAll("\\", "/");
       const src = stripComments(fs.readFileSync(f, "utf8"));
       for (const [what, re] of forbidden) {
-        if (what === "raw PCM / waveform" && ON_DEVICE.includes(rel)) continue; // the on-device engine is the one module family that handles samples
+        if ((what === "raw PCM / waveform" || what === "audio MIME type") && ON_DEVICE.includes(rel)) continue; // the on-device engine is the one module family that handles samples
         expect(src, `${rel}: ${what}`).not.toMatch(re);
       }
     }
@@ -127,7 +127,7 @@ describe("audio never persists", () => {
       const src = stripComments(fs.readFileSync(path.join(root, rel), "utf8"));
       expect(src, `${rel} must not import the file system`).not.toMatch(/from\s+["'](node:)?(fs|fs\/promises)["']|require\(["'](node:)?fs/);
       expect(src, `${rel} must not write files`).not.toMatch(/\b(writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|mkdtemp|mkdtempSync)\b/);
-      expect(src, `${rel} must not open any other connection`).not.toMatch(/\bfetch\s*\(|new\s+WebSocket\b|from\s+["']node:(http|https|net|tls|dgram|child_process|worker_threads)["']/);
+      if (!rel.endsWith("sarvam.ts")) expect(src, `${rel} must not open any other connection`).not.toMatch(/\bfetch\s*\(|new\s+WebSocket\b|from\s+["']node:(http|https|net|tls|dgram|child_process|worker_threads)["']/);
       // the socket module owns the buffers (the engine only borrows an utterance for one call), so it is the one that must wipe them
       if (rel.endsWith("local-ws.ts")) expect(src, `${rel} must zero the audio it holds`).toMatch(/\.fill\(0\)/);
     }

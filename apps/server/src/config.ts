@@ -60,6 +60,14 @@ const EnvSchema = z.object({
   STT_PRELOAD: str("auto"),
   // 1: when Wispr rejects the key or cannot be reached, transcribe on this machine instead (the audio then reaches this server, in memory only)
   STT_FALLBACK: bool(false),
+  // Sarvam AI speech to text: a CLOUD engine behind the same endpoints, good for Indian accents, Hindi and Hinglish. Opt in with
+  // WISPR_MODE=sarvam or STT_PROVIDER=sarvam, and set SARVAM_API_KEY. Local-only mode always uses on-device Whisper instead.
+  STT_PROVIDER: str("whisper"),
+  SARVAM_API_KEY: str(""),
+  SARVAM_BASE_URL: str("https://api.sarvam.ai"),
+  SARVAM_STT_MODEL: str("saaras:v4"),
+  // auto: en-IN (or the matching code) when WISPR_LANGUAGES names one language, otherwise detect; or force one, e.g. hi-IN, unknown
+  SARVAM_LANGUAGE: str("auto"),
 
   LLM_MODE: str("mock"),
   // auto | anthropic | groq. auto: Anthropic when its key is set, else Groq when its key is set, else mock.
@@ -135,7 +143,16 @@ export interface Config {
     warmupIntervalS: number;
   };
   /** on-device speech to text */
-  stt: { model: string; dtype: string; preload: boolean; fallback: boolean; cacheDir: string };
+  stt: {
+    model: string;
+    dtype: string;
+    preload: boolean;
+    fallback: boolean;
+    cacheDir: string;
+    /** the engine behind the on-server speech endpoints when they are not in local-only mode: on-device Whisper, or Sarvam's cloud API */
+    provider: "whisper" | "sarvam";
+    sarvam: { apiKey: string; baseUrl: string; model: string; languageCode: string };
+  };
   llm: {
     mode: "live" | "mock";
     /** the provider that serves the live paths; "mock" whenever `mode` is "mock" */
@@ -178,10 +195,22 @@ export interface Config {
   };
 }
 
+const SARVAM_LANGUAGES = new Set(["hi", "bn", "kn", "ml", "mr", "od", "pa", "ta", "te", "en", "gu", "as", "ur", "ne", "kok", "ks", "sd", "sa", "sat", "mni", "brx", "mai", "doi"]);
+
+/** the language_code Sarvam is asked for: forced by SARVAM_LANGUAGE, else the single language WISPR_LANGUAGES names (as an -IN code), else detection */
+function sarvamLanguage(asked: string, languages: string[]): string {
+  if (asked && asked.toLowerCase() !== "auto") return asked;
+  const only = languages.length === 1 ? ((languages[0] as string).toLowerCase().split("-")[0] as string) : "";
+  return SARVAM_LANGUAGES.has(only) ? only + "-IN" : "unknown";
+}
+
 export function loadConfig(overrides: Record<string, string | undefined> = {}): Config {
   const raw = EnvSchema.parse({ ...process.env, ...overrides });
 
-  const wisprMode = (["client", "proxy", "mock", "local"].includes(raw.WISPR_MODE) ? raw.WISPR_MODE : "mock") as Config["wispr"]["mode"];
+  // WISPR_MODE=sarvam is the on-server speech endpoint ("local") with Sarvam's cloud API behind it
+  const wisprAsked = raw.WISPR_MODE === "sarvam" ? "local" : raw.WISPR_MODE;
+  const wisprMode = (["client", "proxy", "mock", "local"].includes(wisprAsked) ? wisprAsked : "mock") as Config["wispr"]["mode"];
+  const sarvamReady = (raw.WISPR_MODE === "sarvam" || raw.STT_PROVIDER.toLowerCase() === "sarvam") && Boolean(raw.SARVAM_API_KEY);
   // client/proxy need a key to mint tokens or to proxy; without one we fall back to mock. "local" needs no key at all.
   const effectiveWispr = wisprMode === "client" || wisprMode === "proxy" ? (raw.WISPR_API_KEY ? wisprMode : "mock") : wisprMode;
   const preloadAsked = raw.STT_PRELOAD.toLowerCase();
@@ -235,6 +264,13 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
       dtype: raw.STT_DTYPE,
       preload: ["1", "true", "yes", "on"].includes(preloadAsked) || (!["0", "false", "no", "off"].includes(preloadAsked) && effectiveWispr === "local"),
       fallback: raw.STT_FALLBACK,
+      provider: sarvamReady ? "sarvam" : "whisper",
+      sarvam: {
+        apiKey: raw.SARVAM_API_KEY,
+        baseUrl: raw.SARVAM_BASE_URL.endsWith("/") ? raw.SARVAM_BASE_URL.slice(0, -1) : raw.SARVAM_BASE_URL,
+        model: raw.SARVAM_STT_MODEL,
+        languageCode: sarvamLanguage(raw.SARVAM_LANGUAGE, raw.WISPR_LANGUAGES.split(",").map((s) => s.trim()).filter(Boolean)),
+      },
       // the (non-sensitive) model cache is shared with the embeddings
       cacheDir: raw.MODEL_CACHE_DIR ? path.resolve(REPO_ROOT, raw.MODEL_CACHE_DIR) : path.resolve(REPO_ROOT, "data"),
     },

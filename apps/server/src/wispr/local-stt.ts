@@ -14,9 +14,15 @@ import { safeEqual } from "../memory/crypto";
 
 export const STT_SAMPLE_RATE = 16_000;
 
-/** the model behind the engine: 16 kHz mono samples in [-1, 1] → text */
+/** what a backend returns: the text, and the language it detected when it says so (a BCP-47 code such as en-IN) */
+export interface SttTranscript {
+  text: string;
+  language?: string;
+}
+
+/** the model behind the engine: 16 kHz mono samples in [-1, 1] → text. Whisper runs on this machine; Sarvam (sarvam.ts) is a cloud service. */
 export interface SttBackend {
-  transcribe(pcm: Float32Array, o: { language?: string }): Promise<string>;
+  transcribe(pcm: Float32Array, o: { language?: string }): Promise<string | SttTranscript>;
 }
 
 export interface LocalSttOpts {
@@ -136,14 +142,14 @@ export class LocalStt {
         this._state = "ready";
         this.error = undefined;
         this.loadMs = Math.round(performance.now() - t0);
-        log.info("stt", "on-device speech model ready", { model: this.o.model, ms: this.loadMs });
+        log.info("stt", "speech engine ready", { model: this.o.model, ms: this.loadMs });
         return b;
       },
       (err: unknown) => {
         this._state = "error";
         this.error = (err instanceof Error ? err.message : "load failed").slice(0, 160);
         this.backend = null;
-        log.warn("stt", "on-device speech model could not be loaded (is it downloaded? the first load needs the network)", { model: this.o.model, error: this.error });
+        log.warn("stt", "speech engine could not be loaded (for Whisper: is the model downloaded? the first load needs the network)", { model: this.o.model, error: this.error });
         throw err;
       },
     );
@@ -189,11 +195,13 @@ export class LocalStt {
     const t0 = performance.now();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const limit = this.o.timeoutMs ?? 30_000;
-    const raw = await Promise.race([
+    const out = await Promise.race([
       backend.transcribe(pcm, { language: this.language() }),
       new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("transcription timed out")), limit))),
     ]).finally(() => clearTimeout(timer));
     const ms = Math.round(performance.now() - t0);
+    const raw = typeof out === "string" ? out : out.text;
+    const detected = typeof out === "string" ? undefined : out.language;
 
     let text = cleanTranscript(raw);
     // a short, nearly silent clip becomes "Thank you." in Whisper's mouth: that is the model talking, not the user
@@ -202,7 +210,7 @@ export class LocalStt {
     this.lastAudioMs = audioMs;
     this.lastMs = ms;
     log.debug("stt", "utterance transcribed", { audioMs, ms, chars: text.length });
-    return { text, ms, audioMs, language };
+    return { text, ms, audioMs, language: detected ?? language };
   }
 }
 

@@ -232,7 +232,7 @@ export interface FragmentView {
   transport: FragmentTransport;
 }
 
-export type FragmentTransport = "wispr_ws" | "wispr_rest" | "wispr_proxy" | "local_stt" | "mock" | "replay";
+export type FragmentTransport = "wispr_ws" | "wispr_rest" | "wispr_proxy" | "local_stt" | "cloud_stt" | "mock" | "replay";
 
 export interface ReferenceView {
   mention: string;

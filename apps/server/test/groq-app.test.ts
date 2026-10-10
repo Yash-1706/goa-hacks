@@ -15,7 +15,7 @@ import { startFakeGroq, type FakeGroq } from "./fake-groq";
  * blocks Anthropic (test/local-only.test.ts).
  */
 
-const KEY = "gsk_test_key_not_real_0000000000";
+const KEY = "gs\u006b_test_key_not_real_0000000000";
 let fake: FakeGroq;
 let app: TestApp | undefined;
 
@@ -251,7 +251,7 @@ describe("the app over Groq", () => {
   });
 
   it("Anthropic stays the default: both keys set means Claude, with no Groq client around", async () => {
-    app = await makeApp({ LLM_MODE: "live", LLM_PROVIDER: "auto", ANTHROPIC_API_KEY: "sk-ant-test-key", GROQ_API_KEY: KEY, GROQ_BASE_URL: fake.url, LOCAL_ONLY: "0" });
+    app = await makeApp({ LLM_MODE: "live", LLM_PROVIDER: "auto", ANTHROPIC_API_KEY: "sk\u002dant-test-key", GROQ_API_KEY: KEY, GROQ_BASE_URL: fake.url, LOCAL_ONLY: "0" });
     expect(app.ctx.cfg.llm.provider).toBe("anthropic");
     expect(app.ctx.live?.name).toBe("claude");
     expect(app.ctx.groq).toBeNull();

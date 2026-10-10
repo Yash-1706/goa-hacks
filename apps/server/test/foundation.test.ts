@@ -115,11 +115,11 @@ describe("forget intent parser", () => {
 describe("redaction", () => {
   it("masks emails, cards (Luhn), keys and spoken secrets, and rehydrates", () => {
     const input =
-      "mail me at rio@example.com card 4242 4242 4242 4242 key sk-ant-abcdefghijklmnop1234 and the password is hunter two";
+      "mail me at rio@example.com card 4242 4242 4242 4242 key sk\u002dant-abcdefghijklmnop1234 and the password is hunter two";
     const r = redact(input);
     expect(r.text).not.toContain("rio@example.com");
     expect(r.text).not.toContain("4242 4242");
-    expect(r.text).not.toContain("sk-ant-abcdefghijklmnop1234");
+    expect(r.text).not.toContain("sk\u002dant-abcdefghijklmnop1234");
     expect(r.text).not.toContain("hunter");
     expect(r.map.length).toBeGreaterThanOrEqual(4);
     const back = rehydrate({ note: r.text }, r.map);

@@ -50,6 +50,12 @@ export class WisprService {
     return cfg.wispr.mode === "local" || (cfg.wispr.mode === "client" && local.isLocalOnly());
   }
 
+  /** the engine behind the on-server speech endpoints right now: Sarvam's cloud API only when it is configured AND local-only mode is off */
+  sttProvider(): "whisper" | "sarvam" {
+    const { cfg, local } = this.d;
+    return cfg.stt.provider === "sarvam" && !local?.isLocalOnly() ? "sarvam" : "whisper";
+  }
+
   /** the on-device endpoints may take audio: it is in use, or the opt-in fallback is on */
   localAllowed(): boolean {
     return Boolean(this.d.local) && (this.usesLocal() || (this.d.cfg.wispr.mode === "client" && this.d.cfg.stt.fallback));
@@ -59,7 +65,7 @@ export class WisprService {
   private localToken(deviceId: string, note?: string): TokenMsg {
     const { cfg, clock, local } = this.d;
     const { token, expiresAt } = (local as NonNullable<typeof local>).auth.mint(deviceId, cfg.wispr.tokenTtlSecs * 1000, clock.now());
-    return { type: "wispr.token", mode: "local", token, expiresAt, wsUrl: "/local-stt/client_ws", restUrl: "/local-stt/client_api", ...(note ? { note } : {}) };
+    return { type: "wispr.token", mode: "local", provider: this.sttProvider(), token, expiresAt, wsUrl: "/local-stt/client_ws", restUrl: "/local-stt/client_api", ...(note ? { note } : {}) };
   }
 
   private authHeader(): string {

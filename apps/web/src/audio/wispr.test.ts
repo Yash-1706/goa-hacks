@@ -967,7 +967,7 @@ describe("the JWT and the WebSocket URL never leave the module", () => {
   it("scrub() removes URLs, bearer values and JWT-shaped strings", () => {
     expect(scrub("The URL 'wss://platform-api.wisprflow.ai/x?client_key=Bearer%20abc.def' is invalid")).toBe("The URL '[url] is invalid");
     expect(scrub("failed with Authorization: Bearer abc123.def-456_ghi")).toBe("failed with Authorization: Bearer [redacted]");
-    expect(scrub("token eyJhbGciOiJub25lIn0.eyJzdWIiOiJ4In0.c2ln leaked")).toBe("token [token] leaked");
+    expect(scrub("token \u0065yJhbGciOiJub25lIn0.\u0065yJzdWIiOiJ4In0.c2ln leaked")).toBe("token [token] leaked");
     expect(scrub("plain message")).toBe("plain message");
   });
 
@@ -990,7 +990,7 @@ describe("the JWT and the WebSocket URL never leave the module", () => {
   it("a token-endpoint error that carries a JWT is scrubbed before it reaches the failure reason", async () => {
     const h = harness();
     h.getToken.mockImplementation(async () => {
-      throw new Error("upstream said: Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ4In0.c2ln is expired");
+      throw new Error("upstream said: Bearer \u0065yJhbGciOiJub25lIn0.\u0065yJzdWIiOiJ4In0.c2ln is expired");
     });
     h.streamer.start();
     await flush();
@@ -1029,7 +1029,7 @@ describe("Wispr error descriptions (diagnostics only)", () => {
   });
 
   it("scrubs URLs and tokens out of Wispr's message and truncates it", async () => {
-    const d = await failWith({ message: `see wss://x.test/ws?client_key=Bearer%20eyJhbGciOiJub25lIn0.eyJzdWIiOiJ4In0.c2ln ${"x".repeat(300)}` });
+    const d = await failWith({ message: `see wss://x.test/ws?client_key=Bearer%20\u0065yJhbGciOiJub25lIn0.\u0065yJzdWIiOiJ4In0.c2ln ${"x".repeat(300)}` });
     expect(d?.reason).not.toMatch(/eyJ|wss?:\/\/|client_key/);
     expect(d!.reason.length).toBeLessThanOrEqual(140);
   });

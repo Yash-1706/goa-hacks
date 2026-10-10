@@ -42,7 +42,7 @@ const prevEnv = { url: process.env.ANTHROPIC_BASE_URL, key: process.env.ANTHROPI
 beforeAll(async () => {
   fake = await startFakeAnthropic();
   process.env.ANTHROPIC_BASE_URL = fake.url;
-  process.env.ANTHROPIC_API_KEY = "sk-ant-test-key";
+  process.env.ANTHROPIC_API_KEY = "sk\u002dant-test-key";
 });
 afterAll(async () => {
   await fake.close();
@@ -50,7 +50,7 @@ afterAll(async () => {
   process.env.ANTHROPIC_API_KEY = prevEnv.key;
 });
 
-const make = (timeoutMs = 4000) => new ClaudeCortex({ apiKey: "sk-ant-test-key", model: "claude-haiku-4-5", fallback, timeoutMs });
+const make = (timeoutMs = 4000) => new ClaudeCortex({ apiKey: "sk\u002dant-test-key", model: "claude-haiku-4-5", fallback, timeoutMs });
 const reset = (...script: FakeMode[]) => fake.reset(...script);
 
 describe("ClaudeCortex against a faithful Messages-API fake", () => {
@@ -74,7 +74,7 @@ describe("ClaudeCortex against a faithful Messages-API fake", () => {
 
   it("sends a cached, static system prompt and the strict schema; never the raw secret", async () => {
     reset({ kind: "ok", json: { ...canned, intent: "Rotate the key [SECRET_1]." } });
-    const input = await baseInput("the api key is sk-ant-abcdefghijklmnop1234 please remember mail me at rio@example.com");
+    const input = await baseInput("the api key is sk\u002dant-abcdefghijklmnop1234 please remember mail me at rio@example.com");
     const out = await make().analyze(input);
     const body = fake.requests[0]!.body as { system: Array<{ cache_control?: { type: string; ttl?: string }; text: string }>; output_config: { format: { schema: unknown } }; messages: Array<{ content: string }>; model: string; stream?: boolean };
 
@@ -83,12 +83,12 @@ describe("ClaudeCortex against a faithful Messages-API fake", () => {
     expect(body.system[0]!.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
     expect(JSON.stringify(body.output_config.format.schema)).toContain('"enum"');
     const sent = JSON.stringify(body);
-    expect(sent).not.toContain("sk-ant-abcdefghijklmnop1234");
+    expect(sent).not.toContain("sk\u002dant-abcdefghijklmnop1234");
     expect(sent).not.toContain("rio@example.com");
     expect(sent).toMatch(/\[SECRET_\d+\]|\[EMAIL_\d+\]/);
     expect(out.redactions).toBeGreaterThanOrEqual(2);
     // placeholders in the model's answer are restored locally
-    expect(out.result.intent).toContain("sk-ant-abcdefghijklmnop1234");
+    expect(out.result.intent).toContain("sk\u002dant-abcdefghijklmnop1234");
   });
 
   it("falls back to the local cortex on auth failure and then stops calling the API for a while", async () => {

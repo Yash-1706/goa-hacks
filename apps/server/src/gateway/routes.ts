@@ -41,7 +41,7 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
     // free-tier bookkeeping (counters and pacing state only, never content); null unless the provider is groq
     groq: ctx.groq ? ctx.groq.stats() : null,
     // on-device speech (model state and timings only); null when this setup cannot use it
-    stt: ctx.localStt ? { ...ctx.localStt.stats(), active: ctx.wispr.usesLocal(), fallback: cfg.stt.fallback } : null,
+    stt: ctx.speechStt() ? { ...(ctx.speechStt() as NonNullable<ReturnType<typeof ctx.speechStt>>).stats(), provider: ctx.wispr.sttProvider(), active: ctx.wispr.usesLocal(), fallback: cfg.stt.fallback } : null,
     paused: privacy.isPaused(),
     memory: store.stats(),
   }));
