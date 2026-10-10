@@ -28,6 +28,8 @@ export interface SayOpts {
   device?: "desk" | "pocket";
   activity?: Activity;
   session?: string;
+  /** false: return once the fragment is accepted, without waiting for its analysis (a model that is still thinking) */
+  wait?: boolean;
 }
 
 /** A fully wired app (in-memory DB, real MiniLM embeddings, mock cortex) on a controllable clock. */
@@ -80,7 +82,7 @@ export async function makeApp(env: Record<string, string> = {}, start = "2026-10
     };
     lastEnd = end;
     await ctx.engine.handleFragment(dev, msg);
-    await ctx.engine.idle();
+    if (o.wait !== false) await ctx.engine.idle();
   };
 
   return {

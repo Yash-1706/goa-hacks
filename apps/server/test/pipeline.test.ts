@@ -1,5 +1,9 @@
+import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
+import type { CortexBackend } from "../src/cortex/types";
+import type { Embedder } from "../src/memory/embeddings";
 import { makeApp, type TestApp } from "./app-helper";
+import { modelEmbedder } from "./helpers";
 
 let app: TestApp | undefined;
 afterEach(async () => {
@@ -284,6 +288,66 @@ describe("corrections are safe", () => {
     await app.say("Actually, hmm, I mean, whatever", { gapMs: 1500 });
     await app.settle();
     expect(app.thoughts().some((t) => /rotate/i.test(t.title))).toBe(true);
+  });
+
+  /** The model is "slow": the first analysis takes `ms`, every later one is immediate. */
+  function slowFirstAnalysis(a: TestApp, ms: number): void {
+    const deps = (a.ctx.engine as unknown as { d: { backend: CortexBackend } }).d;
+    const real = deps.backend;
+    let n = 0;
+    deps.backend = {
+      name: real.name,
+      analyze: async (input, onPartial) => {
+        if (n++ === 0) await new Promise((r) => setTimeout(r, ms));
+        return real.analyze(input, onPartial);
+      },
+    };
+  }
+
+  it("a revision spoken while the model is still reading the original waits for that card, then revises it", async () => {
+    app = await makeApp({}, "2026-10-06T10:00:00+05:30");
+    slowFirstAnalysis(app, 300);
+    await app.say("Set up a call with the vendor on Thursday at 3pm", { wait: false });
+    // a long pause (so it is its own thread, not a continuation), yet the first card is still being written (a queued or retried model call)
+    await app.say("Actually make it Friday", { gapMs: 9000 });
+    const ts = app.thoughts();
+    expect(ts).toHaveLength(1);
+    const a = ts[0]!.artifact!.payload as { kind: string; start_iso: string | null };
+    expect(a.kind).toBe("calendar_event");
+    expect(a.start_iso).toBe("2026-10-09T15:00:00+05:30"); // Friday: the original's late result must not win
+    expect(ts[0]!.fragments).toHaveLength(2);
+  });
+
+  it("'scratch that' does not wait for the model: the card is retracted at once and the late result is discarded", async () => {
+    app = await makeApp({}, "2026-10-06T10:00:00+05:30");
+    slowFirstAnalysis(app, 1500);
+    await app.say("Note to self, rotate the staging keys on Friday", { wait: false });
+    expect(app.thoughts()).toHaveLength(1); // the provisional first-paint card
+    const t0 = Date.now();
+    await app.say("Scratch that", { gapMs: 1200, wait: false });
+    while (app.thoughts().length > 0 && Date.now() - t0 < 1400) await new Promise((r) => setTimeout(r, 20));
+    expect(app.thoughts()).toHaveLength(0);
+    expect(Date.now() - t0).toBeLessThan(1200); // retracted long before the 1.5 s model call returns
+    await app.ctx.engine.idle();
+    expect(app.thoughts()).toHaveLength(0); // the late result found nothing to write to
+  });
+
+  it("idle() does not report quiet while a merged correction is still being written to its card", async () => {
+    let embedDelay = 0;
+    const real = await modelEmbedder();
+    const slow = Object.create(real) as Embedder;
+    slow.embed = async (texts, kind) => {
+      if (embedDelay) await new Promise((r) => setTimeout(r, embedDelay));
+      return real.embed(texts, kind);
+    };
+    app = await makeApp({}, "2026-10-06T10:00:00+05:30", ":memory:", randomBytes(32), { embedder: slow });
+    await app.say("Set up a call with the vendor on Thursday at 3pm");
+    await app.settle();
+    embedDelay = 120; // a loaded machine: every embedding now takes 120 ms
+    await app.say("Actually make it Friday", { gapMs: 1500 });
+    // no settle(): say() alone must not return until the revision is on the card
+    const a = app.thoughts()[0]!.artifact!.payload as { start_iso: string | null };
+    expect(a.start_iso).toBe("2026-10-09T15:00:00+05:30");
   });
 });
 

@@ -75,16 +75,31 @@ interface Thread {
   timer?: ReturnType<typeof setTimeout>;
   lastResult?: CortexResult;
   llmStartWall?: number;
+  /** creation order: a correction only ever waits for an older thread, so two threads can never wait for each other */
+  seq: number;
+  /** this thread's analysis loop while `inflight` (a correction waits for its target's) */
+  run?: Promise<void>;
 }
 
 const WORKING_WORDS = 300;
 const RETRACTION = /\b(scratch that|undo that|never ?mind (that|the last)|forget that one|delete that|take that back|ignore that)\b/i;
+const RETRACTION_ALL = new RegExp(RETRACTION.source, "gi");
+const RETRACTION_FILLER = /\b(ok(?:ay)?|so|yeah|yes|no|please|just|sorry|oops|um+|uh+|hmm+)\b/gi;
+
+/** "Scratch that." alone: it needs no card to act on, so it never waits for one. "Scratch that, make it Friday" is a revision. */
+function isPureRetraction(text: string): boolean {
+  if (!RETRACTION.test(text)) return false;
+  return text.replace(RETRACTION_ALL, " ").replace(RETRACTION_FILLER, " ").split(/[^\p{L}\p{N}]+/u).filter(Boolean).length <= 1;
+}
 
 export class CortexEngine {
   private open = new Map<string, Thread>();
   private recentClosed = new Map<string, Thread>();
   private byThought = new Map<string, Thread>();
   private queues = new Map<string, Promise<void>>();
+  /** every analysis loop that is running, including one whose thread was dropped halfway (a correction merged into its target) */
+  private runs = new Set<Promise<void>>();
+  private seq = 0;
   private shuttingDown = false;
 
   constructor(private d: EngineDeps) {}
@@ -104,11 +119,12 @@ export class CortexEngine {
   }
 
   /** Resolve once every queued fragment is processed and no analysis is running (tests, seeding, replays). A model call may also queue for the provider's token budget (Groq's free tier), which the default allows for. */
-  async idle(timeoutMs = 20_000 + (this.d.cfg.llm.provider === "groq" ? this.d.cfg.llm.groq.maxWaitMs : 0)): Promise<void> {
+  async idle(timeoutMs = this.patienceMs()): Promise<void> {
     const t0 = Date.now();
     for (;;) {
       await Promise.allSettled([...this.queues.values()]);
-      const busy = [...this.byThought.values()].some((th) => th.inflight || th.dirty);
+      // `runs`, not only the registered threads: a merged correction leaves `byThought` while it is still writing the revised card
+      const busy = this.runs.size > 0 || [...this.byThought.values()].some((th) => th.inflight || th.dirty);
       if (!busy) return;
       if (Date.now() - t0 > timeoutMs) throw new Error("engine did not become idle in time");
       await new Promise((r) => setTimeout(r, 15));
@@ -355,6 +371,7 @@ export class CortexEngine {
     });
     const th: Thread = {
       thoughtId: thought.id,
+      seq: ++this.seq,
       dev,
       sessionId: session.id,
       fragIds: [],
@@ -420,7 +437,14 @@ export class CortexEngine {
       th.dirty = true;
       return;
     }
-    void this.run(th);
+    const p = this.run(th); // sets `inflight` before its first await
+    th.run = p;
+    this.runs.add(p);
+    const done = (): void => void this.runs.delete(p);
+    p.then(done, (err: Error) => {
+      done();
+      log.error("engine", `analysis loop failed: ${err.message}`);
+    });
   }
 
   private async run(th: Thread): Promise<void> {
@@ -429,6 +453,7 @@ export class CortexEngine {
       do {
         th.dirty = false;
         if (!this.d.store.getThought(th.thoughtId)) break;
+        await this.awaitTarget(th);
         await this.analyzeOnce(th);
       } while (th.dirty && !this.shuttingDown);
     } catch (err) {
@@ -439,6 +464,42 @@ export class CortexEngine {
     if (th.finalizeWhenIdle && this.d.store.getThought(th.thoughtId)) {
       th.finalizeWhenIdle = false;
       await this.finalize(th);
+    }
+  }
+
+  /** Does this thread read as a correction of something said before: a revision ("actually make it Friday") or a retraction? */
+  private readsAsCorrection(frags: FragRec[], tri: Triage, text: string): boolean {
+    return frags.some((f) => textFeatures(f.text).startsWithRepairCue) || tri.probs.correction > 0.25 || /\b(scratch that|undo that|never mind|forget that one)\b/i.test(text);
+  }
+
+  /** How long to wait on a model call that may itself be queueing (Groq's free-tier token budget). */
+  private patienceMs(): number {
+    return 20_000 + (this.d.cfg.llm.provider === "groq" ? this.d.cfg.llm.groq.maxWaitMs : 0);
+  }
+
+  /**
+   * A revision needs the card it revises. If that thought is still being analysed (a slow model, a queued call), wait for it:
+   * otherwise the model is shown no card to change, and the original's late result then overwrites the revision. A plain
+   * retraction needs no card, so it never waits; the late result finds its thought deleted and is discarded.
+   */
+  private async awaitTarget(th: Thread): Promise<void> {
+    const { store, clock, triager } = this.d;
+    const t = store.getThought(th.thoughtId);
+    if (!t) return;
+    const frags = store.fragmentsOf(t);
+    if (!frags.length) return;
+    const text = frags.map((f) => f.text).join(" ");
+    if (!this.readsAsCorrection(frags, triager.classify(text, th.centroid, textFeatures(text)), text) || isPureRetraction(text)) return;
+    const deadline = Date.now() + this.patienceMs();
+    for (;;) {
+      const prev = this.lastOtherThought(th, clock.now());
+      const target = prev ? this.byThought.get(prev.id) : undefined;
+      if (!target?.inflight || !target.run || target.seq >= th.seq) return; // only ever wait for an OLDER thread: no cycles
+      const left = deadline - Date.now();
+      if (left <= 0) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([target.run.catch(() => undefined), new Promise<void>((r) => (timer = setTimeout(r, left)))]);
+      clearTimeout(timer);
     }
   }
 
@@ -459,8 +520,7 @@ export class CortexEngine {
 
     // a correction needs the thing it corrects
     let lastCard: CortexInput["lastCard"] = null;
-    const looksLikeCorrection = frags.some((f) => textFeatures(f.text).startsWithRepairCue) || tri.probs.correction > 0.25 || /\b(scratch that|undo that|never mind|forget that one)\b/i.test(text);
-    if (looksLikeCorrection) {
+    if (this.readsAsCorrection(frags, tri, text)) {
       const prev = this.lastOtherThought(th, now);
       if (prev) {
         const art = prev.artifactId ? store.artifacts.get(prev.artifactId) : undefined;
@@ -787,6 +847,7 @@ export class CortexEngine {
     store.moveFragment(last, nt);
     const nthread: Thread = {
       thoughtId: nt.id,
+      seq: ++this.seq,
       dev: th.dev,
       sessionId: th.sessionId,
       fragIds: [last.id],
@@ -878,6 +939,7 @@ export class CortexEngine {
     const frags = this.d.store.fragmentsOf(target);
     const th: Thread = {
       thoughtId: target.id,
+      seq: ++this.seq,
       dev: from.dev,
       sessionId: target.sessionId,
       fragIds: frags.map((f) => f.id),
