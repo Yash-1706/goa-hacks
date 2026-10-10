@@ -118,7 +118,7 @@
 .lab-jump__btn[aria-current="true"] {
   color: var(--ink);
   background: var(--grad-soft);
-  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(109, 140, 255, 0.42);
 }
 
 /* ---- segmented control (shared with the Outbox) -------------------------------- */
@@ -161,7 +161,7 @@
 .lab-seg__btn[aria-checked="true"] {
   color: var(--ink);
   background: var(--grad-soft);
-  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(109, 140, 255, 0.45);
 }
 .lab-seg__n {
   min-width: 1.3rem;
@@ -173,7 +173,7 @@
   text-align: center;
 }
 .lab-seg__btn[aria-checked="true"] .lab-seg__n {
-  background: rgba(139, 92, 246, 0.32);
+  background: rgba(109, 140, 255, 0.32);
   color: var(--ink);
 }
 
@@ -189,10 +189,10 @@
 }
 @keyframes lab-flash {
   0% {
-    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.7), var(--shadow);
+    box-shadow: 0 0 0 0 rgba(109, 140, 255, 0.7), var(--shadow);
   }
   25% {
-    box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.45), 0 0 50px -8px rgba(139, 92, 246, 0.8);
+    box-shadow: 0 0 0 4px rgba(109, 140, 255, 0.45), 0 0 50px -8px rgba(109, 140, 255, 0.8);
   }
   100% {
     box-shadow: 0 0 0 0 transparent, var(--shadow);
@@ -214,7 +214,7 @@
   border-radius: 10px;
   color: #c4b5fd;
   background: var(--grad-soft);
-  border: 1px solid rgba(139, 92, 246, 0.32);
+  border: 1px solid rgba(109, 140, 255, 0.32);
 }
 .lab-panel__titles {
   flex: 1 1 14rem;
@@ -347,7 +347,7 @@
   top: -34%;
   width: 62%;
   height: 78%;
-  background: radial-gradient(closest-side, rgba(139, 92, 246, 0.24), transparent 72%);
+  background: radial-gradient(closest-side, rgba(109, 140, 255, 0.24), transparent 72%);
   pointer-events: none;
 }
 .lab-hero__main > * {
@@ -505,7 +505,7 @@
   top: 2px;
   bottom: 2px;
   border-radius: 999px;
-  background: rgba(34, 211, 238, 0.4);
+  background: rgba(45, 212, 191, 0.4);
   transition: left 0.5s var(--ease), width 0.5s var(--ease);
 }
 .lab-gauge__line {
@@ -1262,7 +1262,7 @@
   padding: 1rem 1.15rem;
   border-radius: 16px;
   border: 1px solid var(--line);
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.11), rgba(34, 211, 238, 0.06));
+  background: linear-gradient(135deg, rgba(109, 140, 255, 0.11), rgba(45, 212, 191, 0.06));
 }
 @media (max-width: 860px) {
   .lab-cmp {
@@ -1645,9 +1645,9 @@
   transform: translateY(1px);
 }
 .lab-aut__card.is-on {
-  border-color: rgba(139, 92, 246, 0.62);
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.17), rgba(34, 211, 238, 0.07));
-  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.25), 0 14px 40px -18px rgba(139, 92, 246, 0.75);
+  border-color: rgba(109, 140, 255, 0.62);
+  background: linear-gradient(180deg, rgba(109, 140, 255, 0.17), rgba(45, 212, 191, 0.07));
+  box-shadow: 0 0 0 1px rgba(109, 140, 255, 0.25), 0 14px 40px -18px rgba(109, 140, 255, 0.75);
 }
 .lab-aut__card[aria-disabled="true"] {
   opacity: 0.55;
@@ -1668,7 +1668,7 @@
 }
 .lab-aut__card.is-on .lab-aut__level {
   background: var(--grad);
-  color: #0b0d12;
+  color: #080c16;
 }
 .lab-aut__steps {
   display: inline-flex;
@@ -1883,8 +1883,8 @@
   gap: 0.25rem;
   padding: 0 0.4rem;
   border-radius: 999px;
-  border: 1px solid rgba(34, 211, 238, 0.3);
-  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  background: rgba(45, 212, 191, 0.08);
   color: #a5f3fc;
   font-size: 0.62rem;
   font-weight: 650;
@@ -1902,9 +1902,9 @@
   gap: 0.9rem;
   padding: 0.8rem 1rem;
   border-radius: 16px;
-  border: 1px solid rgba(139, 92, 246, 0.45);
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.14), rgba(34, 211, 238, 0.08));
-  box-shadow: 0 0 44px -20px rgba(139, 92, 246, 0.9);
+  border: 1px solid rgba(109, 140, 255, 0.45);
+  background: linear-gradient(135deg, rgba(109, 140, 255, 0.14), rgba(45, 212, 191, 0.08));
+  box-shadow: 0 0 44px -20px rgba(109, 140, 255, 0.9);
 }
 .lab-heal__badge {
   flex: none;
@@ -1914,7 +1914,7 @@
   padding: 0.2rem 0.6rem;
   border-radius: 999px;
   background: var(--grad);
-  color: #0b0d12;
+  color: #080c16;
   font-size: 0.66rem;
   font-weight: 760;
   letter-spacing: 0.1em;
@@ -2088,8 +2088,8 @@
   color: #c4b5fd;
 }
 .lab-stance--down {
-  border-color: rgba(34, 211, 238, 0.4);
-  background: rgba(34, 211, 238, 0.09);
+  border-color: rgba(45, 212, 191, 0.4);
+  background: rgba(45, 212, 191, 0.09);
   color: #a5f3fc;
 }
 .lab-adapt__track {
@@ -2116,7 +2116,7 @@
   background: rgba(167, 139, 250, 0.6);
 }
 .lab-adapt__span--easier {
-  background: rgba(34, 211, 238, 0.55);
+  background: rgba(45, 212, 191, 0.55);
 }
 .lab-adapt__def {
   position: absolute;
@@ -2287,8 +2287,8 @@
   color: var(--dim);
 }
 .lab-badge--info {
-  border-color: rgba(34, 211, 238, 0.4);
-  background: rgba(34, 211, 238, 0.09);
+  border-color: rgba(45, 212, 191, 0.4);
+  background: rgba(45, 212, 191, 0.09);
   color: #a5f3fc;
 }
 .lab-badge--warn {

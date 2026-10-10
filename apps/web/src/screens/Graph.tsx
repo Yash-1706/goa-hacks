@@ -310,8 +310,8 @@ function EmptyState() {
       <svg className="gx-empty__art" viewBox="0 0 320 200" aria-hidden>
         <defs>
           <linearGradient id="gx-eg" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0" stopColor="#8b5cf6" />
-            <stop offset="1" stopColor="#22d3ee" />
+            <stop offset="0" stopColor="#6d8cff" />
+            <stop offset="1" stopColor="#2dd4bf" />
           </linearGradient>
         </defs>
         <g className="gx-empty__lines" stroke="url(#gx-eg)" strokeWidth="1" fill="none" strokeLinecap="round">

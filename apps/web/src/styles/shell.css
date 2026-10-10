@@ -82,12 +82,12 @@
   z-index: -1;
   border-radius: 14px;
   background: var(--grad-soft);
-  border: 1px solid rgba(139, 92, 246, 0.35);
-  box-shadow: 0 0 22px -6px rgba(139, 92, 246, 0.55);
+  border: 1px solid rgba(109, 140, 255, 0.35);
+  box-shadow: 0 0 22px -6px rgba(109, 140, 255, 0.55);
 }
 .nav__item[aria-current="page"] svg {
   color: #c4b5fd;
-  filter: drop-shadow(0 0 6px rgba(139, 92, 246, 0.8));
+  filter: drop-shadow(0 0 6px rgba(109, 140, 255, 0.8));
 }
 .nav__badge {
   position: absolute;
@@ -265,11 +265,11 @@ button.tchip:hover {
 @keyframes chip-bump {
   0% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.6);
+    box-shadow: 0 0 0 0 rgba(109, 140, 255, 0.6);
   }
   35% {
     transform: scale(1.1);
-    box-shadow: 0 0 0 8px rgba(139, 92, 246, 0);
+    box-shadow: 0 0 0 8px rgba(109, 140, 255, 0);
   }
   100% {
     transform: scale(1);
@@ -478,7 +478,7 @@ html.lg .hide-md {
 }
 .pair__code input:focus {
   border-color: var(--cyan);
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.16);
 }
 .pair__error {
   color: #fda4b4;

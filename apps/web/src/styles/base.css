@@ -5,12 +5,12 @@
 @theme {
   --font-sans: Helvetica, "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
-  --color-bg: #0b0d12;
+  --color-bg: #080c16;
   --color-ink: #e8eaf0;
   --color-dim: #a4adbd;
   --color-faint: #8590a3;
-  --color-violet: #0ea5a4;
-  --color-cyan: #f59e0b;
+  --color-violet: #6d8cff;
+  --color-cyan: #2dd4bf;
   --color-ok: #34d399;
   --color-warn: #fbbf24;
   --color-danger: #fb7185;
@@ -18,8 +18,8 @@
 
 :root {
   color-scheme: dark;
-  --bg: #0b0d12;
-  --bg-2: #10131b;
+  --bg: #080c16;
+  --bg-2: #0d1322;
   --glass: rgba(255, 255, 255, 0.04);
   --glass-2: rgba(255, 255, 255, 0.07);
   --glass-3: rgba(255, 255, 255, 0.11);
@@ -28,13 +28,13 @@
   --ink: #e8eaf0;
   --dim: #a4adbd;
   --faint: #8590a3;
-  --violet: #0ea5a4;
-  --cyan: #f59e0b;
+  --violet: #6d8cff;
+  --cyan: #2dd4bf;
   --ok: #34d399;
   --warn: #fbbf24;
   --danger: #fb7185;
-  --grad: linear-gradient(135deg, #0ea5a4 0%, #f59e0b 100%);
-  --grad-soft: linear-gradient(135deg, rgba(14, 165, 164, 0.22) 0%, rgba(245, 158, 11, 0.16) 100%);
+  --grad: linear-gradient(135deg, #6d8cff 0%, #2dd4bf 100%);
+  --grad-soft: linear-gradient(135deg, rgba(109, 140, 255, 0.22) 0%, rgba(45, 212, 191, 0.16) 100%);
   --shadow: 0 14px 44px -16px rgba(0, 0, 0, 0.7), 0 2px 10px rgba(0, 0, 0, 0.35);
   --radius: 18px;
   --nav-w: 72px;
@@ -50,7 +50,7 @@
   --c-code: #34d399;
   --c-decision: #e879f9;
   --c-idea: #facc15;
-  --c-question: #f59e0b;
+  --c-question: #2dd4bf;
   --c-journal: #94a3b8;
   --c-recall_query: #818cf8;
   --c-aside: #6b7280;
@@ -94,7 +94,7 @@ body {
 }
 
 ::selection {
-  background: rgba(139, 92, 246, 0.45);
+  background: rgba(109, 140, 255, 0.45);
 }
 
 :focus-visible {
@@ -127,7 +127,7 @@ a {
   left: 0.6rem;
   padding: 0.5rem 0.9rem;
   border-radius: 10px;
-  background: #0b0d12;
+  background: #080c16;
   border: 1px solid var(--cyan);
   color: var(--ink);
   font-size: 0.85rem;
@@ -156,8 +156,8 @@ a {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(38% 34% at 18% 14%, rgba(139, 92, 246, 0.2), transparent 70%),
-    radial-gradient(34% 30% at 86% 88%, rgba(34, 211, 238, 0.13), transparent 70%),
+    radial-gradient(38% 34% at 18% 14%, rgba(109, 140, 255, 0.2), transparent 70%),
+    radial-gradient(34% 30% at 86% 88%, rgba(45, 212, 191, 0.13), transparent 70%),
     radial-gradient(28% 24% at 72% 18%, rgba(232, 121, 249, 0.08), transparent 70%),
     radial-gradient(30% 26% at 12% 90%, rgba(56, 189, 248, 0.06), transparent 70%);
   animation: aurora-drift 48s ease-in-out infinite alternate;
@@ -249,9 +249,9 @@ a {
 .btn-primary {
   background: var(--grad);
   border-color: transparent;
-  color: #0b0d12;
+  color: #080c16;
   font-weight: 650;
-  box-shadow: 0 6px 22px -8px rgba(139, 92, 246, 0.7);
+  box-shadow: 0 6px 22px -8px rgba(109, 140, 255, 0.7);
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--grad);
@@ -315,8 +315,8 @@ a {
 }
 .icon-btn[aria-pressed="true"] {
   color: var(--cyan);
-  background: rgba(34, 211, 238, 0.1);
-  border-color: rgba(34, 211, 238, 0.3);
+  background: rgba(45, 212, 191, 0.1);
+  border-color: rgba(45, 212, 191, 0.3);
 }
 
 /* ---- chips ------------------------------------------------------------- */
@@ -434,8 +434,8 @@ a.chip:hover {
   color: var(--faint);
 }
 .input:focus {
-  border-color: rgba(34, 211, 238, 0.65);
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.14);
+  border-color: rgba(45, 212, 191, 0.65);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.14);
   background: rgba(0, 0, 0, 0.4);
 }
 
@@ -574,3 +574,14 @@ a.chip:hover {
     animation: none;
   }
 }
+
+/* Production polish: accessible focus, calmer motion, crisper surfaces */
+:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; border-radius: 8px; }
+::selection { background: rgba(109, 140, 255, 0.35); }
+button, a, [role="button"] { transition: background-color 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.18s var(--ease), box-shadow 0.18s var(--ease); }
+button:active { transform: translateY(1px); }
+.glass { backdrop-filter: blur(14px) saturate(1.2); box-shadow: var(--shadow); }
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }

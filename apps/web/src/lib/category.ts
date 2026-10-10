@@ -33,7 +33,7 @@ export const CATEGORY_META: Record<Category, CategoryMeta> = {
   code: { label: "Code", color: "#34d399", icon: Code2, gloss: "An implementation idea" },
   decision: { label: "Decision", color: "#e879f9", icon: GitBranch, gloss: "A choice, with what was rejected" },
   idea: { label: "Idea", color: "#facc15", icon: Lightbulb, gloss: "A thought worth keeping" },
-  question: { label: "Question", color: "#22d3ee", icon: CircleHelp, gloss: "An open loop" },
+  question: { label: "Question", color: "#2dd4bf", icon: CircleHelp, gloss: "An open loop" },
   journal: { label: "Journal", color: "#94a3b8", icon: BookOpen, gloss: "Ephemeral remark (72 h)" },
   recall_query: { label: "Recall", color: "#818cf8", icon: Search, gloss: "A question for memory" },
   aside: { label: "Aside", color: "#6b7280", icon: Ghost, gloss: "Filtered, never stored" },

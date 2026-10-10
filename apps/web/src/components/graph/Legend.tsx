@@ -75,7 +75,7 @@ export const Legend = memo(function Legend({ stats, onSelect }: { stats: GraphSt
             <ul className="gx-key">
               <li>
                 <Swatch>
-                  <circle cx="13" cy="11" r="8" fill="rgba(139,92,246,.16)" stroke="#8b5cf6" strokeWidth="2.2" />
+                  <circle cx="13" cy="11" r="8" fill="rgba(109,140,255,.16)" stroke="#6d8cff" strokeWidth="2.2" />
                 </Swatch>
                 <span>
                   <b>Session</b> a conversation. Colour per session.
@@ -84,7 +84,7 @@ export const Legend = memo(function Legend({ stats, onSelect }: { stats: GraphSt
               <li>
                 <Swatch>
                   <circle cx="7" cy="11" r="5" fill="none" stroke="#a78bfa" strokeWidth="1.8" />
-                  <circle cx="19" cy="11" r="5" fill="none" stroke="#22d3ee" strokeWidth="1.8" strokeDasharray="3 2.2" />
+                  <circle cx="19" cy="11" r="5" fill="none" stroke="#2dd4bf" strokeWidth="1.8" strokeDasharray="3 2.2" />
                 </Swatch>
                 <span>
                   <b>Solid ring</b> desk, <b>dashed</b> pocket (phone).
@@ -118,7 +118,7 @@ export const Legend = memo(function Legend({ stats, onSelect }: { stats: GraphSt
               </li>
               <li>
                 <Swatch>
-                  <circle cx="13" cy="11" r="7" fill="#0b0d12" stroke="#34d399" strokeWidth="1.4" />
+                  <circle cx="13" cy="11" r="7" fill="#080c16" stroke="#34d399" strokeWidth="1.4" />
                   <path d="M10.2 8.6 L7.6 11 L10.2 13.4 M15.8 8.6 L18.4 11 L15.8 13.4" fill="none" stroke="#34d399" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                 </Swatch>
                 <span>

@@ -185,14 +185,14 @@ export function Sparkline({ values, width = 78, height = 24, target = 1000, max 
     <svg className="spark" width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden>
       <defs>
         <linearGradient id="spark-g" x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" stopColor="#8b5cf6" />
-          <stop offset="1" stopColor="#22d3ee" />
+          <stop offset="0" stopColor="#6d8cff" />
+          <stop offset="1" stopColor="#2dd4bf" />
         </linearGradient>
       </defs>
       <line className="target" x1="0" x2={width} y1={geometry.ty} y2={geometry.ty} />
       <path className="area" d={geometry.area} fill="url(#spark-g)" />
       <path className="line" d={geometry.line} stroke="url(#spark-g)" />
-      <circle cx={geometry.last[0]} cy={geometry.last[1]} r="2.2" fill="#22d3ee" />
+      <circle cx={geometry.last[0]} cy={geometry.last[1]} r="2.2" fill="#2dd4bf" />
     </svg>
   );
 }

@@ -117,7 +117,7 @@
 .seg__btn[aria-selected="true"] {
   background: var(--grad-soft);
   color: var(--ink);
-  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(109, 140, 255, 0.4);
 }
 .seg__dot {
   position: absolute;
@@ -469,7 +469,7 @@
   padding: 0.85rem 0.95rem 0.8rem 1.1rem;
   border-radius: 18px;
   border: 1px solid rgba(232, 121, 249, 0.3);
-  background: linear-gradient(180deg, rgba(232, 121, 249, 0.09), rgba(139, 92, 246, 0.035));
+  background: linear-gradient(180deg, rgba(232, 121, 249, 0.09), rgba(109, 140, 255, 0.035));
   box-shadow: 0 12px 36px -18px rgba(232, 121, 249, 0.55);
   overflow: hidden;
 }
@@ -572,7 +572,7 @@
 .slot--on {
   color: #fff;
   border-color: transparent;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.55), rgba(232, 121, 249, 0.45));
+  background: linear-gradient(135deg, rgba(109, 140, 255, 0.55), rgba(232, 121, 249, 0.45));
   box-shadow: 0 6px 20px -8px rgba(232, 121, 249, 0.8);
 }
 .sug__actions {
@@ -604,8 +604,8 @@
   align-items: flex-start;
   padding: 0.75rem 0.7rem 0.75rem 0.85rem;
   border-radius: 16px;
-  border: 1px solid rgba(34, 211, 238, 0.22);
-  background: linear-gradient(180deg, rgba(34, 211, 238, 0.07), rgba(34, 211, 238, 0.015));
+  border: 1px solid rgba(45, 212, 191, 0.22);
+  background: linear-gradient(180deg, rgba(45, 212, 191, 0.07), rgba(45, 212, 191, 0.015));
 }
 .echo__ripple {
   position: relative;
@@ -656,9 +656,9 @@
   position: relative;
   padding: 0.85rem 0.95rem 0.8rem 1.1rem;
   border-radius: 18px;
-  border: 1px solid rgba(34, 211, 238, 0.3);
-  background: linear-gradient(180deg, rgba(34, 211, 238, 0.09), rgba(139, 92, 246, 0.04));
-  box-shadow: 0 12px 36px -18px rgba(34, 211, 238, 0.5);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  background: linear-gradient(180deg, rgba(45, 212, 191, 0.09), rgba(109, 140, 255, 0.04));
+  box-shadow: 0 12px 36px -18px rgba(45, 212, 191, 0.5);
   overflow: hidden;
 }
 .brief::before {
@@ -668,13 +668,13 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(180deg, #22d3ee, #8b5cf6);
-  box-shadow: 0 0 18px #22d3ee;
+  background: linear-gradient(180deg, #2dd4bf, #6d8cff);
+  box-shadow: 0 0 18px #2dd4bf;
 }
 .brief .sug__icon {
-  background: rgba(34, 211, 238, 0.13);
+  background: rgba(45, 212, 191, 0.13);
   color: #67e8f9;
-  border-color: rgba(34, 211, 238, 0.32);
+  border-color: rgba(45, 212, 191, 0.32);
 }
 .brief .sug__kind {
   color: #67e8f9;

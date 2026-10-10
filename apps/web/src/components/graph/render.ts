@@ -639,8 +639,8 @@ export class GraphRenderer {
 
     if (bridge) {
       // bridging entities are hubs: a violet-cyan halo and a slowly turning dashed ring
-      glow(ctx, x, y, half * 4.4, "#8b5cf6", 0.5 * alpha);
-      if (px >= 4) glow(ctx, x, y, half * 3.1, "#22d3ee", 0.32 * alpha);
+      glow(ctx, x, y, half * 4.4, "#6d8cff", 0.5 * alpha);
+      if (px >= 4) glow(ctx, x, y, half * 3.1, "#2dd4bf", 0.32 * alpha);
     } else if (q.halos) glow(ctx, x, y, half * 2.9, color, 0.3 * alpha);
 
     const s = half * 2;
@@ -679,7 +679,7 @@ export class GraphRenderer {
       const by = y - half * 0.95;
       const br = Math.max(4.2, 5.2 / Math.sqrt(scale));
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = "#8b5cf6";
+      ctx.fillStyle = "#6d8cff";
       ctx.beginPath();
       ctx.arc(bx, by, br, 0, TAU);
       ctx.fill();

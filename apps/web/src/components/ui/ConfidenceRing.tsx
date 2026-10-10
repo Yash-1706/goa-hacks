@@ -8,7 +8,7 @@ const colorOf = (v: number): string => (v >= 0.75 ? "#34d399" : v >= 0.55 ? "#fb
 /** Confidence as a ring (0–100). While the model is still thinking it spins as a dashed arc instead. */
 export const ConfidenceRing = memo(function ConfidenceRing({ value, size = 36, thinking = false }: { value: number; size?: number; thinking?: boolean }) {
   const v = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-  const color = thinking ? "#22d3ee" : colorOf(v);
+  const color = thinking ? "#2dd4bf" : colorOf(v);
   return (
     <svg
       width={size}

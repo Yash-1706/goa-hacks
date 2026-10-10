@@ -125,8 +125,8 @@
 .pk-pause--resume {
   border-color: transparent;
   background: var(--grad);
-  color: #0b0d12;
-  box-shadow: 0 10px 30px -10px rgba(139, 92, 246, 0.8);
+  color: #080c16;
+  box-shadow: 0 10px 30px -10px rgba(109, 140, 255, 0.8);
 }
 .pk-pause:disabled {
   opacity: 0.5;

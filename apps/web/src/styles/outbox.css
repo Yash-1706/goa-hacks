@@ -74,10 +74,10 @@
 .ob-aut__step.is-on .ob-aut__node {
   border-color: transparent;
   background: var(--grad);
-  color: #0b0d12;
+  color: #080c16;
 }
 .ob-aut__step.is-now .ob-aut__node {
-  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.28), 0 0 18px rgba(139, 92, 246, 0.6);
+  box-shadow: 0 0 0 4px rgba(109, 140, 255, 0.28), 0 0 18px rgba(109, 140, 255, 0.6);
 }
 .ob-aut__name {
   color: var(--faint);
@@ -128,7 +128,7 @@
   --st: #34d399;
 }
 .ob-group--executed {
-  --st: #22d3ee;
+  --st: #2dd4bf;
 }
 .ob-group--dismissed {
   --st: #94a3b8;
@@ -257,7 +257,7 @@
   --st: #34d399;
 }
 .ob-card[data-status="executed"] {
-  --st: #22d3ee;
+  --st: #2dd4bf;
 }
 .ob-card[data-status="dismissed"],
 .ob-card[data-status="undone"] {
@@ -359,7 +359,7 @@
   --s: #34d399;
 }
 .ob-status--executed {
-  --s: #22d3ee;
+  --s: #2dd4bf;
 }
 .ob-status--dismissed,
 .ob-status--undone {
@@ -453,7 +453,7 @@
   width: 4.4rem;
   height: 4.4rem;
   border-radius: 50%;
-  border: 1px solid rgba(139, 92, 246, 0.4);
+  border: 1px solid rgba(109, 140, 255, 0.4);
   background: var(--grad-soft);
   color: #c4b5fd;
 }
@@ -461,7 +461,7 @@
   position: absolute;
   inset: -0.5rem;
   border-radius: 50%;
-  border: 1px solid rgba(139, 92, 246, 0.35);
+  border: 1px solid rgba(109, 140, 255, 0.35);
   animation: ob-ring 3.2s ease-out infinite;
 }
 @keyframes ob-ring {

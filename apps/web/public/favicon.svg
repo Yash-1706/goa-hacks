@@ -3,7 +3,7 @@
     <radialGradient id="bg" cx="28%" cy="18%" r="95%">
       <stop offset="0" stop-color="#241b45"/>
       <stop offset="0.55" stop-color="#101323"/>
-      <stop offset="1" stop-color="#0b0d12"/>
+      <stop offset="1" stop-color="#080c16"/>
     </radialGradient>
     <radialGradient id="halo" cx="50%" cy="50%" r="50%">
       <stop offset="0" stop-color="#8b5cf6" stop-opacity=".6"/>

@@ -32,7 +32,7 @@
   touch-action: none;
 }
 .gx-canvas:focus-visible {
-  box-shadow: inset 0 0 0 2px rgba(34, 211, 238, 0.4);
+  box-shadow: inset 0 0 0 2px rgba(45, 212, 191, 0.4);
   border-radius: 0;
 }
 .gx-canvas .force-graph-container,
@@ -179,9 +179,9 @@
   border: 0;
   border-radius: 50%;
   background: var(--grad);
-  color: #0b0d12;
+  color: #080c16;
   cursor: pointer;
-  box-shadow: 0 6px 22px -6px rgba(139, 92, 246, 0.8);
+  box-shadow: 0 6px 22px -6px rgba(109, 140, 255, 0.8);
   transition: transform 0.15s var(--ease), box-shadow 0.2s, filter 0.2s;
   -webkit-tap-highlight-color: transparent;
 }
@@ -193,7 +193,7 @@
   transform: scale(0.96);
 }
 .gx-play[aria-pressed="true"] {
-  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.22), 0 6px 26px -4px rgba(34, 211, 238, 0.75);
+  box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.22), 0 6px 26px -4px rgba(45, 212, 191, 0.75);
 }
 .gx-play:disabled {
   opacity: 0.4;
@@ -223,7 +223,7 @@
 .gx-track::after {
   width: calc((100% - 16px) * var(--p, 0) / 100%);
   background: var(--grad);
-  box-shadow: 0 0 14px rgba(139, 92, 246, 0.6);
+  box-shadow: 0 0 14px rgba(109, 140, 255, 0.6);
 }
 .gx-ticks {
   position: absolute;
@@ -240,7 +240,7 @@
   flex: 1;
   min-width: 1px;
   border-radius: 2px 2px 0 0;
-  background: linear-gradient(to top, rgba(34, 211, 238, 0.9), rgba(139, 92, 246, 0.9));
+  background: linear-gradient(to top, rgba(45, 212, 191, 0.9), rgba(109, 140, 255, 0.9));
 }
 .gx-marks {
   position: absolute;
@@ -291,8 +291,8 @@
   margin-top: 1px;
   border: 0;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff, #ddd6fe 55%, #8b5cf6);
-  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.3), 0 0 18px rgba(34, 211, 238, 0.65);
+  background: radial-gradient(circle at 35% 30%, #fff, #ddd6fe 55%, #6d8cff);
+  box-shadow: 0 0 0 4px rgba(109, 140, 255, 0.3), 0 0 18px rgba(45, 212, 191, 0.65);
   transition: box-shadow 0.15s, transform 0.15s;
 }
 .gx-range::-moz-range-thumb {
@@ -300,17 +300,17 @@
   height: 16px;
   border: 0;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff, #ddd6fe 55%, #8b5cf6);
-  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.3), 0 0 18px rgba(34, 211, 238, 0.65);
+  background: radial-gradient(circle at 35% 30%, #fff, #ddd6fe 55%, #6d8cff);
+  box-shadow: 0 0 0 4px rgba(109, 140, 255, 0.3), 0 0 18px rgba(45, 212, 191, 0.65);
 }
 .gx-range:hover::-webkit-slider-thumb {
   transform: scale(1.15);
 }
 .gx-range:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px #0b0d12, 0 0 0 5px var(--cyan), 0 0 20px rgba(34, 211, 238, 0.7);
+  box-shadow: 0 0 0 3px #080c16, 0 0 0 5px var(--cyan), 0 0 20px rgba(45, 212, 191, 0.7);
 }
 .gx-range:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 3px #0b0d12, 0 0 0 5px var(--cyan), 0 0 20px rgba(34, 211, 238, 0.7);
+  box-shadow: 0 0 0 3px #080c16, 0 0 0 5px var(--cyan), 0 0 20px rgba(45, 212, 191, 0.7);
 }
 .gx-range:disabled {
   cursor: not-allowed;
@@ -698,7 +698,7 @@
   overflow: hidden;
 }
 .gx-panel[data-pinned="false"] {
-  border-color: rgba(34, 211, 238, 0.3);
+  border-color: rgba(45, 212, 191, 0.3);
 }
 .gx-panel__grip {
   display: none;
@@ -925,8 +925,8 @@
   white-space: nowrap;
 }
 .gx-pill--bridge {
-  border-color: rgba(139, 92, 246, 0.5);
-  background: rgba(139, 92, 246, 0.14);
+  border-color: rgba(109, 140, 255, 0.5);
+  background: rgba(109, 140, 255, 0.14);
   color: #ddd6fe;
 }
 .gx-ret {
@@ -1068,8 +1068,8 @@
   margin: 0.2rem 0 0;
   padding: 0.45rem 0.95rem;
   border-radius: 999px;
-  border: 1px solid rgba(34, 211, 238, 0.3);
-  background: rgba(34, 211, 238, 0.07);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  background: rgba(45, 212, 191, 0.07);
   color: #a5f3fc;
   font-size: 0.82rem;
 }

@@ -13,8 +13,8 @@
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .rc-ask:focus-within {
-  border-color: rgba(34, 211, 238, 0.6);
-  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.1), var(--shadow);
+  border-color: rgba(45, 212, 191, 0.6);
+  box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.1), var(--shadow);
 }
 .rc-ask__icon {
   flex: none;
