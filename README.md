@@ -66,6 +66,7 @@ Phones need HTTPS for the microphone. In PowerShell: `$env:HTTPS=1; pnpm dev:web
 | `pnpm test` / `pnpm typecheck` | all tests / all type checks |
 | `pnpm replay scripts/replay/s1_bug.json [--speed 4] [--local]` | play a scripted ramble into the running server (watch the UI), or in-process |
 | `pnpm wispr:check [--rest] [--idle 60]` | the first thing to run once a Wispr key exists: speaks a synthetic sentence through the real token path and streamer and reports the Wispr wire assumptions as PASS / FAIL / UNKNOWN |
+| `apps/web/scripts/voice-smoke/` | the whole browser voice path with no key and no microphone: a synthetic voice is played into the page as the mic (real VAD, packetizer and streamer) against the strict fake Wispr; see its README |
 | `pnpm seed [--reset]` | write ~8 backdated sessions (development aid; **the live demo should use real dogfooded sessions**) |
 | `pnpm eval [--live] [--limit N] [--out file]` | score intent, control phrases, reference resolution, recall, nonsense robustness → `docs/EVAL.md`. `--live` uses the configured provider and says so in the report header (`cortex: live groq/<model>`); `--limit N` samples N items per section (a free tier's quota is small); a Groq run writes `docs/EVAL.groq.md` so the committed offline report is never overwritten |
 | `pnpm bench [--live] [--limit N] [--out file]` | per-stage latency benchmark → `docs/LATENCY.md`, `docs/latency.csv` (a Groq run writes `docs/LATENCY.groq.md`) |

@@ -53,6 +53,7 @@ Everything below was run against the real server and the real UI, not mocks, wit
 - **Screens:** Recall (constraint chips, sources in 4 ms, cited answer), Privacy Center, Graph (timeline scrub), Lab, Outbox (edit persisted on the server), Pocket at 375 px; no horizontal overflow on any route; no console errors apart from the browser's own "WebSocket failed" lines while the server was down.
 - **Network:** from a LAN address every route except `/api/health` answers 401 until paired; dev routes answer 401/404 off-loopback; a public website origin gets 403; the HTTPS dev mode serves pages, proxies the API and upgrades WebSockets; the production build's service worker is valid and precaches 34 files that all exist.
 - **Voice path without a key:** `pnpm wispr:check` ran the real streamer, over a real socket, through the real server token path against the strict fake: PASS on every item that can be tested from Node.
+- **Voice path in a real browser (synthetic voice, still no Wispr key):** a Windows-generated voice played into the page as the "microphone" (`apps/web/scripts/voice-smoke/`) and the strict fake Wispr behind the real server. The real Silero VAD (WASM) caught a 3.2 s and a 6.3 s sentence (102 and 198 packets of 32 ms, 1,024 bytes each, one `commit` with the matching total) and the same sentence at −31 dBFS, which the Stream tagged `WHISPER`; silence sent nothing; the fake counted **0 protocol violations**. Cards appeared 203–414 ms after the final text (first paint p50 203 ms, finished card p50 264 ms, speech → card p50 1.06 s with a 300 ms fake Wispr). Restarting the upstream was recovered by the standby socket; with a silent socket the app waited out the 4 s timeout, fell back to REST (a WAV the strict fake accepts) and still produced the card; a spoken "pause memory" released the mic, closed every Wispr socket, paused the server and was never stored (811 ms by the app's own clock). **Not covered:** a physical microphone, room acoustics, real whispers, the real Wispr service.
 
 ### Bugs this pass found (each fixed, each with a regression test)
 
@@ -76,8 +77,8 @@ Everything below was run against the real server and the real UI, not mocks, wit
 ### Capture: "Ear"
 | ID | Pri | Status | Evidence, and what is missing |
 |---|---|---|---|
-| CAP-1 VAD-gated streaming | P0 | 🔶 | ✅ silence → zero network audio and zero radio time; pre-roll flushed at the first packet (`audio/engine.test.ts`). Onset → first packet ≤ 150 ms needs a real mic |
-| CAP-2 whisper-sensitive | P0 | 🔶 | ✅ VAD tuned (threshold 0.35, calibrated noise floor, whisper flag follows the room); only a synthetic voice was available, so "≥ 9/10 real whispers" is unmeasured |
+| CAP-1 VAD-gated streaming | P0 | 🔶 | ✅ silence → zero network audio and zero radio time; pre-roll flushed at the first packet (`audio/engine.test.ts`); also seen in a real browser with the real VAD (silence sent nothing, speech became 32 ms packets). Onset → first packet ≤ 150 ms needs a real mic |
+| CAP-2 whisper-sensitive | P0 | 🔶 | ✅ VAD tuned (threshold 0.35, calibrated noise floor, whisper flag follows the room); the real VAD in a browser also caught a synthetic voice at −31 dBFS and flagged it as a whisper, but only a synthetic voice was available, so "≥ 9/10 real whispers" is unmeasured |
 | CAP-3 aggressive segmentation | P0 | 🔶 | ✅ commit at 480 ms of silence, stitcher re-joins (`pipeline.test.ts`); fragment counts on a real 2-minute ramble not measured |
 | CAP-4 context-primed Wispr | P0 | ✅ | `audio/wispr.test.ts` (dictionary ≤ 150 terms, last ≤ 6 messages, name, language), `modules.test.ts` (server context redacted) |
 | CAP-5 per-fragment features | P0 | ✅ | `FragmentFinal` schema validated on every emitted fragment; activity from motion sensors is 🔶 (real phone) |
@@ -134,7 +135,7 @@ Everything below was run against the real server and the real UI, not mocks, wit
 ### Privacy: "Guardian"
 | ID | Pri | Status | Evidence, and what is missing |
 |---|---|---|---|
-| PRV-1 whispered kill switch | P0 | 🔶 | ✅ mic released *first*, phrase never stored, airtight afterwards, all devices told (`engine.test.ts`, `gateway.test.ts`); ≤ 1 s p95 on a real device is unmeasured, and it includes Wispr's round trip (an on-device keyword spotter is ⬜) |
+| PRV-1 whispered kill switch | P0 | 🔶 | ✅ mic released *first*, phrase never stored, airtight afterwards, all devices told (`engine.test.ts`, `gateway.test.ts`); in a real browser a spoken phrase released the mic 811 ms after it ended (fake Wispr, 300 ms); ≤ 1 s p95 on a real device is unmeasured, and it includes Wispr's round trip (an on-device keyword spotter is ⬜) |
 | PRV-2 retroactive purge | P0 | ✅ | trailing 30 s purged on pause; "forget the last five minutes"; forgetting by meaning |
 | PRV-3 deliberate resume | P0 | ✅ | fragments refused until a tap; no voice path resumes |
 | PRV-4 audio never on our server | P0 | ✅ | `no-audio.test.ts`, `audio/egress.test.ts` |
