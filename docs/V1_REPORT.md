@@ -1,6 +1,6 @@
 # Synapse V1: report
 
-Branch `v1` (7 commits on top of `main` 961283c), not pushed. Plan: [V1_PLAN.md](V1_PLAN.md). Day-by-day log with every decision: [V1_PROGRESS.md](V1_PROGRESS.md). What only you can do: [MANUAL_STEPS.md](MANUAL_STEPS.md).
+Branch `v1` (7 commits on top of `main` 961283c), not pushed. Plan: [V1_PLAN.md](dev/V1_PLAN.md). Day-by-day log with every decision: [V1_PROGRESS.md](dev/V1_PROGRESS.md). What only you can do: [MANUAL_STEPS.md](dev/MANUAL_STEPS.md).
 
 ## 1. Summary
 
@@ -103,7 +103,7 @@ GitHub: ✅ @SayedZahur786 via gh auth token (Phase 0); ⚠️ "could not reach 
 - Offline: **"Waiting for network"**, with 0 server captures for that clip. Back online: **exactly 1**.
 - Manifest correct: start URL, shortcut and share target.
 
-**Outputs, Phase 3.** Same phone flow, with a fake GitHub standing in for `SayedZahur786/synapse-sandbox`:
+**Outputs, Phase 3.** Same phone flow, with a fake GitHub standing in for `<owner>/synapse-sandbox`:
 - **Create issue** returned "Created #1", filed with the footer and no internal IDs.
 - The email asked **"Who is ‘the team’?"** once. The mailto and Gmail links decode to the right recipients, subject and body.
 - Reminder at **tomorrow 18:00 IST**, with the calendar `dates` in UTC and an `.ics` containing VALARM.
@@ -112,7 +112,7 @@ GitHub: ✅ @SayedZahur786 via gh auth token (Phase 0); ⚠️ "could not reach 
 
 **Real GitHub import** (read-only, your `gh` token, counts only): 30 repos (5 preselected, 1 default); 16 teammates with email (8 preselected).
 
-**UI, Phase 4.** 34 screenshots in [screenshots/v1/](screenshots/v1/): Inbox empty, with cards, and with Why? open; Ask; the seven Settings tabs; the five first-run steps; and `/capture`, each at 1440 and 390 wide. **0 violations:**
+**UI, Phase 4.** 34 screenshots in [screenshots/v1/](screenshots/v1): Inbox empty, with cards, and with Why? open; Ask; the seven Settings tabs; the five first-run steps; and `/capture`, each at 1440 and 390 wide. **0 violations:**
 - no internal IDs, millisecond timings, autonomy labels or "mock" on the default screens;
 - no horizontal overflow;
 - no page errors.
@@ -135,7 +135,7 @@ I looked at each screenshot and fixed four things:
 
 ## 4. Decisions made
 
-Each has a line in [V1_PROGRESS.md](V1_PROGRESS.md) with its cost if wrong. In short:
+Each has a line in [V1_PROGRESS.md](dev/V1_PROGRESS.md) with its cost if wrong. In short:
 - **Setup:**
   - The run created no `.env`; settings came from the process environment, because you declined the `.env` copy.
   - The doctor command is `pnpm run doctor`.
@@ -210,7 +210,7 @@ Each has a line in [V1_PROGRESS.md](V1_PROGRESS.md) with its cost if wrong. In s
 
 ## 7. Recommended next steps (V2)
 
-1. Run [MANUAL_STEPS.md](MANUAL_STEPS.md) with real keys, then tune the segmenter and prompts on your real rambles. The offline cortex is a stand-in.
+1. Run [MANUAL_STEPS.md](dev/MANUAL_STEPS.md) with real keys, then tune the segmenter and prompts on your real rambles. The offline cortex is a stand-in.
 2. Set up a named Cloudflare tunnel, so the phone URL never changes.
 3. Fix the deferred minors above, starting with server-side session revocation and transactional migrations.
 4. A Mac quick-capture app (global hotkey and `context.repo` from the frontmost editor), and an iPhone Shortcut using the capture token.
@@ -225,10 +225,10 @@ Second unattended run, same branch (commits f489d2e → see `git log`). Goal: th
 
 | | |
 |---|---|
-| **Your app** | **https://sayeds-macbook-air.tail351c98.ts.net** (Tailscale Funnel: permanent, TLS ends on the Mac; `/app` laptop, `/capture` phone) |
+| **Your app** | **https://<your-mac>.<tailnet>.ts.net** (Tailscale Funnel: permanent, TLS ends on the Mac; `/app` laptop, `/capture` phone) |
 | **Website** | **https://sayedzahur786.github.io/synapse-site/** (GitHub Pages, repo `SayedZahur786/synapse-site`: static landing only) |
 | Tunnel used | Tailscale Funnel (approved during the run). Fallbacks built and tested: ngrok static domain, cloudflared quick tunnel |
-| Sandbox issue | https://github.com/SayedZahur786/synapse-sandbox/issues/1 (filed through the live server from the R9 card; summary / observed / suspected cause, "Captured by voice with Synapse", no internal IDs) |
+| Sandbox issue | issue #1 in a private sandbox repo (filed through the live server from the R9 card; summary / observed / suspected cause, "Captured by voice with Synapse", no internal IDs) |
 
 ### What changed
 1. **One Groq call per capture** with an in-place re-draft queue; a rate-limit pause is waited out once and invalid JSON is asked again once, instead of falling back to one call per thought (both found live).

@@ -15,7 +15,10 @@ const copyAssets = (): Plugin => ({
   name: "synapse-site-assets",
   closeBundle() {
     fs.mkdirSync(path.join(out, "media"), { recursive: true });
-    for (const f of ["favicon.svg", "og.png", "media/synapse-launch-landscape.mp4", "media/synapse-launch-landscape.jpg"]) fs.copyFileSync(path.join(here, "public", f), path.join(out, f));
+    fs.mkdirSync(path.join(out, "demo"), { recursive: true });
+    for (const f of ["favicon.svg", "og.png", ...["landscape", "vertical"].flatMap((v) => [`media/synapse-launch-${v}.mp4`, `media/synapse-launch-${v}.jpg`])]) fs.copyFileSync(path.join(here, "public", f), path.join(out, f));
+    // the /demo/ page: both launch videos in real players (static HTML, no app code)
+    fs.copyFileSync(path.join(here, "site-static/demo/index.html"), path.join(out, "demo/index.html"));
     fs.writeFileSync(path.join(out, ".nojekyll"), "");
   },
 });

@@ -57,14 +57,14 @@ const deps = (o: Partial<DoctorDeps> = {}, env: Record<string, string> = {}): Do
 });
 
 /** a Mac set up the V1.1 way: Tailscale signed in with Funnel approved, the launchd service running, no sleep on AC power */
-const TS_URL = "https://sayeds-macbook-air.tail0000.ts.net";
+const TS_URL = "https://mac.tail0000.ts.net";
 function macExec(o: { funnel?: boolean; tailscale?: boolean; ngrok?: boolean; launchd?: "running" | "missing"; acSleep?: number } = {}): DoctorDeps["exec"] {
   const { funnel = true, tailscale = true, ngrok = false, launchd = "running", acSleep = 0 } = o;
   return async (cmd, args) => {
     if (cmd === "pnpm") return { ok: true, stdout: "10.28.2\n" };
     if (cmd === "cloudflared") return { ok: true, stdout: "cloudflared version 2026.9.3\n" };
     if (cmd === "tailscale" && tailscale)
-      return { ok: true, stdout: JSON.stringify({ BackendState: "Running", Self: { DNSName: "sayeds-macbook-air.tail0000.ts.net.", CapMap: funnel ? { "https://tailscale.com/cap/funnel": [] } : {} } }) };
+      return { ok: true, stdout: JSON.stringify({ BackendState: "Running", Self: { DNSName: "mac.tail0000.ts.net.", CapMap: funnel ? { "https://tailscale.com/cap/funnel": [] } : {} } }) };
     if (cmd === "ngrok" && ngrok) return { ok: true, stdout: "ngrok version 3.20.0" };
     if (cmd === "launchctl") return launchd === "running" && args.join(" ") === "print gui/501/com.synapse.server" ? { ok: true, stdout: "com.synapse.server = {\n\tstate = running\n\tpid = 4242\n}" } : { ok: false, stdout: "" };
     if (cmd === "pmset") return { ok: true, stdout: `Battery Power:\n sleep                1\nAC Power:\n displaysleep         10\n sleep                ${acSleep}\n` };

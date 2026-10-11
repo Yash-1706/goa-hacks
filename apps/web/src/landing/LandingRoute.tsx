@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { tunnelHeaders } from "@/net/tunnel";
 import Landing from "./Landing";
-import { REPO_URL } from "./links";
+import { DEMO_URL, REPO_URL } from "./links";
 
 /** "/" on the Mac: the landing page, with "Open app" as the primary action for a visitor who is already signed in. */
 export default function LandingRoute() {
@@ -13,5 +13,5 @@ export default function LandingRoute() {
       .then((j) => setLoggedIn(Boolean(j?.authenticated)))
       .catch(() => undefined); // unreachable: stays the public version
   }, []);
-  return <Landing appUrl="/app" repoUrl={REPO_URL} loggedIn={loggedIn} />;
+  return <Landing appUrl="/app" repoUrl={REPO_URL} demoUrl={DEMO_URL} loggedIn={loggedIn} />;
 }

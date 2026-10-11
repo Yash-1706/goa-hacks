@@ -8,7 +8,7 @@ import { chooseTunnels, hasFunnel, parseTunnelSetting, startNgrok, startTailscal
  * free static domain, then a cloudflared quick tunnel (temporary URL) as the last resort.
  */
 
-const tsStatus = (dns = "sayeds-macbook-air.tail0000.ts.net.") => JSON.stringify({ BackendState: "Running", Self: { DNSName: dns, CapMap: { "https://tailscale.com/cap/funnel": [] } } });
+const tsStatus = (dns = "mac.tail0000.ts.net.") => JSON.stringify({ BackendState: "Running", Self: { DNSName: dns, CapMap: { "https://tailscale.com/cap/funnel": [] } } });
 
 function execRig(o: { tailscale?: "running" | "stopped" | "missing" | "no-funnel"; funnel?: "ok" | "not-enabled"; ngrok?: boolean } = {}): { exec: ExecFn; calls: string[] } {
   const calls: string[] = [];
@@ -18,7 +18,7 @@ function execRig(o: { tailscale?: "running" | "stopped" | "missing" | "no-funnel
       if (o.tailscale === "missing") return { ok: false, stdout: "", stderr: "not found", missing: true };
       if (args[0] === "status" && o.tailscale === "no-funnel") return { ok: true, stdout: JSON.stringify({ BackendState: "Running", Self: { DNSName: "m.tail0000.ts.net.", CapMap: {} } }), stderr: "" };
       if (args[0] === "status") return o.tailscale === "stopped" ? { ok: true, stdout: JSON.stringify({ BackendState: "Stopped", Self: {} }), stderr: "" } : { ok: true, stdout: tsStatus(), stderr: "" };
-      if (args[0] === "funnel") return o.funnel === "not-enabled" ? { ok: false, stdout: "Funnel is not enabled on your tailnet.\nTo enable, visit:\n\n https://login.tailscale.com/f/funnel?node=abc", stderr: "" } : { ok: true, stdout: "Available on the internet:\nhttps://sayeds-macbook-air.tail0000.ts.net/\n|-- / proxy http://127.0.0.1:8787\nFunnel started and running in the background.", stderr: "" };
+      if (args[0] === "funnel") return o.funnel === "not-enabled" ? { ok: false, stdout: "Funnel is not enabled on your tailnet.\nTo enable, visit:\n\n https://login.tailscale.com/f/funnel?node=abc", stderr: "" } : { ok: true, stdout: "Available on the internet:\nhttps://mac.tail0000.ts.net/\n|-- / proxy http://127.0.0.1:8787\nFunnel started and running in the background.", stderr: "" };
     }
     if (cmd === "ngrok") return o.ngrok ? { ok: true, stdout: "ngrok version 3.20.0", stderr: "" } : { ok: false, stdout: "", stderr: "", missing: true };
     if (cmd === "cloudflared") return { ok: true, stdout: "cloudflared version 2026.9.3", stderr: "" };
@@ -58,7 +58,7 @@ describe("Tailscale Funnel", () => {
   it("runs `tailscale funnel --bg <port>` and returns the stable ts.net URL", async () => {
     const r = execRig();
     const t = await startTailscaleFunnel({ port: 8787, exec: r.exec });
-    expect(t.url).toBe("https://sayeds-macbook-air.tail0000.ts.net");
+    expect(t.url).toBe("https://mac.tail0000.ts.net");
     expect(t.temporary).toBe(false);
     expect(r.calls).toContain("tailscale funnel --bg 8787");
   });

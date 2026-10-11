@@ -4,7 +4,7 @@ import { transitOf } from "./transit";
 /** V1.1 privacy copy: where the phone's connection is decrypted, per tunnel, with no claim stronger than the code. */
 describe("phone → Mac transit", () => {
   it("Tailscale Funnel: decrypted only on this Mac", () => {
-    const t = transitOf("https://sayeds-macbook-air.tail0000.ts.net");
+    const t = transitOf("https://mac.tail0000.ts.net");
     expect(t).toMatchObject({ kind: "tailscale", endToEnd: true, stable: true });
     expect(t.note).toMatch(/only on this Mac/);
   });

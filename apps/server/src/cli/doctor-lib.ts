@@ -177,7 +177,7 @@ async function checkTunnel(d: DoctorDeps): Promise<Check> {
   if (self) {
     return warn("Tunnel", "Tailscale is signed in, but Funnel is not approved for this Mac: falling back to a cloudflared quick tunnel", "run `tailscale funnel 8787` once and approve Funnel (and HTTPS) in the browser page it opens");
   }
-  return warn("Tunnel", "only a cloudflared quick tunnel: the URL changes every restart, so the phone app must be re-added", "install Tailscale (free) and approve Funnel, or set NGROK_DOMAIN (free static domain); see docs/MANUAL_STEPS.md");
+  return warn("Tunnel", "only a cloudflared quick tunnel: the URL changes every restart, so the phone app must be re-added", "install Tailscale (free) and approve Funnel, or set NGROK_DOMAIN (free static domain); see docs/SETUP.md");
 }
 
 /** the URL the server last published answers from outside (through the tunnel, not localhost) */

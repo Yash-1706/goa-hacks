@@ -4,7 +4,7 @@ import path from "node:path";
 
 const dir = path.resolve(import.meta.dirname, "../../../site-dist");
 const files = fs.readdirSync(dir, { recursive: true }).map(String).filter((f) => fs.statSync(path.join(dir, f)).isFile());
-const FORBIDDEN = [/\/api\//, /x-synapse-device/, /\/ws\b/, /gsk_[A-Za-z0-9]{10}/, /sk_[a-z0-9]{8}_/, /ghp_[A-Za-z0-9]{10}/, /SYNAPSE_PASSCODE/];
+const FORBIDDEN = [/[a-z0-9-]+\.ts\.net/, /\/api\//, /x-synapse-device/, /\/ws\b/, /gsk_[A-Za-z0-9]{10}/, /sk_[a-z0-9]{8}_/, /ghp_[A-Za-z0-9]{10}/, /SYNAPSE_PASSCODE/];
 const problems = [];
 let bytes = 0;
 for (const f of files) {

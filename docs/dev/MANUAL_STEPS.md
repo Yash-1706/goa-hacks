@@ -1,8 +1,8 @@
 # Manual steps
 
-Only what needs your hands, a real phone or your accounts. Everything else was done and verified by the V1.1 run ([V1_REPORT.md](V1_REPORT.md#v11)).
+Only what needs your hands, a real phone or your accounts. Everything else was done and verified by the V1.1 run ([V1_REPORT.md](../V1_REPORT.md#v11)).
 
-Your app's permanent address: **https://sayeds-macbook-air.tail351c98.ts.net** (Tailscale Funnel). The passcode is `SYNAPSE_PASSCODE` in `.env` (changed in V1.1: every old session is signed out).
+Your app's permanent address: **https://<your-mac>.<tailnet>.ts.net** (Tailscale Funnel). The passcode is `SYNAPSE_PASSCODE` in `.env` (changed in V1.1: every old session is signed out).
 
 0. **Check the Mac is ready.**
    - Run `pnpm run doctor`.
@@ -12,7 +12,7 @@ Your app's permanent address: **https://sayeds-macbook-air.tail351c98.ts.net** (
      - ⚠️ Service: `pnpm run service:install`; if it waits with no URL, click **Allow** on the "node would like to access files in your Desktop folder" prompt.
 
 1. **Install the phone app.**
-   - On the Android phone, open `https://sayeds-macbook-air.tail351c98.ts.net/capture` in Chrome.
+   - On the Android phone, open `https://<your-mac>.<tailnet>.ts.net/capture` in Chrome.
    - Sign in with the passcode from `.env`, then ⋮ → **Add to Home screen**.
    - **Expect:** a Synapse icon that opens straight to the big record button. The address never changes, so this is a one-time step.
    - **If it fails:** a 502 page means the Mac's server is down: `pnpm run service:status`.
@@ -23,7 +23,7 @@ Your app's permanent address: **https://sayeds-macbook-air.tail351c98.ts.net** (
      - Within a few seconds: "Made 3 things: GitHub issue · Email · Reminder", the reminder at 7:00 pm.
      - The laptop (`/app`) shows the same cards.
      - With the Mac asleep or off, the clip says "Saved on your phone. It will sync when your Mac is awake." and goes up once it's back.
-   - Optional: tap **Create issue** on the bug card: it files the issue in `SayedZahur786/synapse-sandbox`.
+   - Optional: tap **Create issue** on the bug card: it files the issue in `<owner>/synapse-sandbox`.
    - **If it fails:** "Microphone blocked": allow it in Chrome's site settings. Cards marked "improving…" are being redrafted after Groq's free-tier limit; wait a minute.
 
 3. **Look at the public website.**

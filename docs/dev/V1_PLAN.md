@@ -30,7 +30,7 @@ Everything that needs a human, a secret or an account happens here, so the run n
    SARVAM_API_KEY=...
    GROQ_API_KEY=...            # free key from console.groq.com/keys
    SYNAPSE_PASSCODE=...        # any passphrase you'll type on your phone
-   GITHUB_SANDBOX_REPO=SayedZahur786/synapse-sandbox
+   GITHUB_SANDBOX_REPO=<owner>/synapse-sandbox
    ```
 4. **Keep the Mac awake and plugged in.** Either turn on "Prevent automatic sleeping when the display is off" in System Settings → Battery, or run Claude Code inside `caffeinate -i` (`caffeinate -i claude ...`).
 5. **Work on a branch:**

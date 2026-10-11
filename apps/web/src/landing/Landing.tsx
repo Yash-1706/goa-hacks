@@ -3,10 +3,12 @@ import DemoStrip from "./DemoStrip";
 import "./landing.css";
 
 export interface LandingProps {
-  /** Where "Open app" goes. */
+  /** Where "Open app" goes; empty on the public (GitHub Pages) copy, which has no app to open. */
   appUrl: string;
   /** The public repository. */
   repoUrl: string;
+  /** The full demo video page. */
+  demoUrl?: string;
   /** A signed-in visitor gets "Open app" as the primary button. */
   loggedIn?: boolean;
 }
@@ -151,12 +153,17 @@ function Check() {
  * The public landing page. Standalone: it brings its own stylesheet (scoped under `.lp`) and imports nothing from the app.
  * Signed in, "Open app" is the primary action; otherwise the repo is (Synapse runs on your own Mac, so a new visitor starts there).
  */
-export default function Landing({ appUrl, repoUrl, loggedIn = false }: LandingProps) {
+export default function Landing({ appUrl, repoUrl, demoUrl, loggedIn = false }: LandingProps) {
   const openApp = (
     <a key="app" className={`lp-btn${loggedIn ? " lp-btn--primary" : ""}`} href={appUrl}>
       Open app
     </a>
   );
+  const demo = demoUrl ? (
+    <a key="demo" className="lp-btn" href={demoUrl}>
+      Watch the demo
+    </a>
+  ) : null;
   const github = (
     <a key="repo" className={`lp-btn${loggedIn ? "" : " lp-btn--primary"}`} href={repoUrl}>
       <GitHubIcon />
@@ -173,9 +180,15 @@ export default function Landing({ appUrl, repoUrl, loggedIn = false }: LandingPr
             Synapse
           </span>
           <nav aria-label="Primary">
-            <a className="lp-top__link" href={appUrl}>
-              Open app
-            </a>
+            {appUrl ? (
+              <a className="lp-top__link" href={appUrl}>
+                Open app
+              </a>
+            ) : demoUrl ? (
+              <a className="lp-top__link" href={demoUrl}>
+                Watch the demo
+              </a>
+            ) : null}
           </nav>
         </div>
       </header>
@@ -189,7 +202,7 @@ export default function Landing({ appUrl, repoUrl, loggedIn = false }: LandingPr
             <p className="lp-hero__sub">
               Ramble on a walk. Get the GitHub issue, the email draft and the reminder, ready to send.
             </p>
-            <div className="lp-hero__actions">{loggedIn ? [openApp, github] : [github, openApp]}</div>
+            <div className="lp-hero__actions">{(appUrl ? (loggedIn ? [openApp, github] : [github, openApp]) : [github]).concat(demo ? [demo] : [])}</div>
             <HeroVideo />
           </div>
         </section>

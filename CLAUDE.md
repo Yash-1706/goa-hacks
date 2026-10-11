@@ -1,6 +1,6 @@
 # Synapse: build guide for Claude Code
 
-WhisperFlow Hackathon 2026, **Problem Statement 4: Ambient Cognitive Offloading** (see `WHISPERFLOW HACKATHON 2026.pdf`, pages 8–10).
+WhisperFlow Hackathon 2026, **Problem Statement 4: Ambient Cognitive Offloading** (see `docs/hackathon-brief.pdf`, pages 8–10).
 Specs: product → `docs/PRD.md` · technical → `docs/TRD.md` · research → `docs/RESEARCH.md`. **Read the TRD before writing code.**
 
 ## How to build
