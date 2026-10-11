@@ -105,7 +105,7 @@ function GitHubIcon() {
  * `muted` attribute, which iOS needs before it autoplays; reduced-motion visitors get it paused on its poster. Paths are
  * relative to the page base, so the same markup works on the Mac (/) and on GitHub Pages (/synapse-site/). */
 const MEDIA = `${import.meta.env.BASE_URL}media/synapse-launch-landscape`;
-const HERO_VIDEO = `<video class="lp-hero__video" autoplay muted loop playsinline preload="metadata" poster="${MEDIA}.jpg" aria-label="Synapse launch video: a spoken ramble becomes a GitHub issue, an email draft and a reminder"><source src="${MEDIA}.mp4" type="video/mp4" /><img src="${MEDIA}.jpg" alt="A spoken ramble next to the three cards Synapse made from it" /></video>`;
+const HERO_VIDEO = `<video class="lp-hero__video" autoplay muted loop playsinline preload="metadata" poster="${MEDIA}.jpg" aria-label="Synapse launch video: thoughts said mid-run become a GitHub issue and a reminder"><source src="${MEDIA}.mp4" type="video/mp4" /><img src="${MEDIA}.jpg" alt="Mid-run: the Synapse phone app ready to record, over a treadmill readout" /></video>`;
 
 function HeroVideo() {
   const ref = useRef<HTMLDivElement>(null);
