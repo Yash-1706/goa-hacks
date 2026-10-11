@@ -18,9 +18,26 @@ import { isAllowedOrigin, isLoopback } from "./trust";
  * WebSocket upgrade and the on-device speech endpoints alike; the capture-only bearer token is accepted on POST /api/capture.
  * /api/dev/* additionally requires dev mode and a real loopback request (never in tunnel mode). */
 
-/** reachable without a session: logging in needs to work */
+/**
+ * Default deny (V1.1). Public, by exact matched route only: health and sign-in. Public by method: GET/HEAD of the app's static
+ * shell (pages, scripts, styles, manifest, service worker, icons: public code, no user data). Everything else needs a session
+ * (or, on the LAN, loopback / a paired device): every /api route, the WebSocket, the speech endpoints, and any other method.
+ */
 const OPEN = new Set(["/api/health", "/api/auth/login", "/api/auth/logout", "/api/auth/status"]);
-const guarded = (url: string): boolean => url.startsWith("/api") || url === "/ws" || url.startsWith("/local-stt");
+const PROTECTED = /^\/(api|ws|local-stt)(\/|$)/;
+
+/** The path the way a lenient server, proxy or OS might read it: decoded, slashes collapsed, dot segments resolved, trailing
+ *  dots dropped, lowercased. Only used to decide whether a request is protected; never to serve anything. */
+export function canonicalPath(decoded: string): string {
+  const out: string[] = [];
+  for (const raw of decoded.split(/[\\/]+/)) {
+    const seg = raw.replace(/\.+$/, "").toLowerCase();
+    if (!seg || seg === ".") continue;
+    if (raw === "..") out.pop();
+    else out.push(seg);
+  }
+  return `/${out.join("/")}`;
+}
 
 /** a 5-minute 16 kHz mono WAV is ~9.6 MB; voice notes shared from other apps may be larger */
 export const MAX_CAPTURE_BYTES = 25 * 1024 * 1024;
@@ -43,11 +60,16 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
       return reply.code(400).send({ error: "malformed path" });
     }
     const route = req.routeOptions?.url;
-    const url = route && guarded(route) ? route : decoded;
-    if (!guarded(url) && !guarded(decoded)) return;
     if (route && OPEN.has(route)) return;
+    const canonical = canonicalPath(decoded);
+    const isProtected = PROTECTED.test(canonical) || Boolean(route && PROTECTED.test(route));
+    const readOnly = req.method === "GET" || req.method === "HEAD";
+    if (!isProtected && readOnly) return; // the static shell and client-side routes
+    // what the guard reasons about: the matched route, else the canonical spelling ("/API//state." is /api/state)
+    const url = route && PROTECTED.test(route) ? route : canonical;
+    const realtime = url === "/ws" || url.startsWith("/local-stt");
     // the WebSocket and speech endpoints check the origin themselves (closing with 1008); REST is refused here
-    if (url.startsWith("/api") && !isAllowedOrigin(header(req, "origin"), auth.publicOrigin)) return reply.code(403).send({ error: "origin not allowed" });
+    if (!realtime && !isAllowedOrigin(header(req, "origin"), auth.publicOrigin)) return reply.code(403).send({ error: "origin not allowed" });
     const ip = trust.clientIp(req.raw);
     const tunneled = viaTunnel(req);
     const local = isLoopback(ip) && !tunneled; // behind a tunnel every request comes from loopback
@@ -56,7 +78,7 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
     if (!session && !captureBearer) {
       if (tunneled) return reply.code(401).send({ error: "sign in with the passcode" });
       // the WebSocket authenticates in its hello and the speech endpoints with their own short-lived tokens (LAN only)
-      if (url.startsWith("/api")) {
+      if (!realtime) {
         const verdict = trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token"));
         if (!verdict.ok) return reply.code(401).send({ error: verdict.reason ?? "unauthorized" });
       }
@@ -94,6 +116,13 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
     const ip = trust.clientIp(req.raw);
     const legacy = !viaTunnel(req) && trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token")).ok;
     return { authenticated: auth.hasSession(header(req, "cookie")) || legacy, passcodeSet: auth.enabled, publicMode: auth.publicMode };
+  });
+  // "Log out all devices": every session and the capture token stop working, open sockets close
+  app.post("/api/auth/revoke-all", async (req, reply) => {
+    auth.revokeAll();
+    audit.append("sessions_revoked", null, null);
+    ctx.hub.recheckSessions();
+    return reply.header("set-cookie", auth.logoutCookie(secureReq(req))).send({ ok: true });
   });
   app.get("/api/auth/capture-token", async (_req, reply) => (auth.enabled ? { token: auth.captureToken() } : reply.code(503).send({ error: "SYNAPSE_PASSCODE is not set on the server" })));
   app.post("/api/auth/capture-token/rotate", async (_req, reply) => {
@@ -248,6 +277,7 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
           outbox.dismiss(a);
           break;
         case "push":
+          if (a.status === "executed") break; // a retried request: the issue exists, answer with the card
           await outbox.push(a);
           break;
         case "undo":
@@ -279,7 +309,22 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
     if (!a) return reply.code(404).send({ error: "not found" });
     const b = z.object({ via: z.string().min(1).max(24) }).safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: "via is required" });
-    outbox.markShipped(a, b.data.via);
+    try {
+      outbox.markShipped(a, b.data.via);
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+    return store.artifactView(a);
+  });
+  // the one tap after a handoff ("Opened in Gmail" → Done)
+  app.post<{ Params: { id: string } }>("/api/artifacts/:id/done", async (req, reply) => {
+    const a = store.artifacts.get(req.params.id);
+    if (!a) return reply.code(404).send({ error: "not found" });
+    try {
+      outbox.markDone(a);
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
     return store.artifactView(a);
   });
   app.patch<{ Params: { id: string } }>("/api/artifacts/:id", async (req, reply) => {

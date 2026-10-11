@@ -32,6 +32,8 @@ export interface PushResult {
 
 export class Outbox {
   private simCounter = 0;
+  /** one push per card at a time: a double tap or a retried request shares the first push (never two issues) */
+  private pushing = new Map<string, Promise<PushResult>>();
   /** V1: the connected GitHub account and the per-artifact repo (late-bound: routing needs the profile and captures) */
   private links: { github: () => GithubApi | null; repoFor: (a: ArtifactRec) => string | null } | null = null;
 
@@ -91,7 +93,15 @@ export class Outbox {
     return { ok: true };
   }
 
-  async push(a: ArtifactRec): Promise<PushResult> {
+  push(a: ArtifactRec): Promise<PushResult> {
+    const running = this.pushing.get(a.id);
+    if (running) return running;
+    const p = this.pushOnce(a).finally(() => this.pushing.delete(a.id));
+    this.pushing.set(a.id, p);
+    return p;
+  }
+
+  private async pushOnce(a: ArtifactRec): Promise<PushResult> {
     const gate = this.pushability(a);
     if (!gate.ok) throw new Error(gate.reason);
     const t = this.d.store.getThought(a.thoughtId);
@@ -190,15 +200,30 @@ export class Outbox {
     return null;
   }
 
-  /** A link handoff (Gmail draft opened, calendar event added): the card moves to Done. Nothing is sent by Synapse. */
+  /**
+   * A link handoff (Gmail draft opened, calendar event added): the card is "Opened" until the user taps Done (opening an app is
+   * not the same as sending). Nothing is sent by Synapse. Idempotent; never overwrites a card that was really shipped.
+   */
   markShipped(a: ArtifactRec, via: string): void {
-    a.status = "executed";
+    if (a.status === "opened") return;
+    if (a.status === "executed" || a.status === "dismissed" || a.status === "undone") throw new Error(`this card is already ${a.status === "executed" ? "done" : a.status}`);
+    a.status = "opened";
     a.externalRef = `opened:${via.replace(/[^\w-]/g, "").slice(0, 24)}`;
     a.simulated = false;
     this.d.store.saveArtifact(a);
+    this.d.audit.append("artifact_handed_off", `${a.kind}:${via.slice(0, 24)}`, 1);
+    this.d.bus.emit("artifact.status", { artifactId: a.id, thoughtId: a.thoughtId, status: "opened" });
+    this.d.emit({ type: "artifact.upsert", thoughtId: a.thoughtId, artifact: this.d.store.artifactView(a) });
+  }
+
+  /** The one tap after a handoff: the card moves to Done. Idempotent. */
+  markDone(a: ArtifactRec): void {
+    if (a.status === "executed") return;
+    if (a.status === "dismissed" || a.status === "undone") throw new Error(`this card is ${a.status}`);
+    a.status = "executed";
+    this.d.store.saveArtifact(a);
     const t = this.d.store.getThought(a.thoughtId);
     if (t && !t.promoted) this.d.store.promote(t, [...t.salienceReasons, "you shipped it"]);
-    this.d.audit.append("artifact_handed_off", `${a.kind}:${via.slice(0, 24)}`, 1);
     this.d.bus.emit("artifact.status", { artifactId: a.id, thoughtId: a.thoughtId, status: "executed" });
     this.d.emit({ type: "artifact.upsert", thoughtId: a.thoughtId, artifact: this.d.store.artifactView(a) });
   }

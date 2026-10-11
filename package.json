@@ -22,7 +22,8 @@
     "wispr:check": "pnpm --filter @synapse/server exec tsx ../web/scripts/wispr-check.ts",
     "doctor": "pnpm --filter @synapse/server run doctor",
     "start": "pnpm --filter @synapse/web build && pnpm --filter @synapse/server start",
-    "tunnel": "TUNNEL=1 pnpm start"
+    "tunnel": "TUNNEL=1 pnpm start",
+    "sessions:revoke": "pnpm --filter @synapse/server run sessions:revoke"
   },
   "devDependencies": {
     "concurrently": "^10.0.5",

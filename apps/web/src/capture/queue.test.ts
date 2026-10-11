@@ -178,3 +178,14 @@ describe("capture queue: a clip that cannot be opened (review 7)", () => {
     expect(await store.all()).toHaveLength(0);
   });
 });
+
+describe("the phone's clip key (V1.1 check)", () => {
+  it("is AES-GCM and NON-EXTRACTABLE: script can use it, nothing can read it out", async () => {
+    const keys: { k?: CryptoKey } = {};
+    const c = createAesGcmCipher({ get: async () => keys.k, set: async (k) => void (keys.k = k) });
+    await c.seal(new Uint8Array([1, 2, 3]));
+    expect(keys.k?.algorithm).toMatchObject({ name: "AES-GCM", length: 256 });
+    expect(keys.k?.extractable).toBe(false);
+    await expect(crypto.subtle.exportKey("raw", keys.k!)).rejects.toThrow();
+  });
+});

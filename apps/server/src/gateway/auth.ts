@@ -154,15 +154,32 @@ export class Auth {
     return Number(this.db.getSetting("capture_token_gen") ?? "1") || 1;
   }
 
-  /** keys are bound to the passcode: a new passcode invalidates every session and capture token */
+  /** the session epoch: bumped by "Log out all devices" or `pnpm run sessions:revoke` (read per check, so another process's bump counts) */
+  epoch(): string {
+    return this.db.getSetting(EPOCH_SETTING) ?? "0";
+  }
+
+  /** "Log out all devices": every session cookie and the capture token stop working. */
+  revokeAll(): void {
+    revokeAllSessions(this.db);
+  }
+
+  /** keys are bound to the passcode and the epoch: a new passcode or a revoke invalidates every session and capture token */
   private sign(purpose: string, body: string): string {
-    const key = createHmac("sha256", this.secret).update(`${purpose}|${this.o.passcode}`).digest();
+    const key = createHmac("sha256", this.secret).update(`${purpose}|${this.o.passcode}|${this.epoch()}`).digest();
     return createHmac("sha256", key).update(body).digest("base64url");
   }
 
   private digest(purpose: string, s: string): string {
     return createHmac("sha256", this.secret).update(`${purpose}|${s}`).digest("hex");
   }
+}
+
+const EPOCH_SETTING = "session_epoch";
+
+/** Bump the session epoch in a database (the running server reads it on every check). Used by the CLI and by revokeAll. */
+export function revokeAllSessions(db: Pick<Db, "getSetting" | "setSetting">): void {
+  db.setSetting(EPOCH_SETTING, String((Number(db.getSetting(EPOCH_SETTING) ?? "0") || 0) + 1));
 }
 
 function cookie(value: string, maxAgeS: number, secure: boolean): string {

@@ -3,7 +3,7 @@
 Plan: [docs/V1_PLAN.md](V1_PLAN.md). Branch `v1` (cut from `main` at 961283c).
 
 ## Current
-**V1.1 run** (2026-10-11, second unattended run): Phase 2 (fixes from review). Phase 1 done. V1 itself is done: [V1_REPORT.md](V1_REPORT.md).
+**V1.1 run** (2026-10-11, second unattended run): Phase 3 (always-on Mac server, permanent free URL). Phases 1–2 done. V1 itself is done: [V1_REPORT.md](V1_REPORT.md).
 
 ## V1.1 pre-flight (verified, not assumed)
 - `.env`: Sarvam + Groq keys, `GITHUB_SANDBOX_REPO=SayedZahur786/synapse-sandbox`, `LLM_MODE=live`, `WISPR_MODE=sarvam`. **Passcode is 8 digits (not 12+), kept as chosen** → MANUAL_STEPS; doctor warns.
@@ -124,6 +124,16 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 - **Offline model fix:** the segmenter splits comma-joined intents (", oh, and", ", and also", ", oh and", ", plus", ", also" before an action; lists are not split); an explicit "email/tell/message X…" is a confident communication item. The exact transcript real Sarvam produced now gives issue / email draft / reminder at 7.
 - **"Double upload":** not an idempotency bug. `scripts/e2e/phase1.mjs` sent an unauthenticated probe upload (accepted on localhost) plus the real one, neither with a clientId. The probe is now a read (`GET /api/state`) and the upload carries a clientId. Same-clientId idempotency was already covered by tests.
 - Tests: batch (6), redraft (5), segmenter (+6), reminder/offline (+5). Suite 1135/1135.
+
+### V1.1 Phase 2: fixes from review
+- **Revocable sessions:** a session epoch (settings row) is part of the HMAC key, read on every check. `POST /api/auth/revoke-all` ("Log out all devices" in Settings → Profile & connections) and `pnpm run sessions:revoke` (works against a running server's database) end every session and the capture token; open WebSockets carry their session cookie and are closed (4001) on revoke and every 30 s check. Changing `SYNAPSE_PASSCODE` still invalidates everything.
+- **Doctor:** warns when the passcode is under 12 characters or digits only (never prints it).
+- **Idempotent actions:** a per-card push lock in the outbox: two concurrent "Create issue" taps file ONE issue (reproduced first: it filed two); a retried push of a created issue returns the card (200). `answer` refuses opened/executed/dismissed cards (409); `shipped` never overwrites a created issue (409) and is idempotent.
+- **Default-deny auth:** public = exact routes (health, login, logout, status) + GET/HEAD of the static shell; everything that canonicalises to /api, /ws or /local-stt (decoded, slashes collapsed, `..` resolved, trailing dots dropped, lowercased) needs a session; any other method needs auth too. 17 spellings × GET/POST tested through the tunnel: all 401/404, never data.
+- **Phone key:** confirmed AES-GCM 256, non-extractable (`exportKey` rejects); now pinned by a test.
+- **"Opened" state:** new `opened` artifact status. Open draft / Add to calendar → "Opened in Gmail" with a one-tap **Done** (and "Open again"); Done → executed ("Sent from Gmail" / "Added to calendar"). Opened cards stay in Needs you. `POST /api/artifacts/:id/done`.
+- **Migrations:** each step + its `user_version` bump in one transaction; v3's column add is idempotent (a half-applied v3 no longer bricks the database: reproduced first).
+- Suite: web 724, server 421.
 
 ## Decisions
 - Ruling: no `.env` is created by the run. The app's no-`.env` default is mock mode; settings the checks need are passed as process environment. Sayed explicitly declined the `.env` copy — cost if wrong: one `cp` for Sayed, listed in MANUAL_STEPS.

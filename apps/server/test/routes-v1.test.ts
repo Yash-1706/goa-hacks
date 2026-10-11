@@ -59,7 +59,7 @@ describe("V1 routes", () => {
     const mailto = new URL(answered.body.links!.mailto!);
     expect(decodeURIComponent(mailto.pathname)).toBe("sarah@acme.io,dev@acme.io");
     const shipped = await inject<ArtifactView>("POST", `/api/artifacts/${email!.id}/shipped`, { via: "gmail" });
-    expect(shipped.body).toMatchObject({ status: "executed", externalRef: "opened:gmail" });
+    expect(shipped.body).toMatchObject({ status: "opened", externalRef: "opened:gmail" }); // V1.1: Opened until one tap on Done
 
     expect(reminder).toMatchObject({ kind: "reminder", route: { dueAt: "2026-10-07T18:00:00+05:30" }, needs: [] });
     expect(new URL(reminder!.links!.calendar!).searchParams.get("dates")).toBe("20261007T123000Z/20261007T124500Z");

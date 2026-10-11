@@ -72,7 +72,10 @@ describe("the one primary action", () => {
     expect(primaryAction(asking, { mobile: false, emailApp: "gmail" })).toMatchObject({ label: "Open draft", disabled: true, reason: "Needs one answer" });
     expect(primaryAction(view({ kind: "note", body: "x", tags: [] }), { mobile: false, emailApp: "gmail" })).toBeNull();
     expect(shippedText({ ...issue, status: "executed", externalRef: "acme/shop#123", externalUrl: "https://github.com/acme/shop/issues/123" })).toEqual({ text: "Created #123", url: "https://github.com/acme/shop/issues/123" });
-    expect(shippedText({ ...email, status: "executed", externalRef: "opened:gmail" })).toEqual({ text: "Opened in Gmail" });
+    // V1.1: a handoff is "Opened" (still waiting for one tap on Done), then Done
+    expect(shippedText({ ...email, status: "opened", externalRef: "opened:gmail" })).toEqual({ text: "Opened in Gmail", opened: true });
+    expect(shippedText({ ...reminder, status: "opened", externalRef: "opened:calendar" })).toEqual({ text: "Opened in Calendar", opened: true });
+    expect(shippedText({ ...email, status: "executed", externalRef: "opened:gmail" })).toEqual({ text: "Sent from Gmail" });
     expect(shippedText({ ...reminder, status: "executed", externalRef: "opened:calendar" })).toEqual({ text: "Added to calendar" });
     expect(shippedText(issue)).toBeNull();
   });

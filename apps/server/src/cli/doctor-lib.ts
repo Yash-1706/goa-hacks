@@ -140,8 +140,10 @@ async function checkCloudflared(d: DoctorDeps): Promise<Check> {
 function checkPasscode(d: DoctorDeps): Check {
   const p = d.env.SYNAPSE_PASSCODE ?? "";
   if (!p) return warn("Passcode", "SYNAPSE_PASSCODE is not set: the tunnel will refuse to start", "add SYNAPSE_PASSCODE=<a passphrase you can type on your phone> to .env");
-  if (p.length < 8) return warn("Passcode", "SYNAPSE_PASSCODE is shorter than 8 characters: the tunnel refuses it", "use a longer passphrase: the URL is public");
-  return ok("Passcode", "set");
+  if (p.length < 8) return warn("Passcode", "SYNAPSE_PASSCODE is shorter than 8 characters: the tunnel refuses it", "use a passphrase of 12+ characters: the URL is public");
+  // the URL is public: a short or digits-only passcode is the weak link (login is rate-limited, but make guessing hopeless)
+  if (p.length < 12 || /^\d+$/.test(p)) return warn("Passcode", `SYNAPSE_PASSCODE is ${p.length < 12 ? "shorter than 12 characters" : "digits only"}`, "use 12+ characters with letters, e.g. three random words; then pnpm run sessions:revoke");
+  return ok("Passcode", "set (12+ characters)");
 }
 
 export async function runDoctor(d: DoctorDeps): Promise<Check[]> {

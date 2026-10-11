@@ -244,6 +244,19 @@ export function ShipCard({ thought, compact = false }: { thought: ThoughtView; c
   const done = a ? shippedText(a) : null;
   const need = a?.needs?.[0];
 
+  /** after a handoff: the one tap that moves the card to Done */
+  const finish = async (): Promise<void> => {
+    if (!a) return;
+    setBusy(true);
+    try {
+      await api.done(a.id);
+    } catch (e) {
+      toast.warn((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const run = async (): Promise<void> => {
     if (!a || !action || action.disabled) return;
     setBusy(true);
@@ -282,7 +295,19 @@ export function ShipCard({ thought, compact = false }: { thought: ThoughtView; c
       {panel === "edit" && a ? <Editor a={a} onDone={() => setPanel(null)} /> : null}
       {panel === "why" ? <Why t={thought} /> : null}
       <footer className="ship__foot">
-        {done ? (
+        {done?.opened ? (
+          <span className="ship__opened">
+            <span className="ship__done ship__done--opened">{done.text}</span>
+            <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void finish()}>
+              Done
+            </button>
+            {action && action.kind === "link" ? (
+              <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void run()}>
+                Open again
+              </button>
+            ) : null}
+          </span>
+        ) : done ? (
           done.url ? (
             <a className="ship__done" href={done.url} target="_blank" rel="noopener noreferrer">
               <Check size={14} /> {done.text} <ArrowUpRight size={13} />

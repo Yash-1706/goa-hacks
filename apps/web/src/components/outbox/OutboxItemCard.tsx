@@ -61,6 +61,7 @@ export const STATUS_ICON: Record<ArtifactStatus, LucideIcon> = {
   draft: PenLine,
   staged: PackageCheck,
   accepted: CheckCheck,
+  opened: ExternalLink,
   executed: Rocket,
   dismissed: CircleSlash,
   undone: Undo2,

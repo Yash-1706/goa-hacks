@@ -423,6 +423,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
       consolidator.start();
       timers.push(
         setInterval(() => void redraft.tick(), 5_000),
+        setInterval(() => hub.recheckSessions(), 30_000), // a `pnpm run sessions:revoke` from another process
         setInterval(() => store.sweep(), 60_000),
         setInterval(() => metrics.flush(), 5_000),
       );

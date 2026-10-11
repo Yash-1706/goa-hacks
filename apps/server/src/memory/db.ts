@@ -101,19 +101,27 @@ export class Db {
 
   private migrate(): void {
     const v = (this.raw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (v < 1) {
-      this.raw.exec(SCHEMA_V1);
-      this.raw.exec("PRAGMA user_version = 1");
-    }
-    if (v < 2) {
-      this.raw.exec(SCHEMA_V2);
-      this.raw.exec("PRAGMA user_version = 2");
-    }
-    if (v < 3) {
-      // V1 routing answers (which repo, whose address, when), sealed with the artifact's own key
-      this.raw.exec("ALTER TABLE artifacts ADD COLUMN route_enc BLOB");
-      this.raw.exec("PRAGMA user_version = 3");
-    }
+    // each step and its version bump commit together: a crash can never leave a step half-applied with the old version
+    const step = (to: number, apply: () => void): void => {
+      if (v >= to) return;
+      this.raw.exec("BEGIN IMMEDIATE");
+      try {
+        apply();
+        this.raw.exec(`PRAGMA user_version = ${to}`);
+        this.raw.exec("COMMIT");
+      } catch (err) {
+        this.raw.exec("ROLLBACK");
+        throw err;
+      }
+    };
+    step(1, () => this.raw.exec(SCHEMA_V1));
+    step(2, () => this.raw.exec(SCHEMA_V2));
+    // V1 routing answers (which repo, whose address, when), sealed with the artifact's own key. Idempotent: an older build that
+    // added the column and crashed before bumping the version must not brick the database.
+    step(3, () => {
+      const cols = this.raw.prepare("PRAGMA table_info(artifacts)").all() as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === "route_enc")) this.raw.exec("ALTER TABLE artifacts ADD COLUMN route_enc BLOB");
+    });
   }
 }
 

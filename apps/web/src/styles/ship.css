@@ -250,3 +250,12 @@
   font-size: 0.76rem;
   font-style: italic;
 }
+.ship__opened {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.ship__done--opened {
+  color: var(--dim);
+}

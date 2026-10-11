@@ -183,6 +183,8 @@ export const ARTIFACT_STATUSES = [
   "draft",
   "staged",
   "accepted",
+  /** V1.1: handed to another app (Gmail, Calendar); one tap on Done finishes it */
+  "opened",
   "executed",
   "dismissed",
   "undone",

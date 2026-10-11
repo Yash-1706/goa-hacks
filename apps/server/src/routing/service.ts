@@ -72,7 +72,8 @@ export class RoutingService {
 
   /** Answer one question: stored on the artifact, learned in the profile, the card re-rendered everywhere. */
   answer(a: ArtifactRec, field: string, value: string): ArtifactRec {
-    if (a.status === "executed") throw new Error("already shipped");
+    if (a.status === "executed" || a.status === "opened") throw new Error("this card was already shipped");
+    if (a.status === "dismissed" || a.status === "undone") throw new Error(`this card is ${a.status}`);
     const i = this.input(a);
     const res = applyAnswer({ artifact: a.payload, stored: i.stored, field, value, profile: i.profile, keywords: i.keywords, now: i.now, tz: i.tz });
     a.route = res.stored;

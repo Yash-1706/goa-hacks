@@ -92,6 +92,8 @@ export const api = {
   // ---- V1: capture, ask-cards, handoffs, profile, GitHub
   capture: (text: string) => json<CaptureResponse>("/api/capture", "POST", { text, context: { source: "web" } }),
   answer: (id: string, field: string, value: string) => json<ArtifactView>(`/api/artifacts/${encodeURIComponent(id)}/answer`, "POST", { field, value }),
+  done: (id: string) => json<ArtifactView>(`/api/artifacts/${encodeURIComponent(id)}/done`, "POST"),
+  revokeAll: () => json<{ ok: boolean }>("/api/auth/revoke-all", "POST"),
   shipped: (id: string, via: string) => json<ArtifactView>(`/api/artifacts/${encodeURIComponent(id)}/shipped`, "POST", { via }),
   profile: (signal?: AbortSignal) => json<Profile>("/api/profile", "GET", undefined, signal),
   saveProfile: (p: Profile) => json<Profile>("/api/profile", "PUT", p),

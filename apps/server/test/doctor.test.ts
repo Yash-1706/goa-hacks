@@ -42,7 +42,7 @@ const deps = (o: Partial<DoctorDeps> = {}, env: Record<string, string> = {}): Do
     SARVAM_BASE_URL: sarvam.url,
     GROQ_API_KEY: GROQ_KEY,
     GITHUB_TOKEN: GH_TOKEN,
-    SYNAPSE_PASSCODE: "correct horse",
+    SYNAPSE_PASSCODE: "correct horse battery",
     ...env,
   },
   envFilePresent: true,
@@ -65,7 +65,7 @@ describe("pnpm doctor", () => {
     // the Sarvam check really sent one second of 16 kHz audio through SarvamStt
     expect(sarvam.requests.at(-1)?.wav).toMatchObject({ rate: 16000, channels: 1, samples: 16000 });
     const out = formatChecks(checks);
-    for (const secret of [SARVAM_KEY, GROQ_KEY, GH_TOKEN, "correct horse"]) expect(out).not.toContain(secret);
+    for (const secret of [SARVAM_KEY, GROQ_KEY, GH_TOKEN, "correct horse battery"]) expect(out).not.toContain(secret);
     expect(out).toContain("✅");
   });
 
@@ -131,5 +131,16 @@ describe("pnpm doctor", () => {
   it("EMBEDDINGS=hash needs no model at all", async () => {
     const c = byName(await runDoctor(deps({ modelCached: () => false }, { EMBEDDINGS: "hash" })));
     expect(c["Embedding model"]?.status).toBe("ok");
+  });
+});
+
+describe("pnpm doctor: the passcode guards a public URL (V1.1)", () => {
+  it("warns under 12 characters or digits only; a long passphrase passes", async () => {
+    const pass = async (p: string) => (await runDoctor(deps({}, { SYNAPSE_PASSCODE: p }))).find((c) => c.name === "Passcode")!;
+    expect((await pass("12345678")).status).toBe("warn");
+    expect((await pass("123456789012345")).status).toBe("warn"); // long, but digits only
+    expect((await pass("short words")).status).toBe("warn");
+    expect(await pass("correct horse battery")).toMatchObject({ status: "ok" });
+    expect(JSON.stringify(await pass("12345678"))).not.toContain("12345678");
   });
 });

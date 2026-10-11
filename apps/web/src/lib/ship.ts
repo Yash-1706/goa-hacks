@@ -104,13 +104,15 @@ export function primaryAction(a: ArtifactView, o: { mobile: boolean; emailApp: "
   }
 }
 
-const VIA: Record<string, string> = { gmail: "Opened in Gmail", mail: "Opened in your mail app", calendar: "Added to calendar", github: "Opened on GitHub", whatsapp: "Opened in WhatsApp" };
+const OPENED: Record<string, string> = { gmail: "Opened in Gmail", mail: "Opened in your mail app", calendar: "Opened in Calendar", github: "Opened on GitHub", whatsapp: "Opened in WhatsApp" };
+const DONE: Record<string, string> = { gmail: "Sent from Gmail", mail: "Sent from your mail app", calendar: "Added to calendar", github: "Filed on GitHub", whatsapp: "Sent on WhatsApp" };
 
-/** "Created #123 ↗" / "Opened in Gmail": what happened to a shipped card. */
-export function shippedText(a: ArtifactView): { text: string; url?: string } | null {
-  if (a.status !== "executed") return null;
+/** "Created #123 ↗", "Opened in Gmail" (waiting for Done), "Sent from Gmail": what happened to a card. */
+export function shippedText(a: ArtifactView): { text: string; url?: string; opened?: boolean } | null {
   const ref = a.externalRef ?? "";
-  if (ref.startsWith("opened:")) return { text: VIA[ref.slice(7)] ?? "Shipped" };
+  if (a.status === "opened") return { text: OPENED[ref.slice(7)] ?? "Opened", opened: true };
+  if (a.status !== "executed") return null;
+  if (ref.startsWith("opened:")) return { text: DONE[ref.slice(7)] ?? "Done" };
   const n = ref.match(/#(\d+)$/)?.[1];
   if (n) return { text: `${a.simulated ? "Simulated" : "Created"} #${n}`, ...(a.externalUrl ? { url: a.externalUrl } : {}) };
   return { text: a.simulated ? "Simulated" : "Done", ...(a.externalUrl ? { url: a.externalUrl } : {}) };

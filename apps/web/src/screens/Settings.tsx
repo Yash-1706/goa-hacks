@@ -109,10 +109,25 @@ function ProfileTab() {
           <Card title="Shortcuts and other apps" hint="A token that can only send captures (POST /api/capture with Authorization: Bearer …). For an iPhone Shortcut or a script.">
             <CaptureToken />
           </Card>
-          <Card title="This device">
-            <button type="button" className="btn" onClick={() => void logout()}>
-              Sign out
-            </button>
+          <Card title="Devices" hint="Sign this browser out, or every phone and browser at once (also ends the capture token).">
+            <div className="set-row">
+              <button type="button" className="btn" onClick={() => void logout()}>
+                Sign out
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  if (!window.confirm("Log out every device, including this one? Each one signs in again with the passcode.")) return;
+                  void api.revokeAll().then(
+                    () => useAuth.getState().require(),
+                    (e: Error) => toast.warn(e.message),
+                  );
+                }}
+              >
+                Log out all devices
+              </button>
+            </div>
           </Card>
         </>
       ) : null}

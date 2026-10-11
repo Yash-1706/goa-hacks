@@ -21,14 +21,15 @@ describe("inbox buckets", () => {
     const issue = thought("bug", { kind: "github_issue" }, 10);
     const email = thought("communication", { kind: "email_draft", needs: [{ field: "to:team", question: "q", options: [], allowFreeText: true }] }, 20);
     const shipped = thought("scheduling", { kind: "reminder", status: "executed" }, 5);
+    const opened = thought("communication", { kind: "email_draft", status: "opened" }, 15);
     const note = thought("idea", { kind: "note" }, 7);
     const decision = thought("decision", { kind: "decision" }, 8);
     const question = thought("question", null, 9);
     const dismissed = thought("bug", { kind: "github_issue", status: "dismissed" }, 11);
     const aside = thought("aside", null, 12);
     const recall = thought("recall_query", { kind: "recall" }, 13);
-    const b = buckets([issue, email, shipped, note, decision, question, dismissed, aside, recall]);
-    expect(b.needsYou.map((t) => t.id)).toEqual([email.id, issue.id]);
+    const b = buckets([issue, email, shipped, opened, note, decision, question, dismissed, aside, recall]);
+    expect(b.needsYou.map((t) => t.id)).toEqual([email.id, opened.id, issue.id]); // opened waits for its Done
     expect(b.done.map((t) => t.id)).toEqual([shipped.id]);
     expect(b.saved.map((t) => t.id)).toEqual([question.id, decision.id, note.id]);
   });
