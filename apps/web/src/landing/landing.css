@@ -234,8 +234,40 @@ body:has(> .lp) {
   max-width: 34rem;
 }
 
-.lp-hero__media {
+.lp-hero__frame {
+  position: relative;
   margin-top: 40px;
+}
+
+.lp-hero__sound {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: rgba(12, 12, 13, 0.78);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 550;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.lp-hero__sound:hover {
+  background: rgba(24, 24, 27, 0.92);
+}
+
+.lp-hero__sound[aria-pressed="true"] {
+  border-color: var(--violet);
+}
+
+.lp-hero__media {
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
   overflow: hidden;

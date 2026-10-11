@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import DemoStrip from "./DemoStrip";
 import "./landing.css";
 
@@ -109,6 +109,7 @@ const HERO_VIDEO = `<video class="lp-hero__video" autoplay muted loop playsinlin
 
 function HeroVideo() {
   const ref = useRef<HTMLDivElement>(null);
+  const [soundOn, setSoundOn] = useState(false);
   useEffect(() => {
     const v = ref.current?.querySelector("video");
     if (!v) return;
@@ -116,7 +117,26 @@ function HeroVideo() {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
     else void v.play().catch(() => undefined); // blocked (e.g. data saver): the poster stays
   }, []);
-  return <div ref={ref} className="lp-hero__media" dangerouslySetInnerHTML={{ __html: HERO_VIDEO }} />;
+  // browsers only autoplay muted video: the music (and the run's footsteps) comes on with the visitor's own tap
+  const toggleSound = (): void => {
+    const v = ref.current?.querySelector("video");
+    if (!v) return;
+    v.muted = soundOn;
+    if (!soundOn) void v.play().catch(() => undefined);
+    setSoundOn(!soundOn);
+  };
+  return (
+    <div className="lp-hero__frame">
+      <div ref={ref} className="lp-hero__media" dangerouslySetInnerHTML={{ __html: HERO_VIDEO }} />
+      <button type="button" className="lp-hero__sound" aria-pressed={soundOn} aria-label={soundOn ? "Turn sound off" : "Turn sound on"} onClick={toggleSound}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M11 5 6 9H3v6h3l5 4z" />
+          {soundOn ? <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /> : <path d="m22 9-6 6M16 9l6 6" />}
+        </svg>
+        {soundOn ? "Sound on" : "Tap for sound"}
+      </button>
+    </div>
+  );
 }
 
 function Check() {

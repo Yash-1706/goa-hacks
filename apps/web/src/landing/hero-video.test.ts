@@ -20,4 +20,10 @@ describe("landing hero video", () => {
     expect(video).toMatch(/src="[^"]*media\/synapse-launch-landscape\.mp4"/);
     expect(video).toContain('<img src="');
   });
+
+  it("has a sound button: autoplay must stay muted, the visitor turns the music on", () => {
+    expect(html).toMatch(/<button[^>]*class="lp-hero__sound"[^>]*aria-pressed="false"[^>]*>/);
+    expect(html).toMatch(/aria-label="Turn sound on"/);
+  });
 });
+
