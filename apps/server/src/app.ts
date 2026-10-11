@@ -3,17 +3,21 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { ClientConfig, ServerMessage } from "@synapse/shared";
 import { Bus } from "./bus";
+import { CaptureService } from "./capture/service";
 import { systemClock, type Clock } from "./clock";
 import type { Config } from "./config";
 import type { Hub } from "./ctx";
 import { CortexEngine } from "./cortex/engine";
 import { MockCortex } from "./cortex/mock";
 import type { CortexBackend, CortexInput, CortexOutput, PartialCallback } from "./cortex/types";
+import { Auth } from "./gateway/auth";
 import { WsHub, type HubServices } from "./gateway/hub";
-import { registerRoutes } from "./gateway/routes";
+import { MAX_CAPTURE_BYTES, registerRoutes } from "./gateway/routes";
+import { registerWeb, webDistReady } from "./gateway/static";
 import { Trust, isAllowedOrigin } from "./gateway/trust";
 import { ControlIntents } from "./gate/intent";
 import { Triager } from "./gate/triage";
@@ -77,6 +81,8 @@ export interface AppCtx {
   battery: BatteryLog;
   audit: AuditChain;
   trust: Trust;
+  /** passcode sessions, the capture token, and the public URL (tunnel) */
+  auth: Auth;
   privacy: PrivacyService;
   outbox: Outbox;
   autonomy: AutonomyPolicy;
@@ -97,6 +103,10 @@ export interface AppCtx {
   /** the engine that would take the NEXT utterance on the on-server speech endpoints: Sarvam's cloud API, or Whisper (always Whisper in local-only mode) */
   speechStt: () => LocalStt | null;
   asides: { count: number };
+  /** POST /api/capture: text or audio from any client, through the same engine */
+  capture: CaptureService;
+  /** this server also serves the built web app (one origin, one port) */
+  webServed: boolean;
   fastify: FastifyInstance;
   clientConfig: () => ClientConfig;
   /** resolves when every recall answer started by a spoken question has finished (benchmarks and evals wait before they stop the app) */
@@ -150,6 +160,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
 
   // ---- services (hub is created first and late-bound so services can depend on it)
   const trust = new Trust(db, cfg);
+  const auth = new Auth(db, { passcode: cfg.remote.passcode, publicUrl: cfg.remote.publicUrl }, clock);
   const services = {} as HubServices;
   const hub = new WsHub(services);
   const hubIface: Hub = hub;
@@ -212,6 +223,32 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
             }),
         })
       : null;
+  // Speech for POST /api/capture (a phone upload, a shared voice note): Sarvam when a key exists, otherwise Whisper on this machine.
+  // Local-only mode always uses Whisper. These engines exist whatever WISPR_MODE says: the live microphone path is separate.
+  let captureSarvam: LocalStt | null = sarvamStt;
+  let captureWhisper: LocalStt | null = localStt;
+  const captureStt = (): { stt: LocalStt; provider: "sarvam" | "whisper" } => {
+    if (!privacy.localOnly && cfg.stt.sarvam.apiKey) {
+      captureSarvam ??= new LocalStt({
+        model: `sarvam:${cfg.stt.sarvam.model}`,
+        dtype: "api",
+        cacheDir: cfg.stt.cacheDir,
+        languages: cfg.wispr.languages,
+        loader: async () =>
+          new SarvamStt({
+            apiKey: cfg.stt.sarvam.apiKey,
+            baseUrl: cfg.stt.sarvam.baseUrl,
+            model: cfg.stt.sarvam.model,
+            languageCode: cfg.stt.sarvam.languageCode,
+            keyterms: () => [cfg.user.firstName, ...cfg.user.team.map((m) => m.name), ...store.topDictionary(40)],
+            onSend: (i) => audit.append("sent_to_stt", `sarvam:${i.model}`, i.audioMs),
+          }),
+      });
+      return { stt: captureSarvam, provider: "sarvam" };
+    }
+    captureWhisper ??= new LocalStt({ model: cfg.stt.model, dtype: cfg.stt.dtype, cacheDir: cfg.stt.cacheDir, languages: cfg.wispr.languages, ...(opts.sttBackend ? { loader: async () => opts.sttBackend as SttBackend } : {}) });
+    return { stt: captureWhisper, provider: "whisper" };
+  };
   const sttAuth = new LocalSttAuth();
   const wispr = new WisprService({
     cfg, store, clock, anyListening: () => hub.anyListening(),
@@ -233,6 +270,8 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   });
   privacy.attachEngine(engine);
   const proactive = new ProactiveEngine({ cfg, clock, bus, store, embedder, hub: hubIface, emit, recall, deep, outbox, privacy, audit, asides });
+
+  const capture = new CaptureService({ db, clock, store, engine, isPaused: () => privacy.isPaused(), stt: captureStt, emit, ttlHours: cfg.memory.ttlHours });
 
   const consolidator = new Consolidator({ cfg, clock, store, embedder, deep, emit, audit, isPaused: () => privacy.isPaused() });
 
@@ -256,7 +295,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   });
 
   Object.assign(services, {
-    cfg, clock, bus, store, engine, privacy, metrics, battery, wispr, outbox, audit, trust, asides,
+    cfg, clock, bus, store, engine, privacy, metrics, battery, wispr, outbox, audit, trust, auth, asides,
     recall: () => recall,
     proactive: () => proactive,
     clientConfig,
@@ -264,17 +303,22 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
 
   // ---- http
   const fastify = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024 });
-  await fastify.register(cors, { origin: (origin, cb) => cb(null, isAllowedOrigin(origin ?? undefined)) });
+  await fastify.register(cors, { origin: (origin, cb) => cb(null, isAllowedOrigin(origin ?? undefined, auth.publicOrigin)), credentials: true });
+  await fastify.register(multipart, { limits: { fileSize: MAX_CAPTURE_BYTES, files: 1, fields: 8, fieldSize: 64 * 1024 } });
   await hub.register(fastify);
   const speechStt = (): LocalStt | null => (sarvamStt && wispr.sttProvider() === "sarvam" ? sarvamStt : localStt);
-  if (localStt) registerLocalStt(fastify, { stt: () => speechStt() as LocalStt, auth: sttAuth, allowed: () => wispr.localAllowed(), now: () => clock.now() });
+  if (localStt) registerLocalStt(fastify, { stt: () => speechStt() as LocalStt, auth: sttAuth, allowed: () => wispr.localAllowed(), now: () => clock.now(), publicOrigin: () => auth.publicOrigin });
 
   const ctx: AppCtx = {
-    cfg, clock, bus, db, vault, store, embedder, triager, intents, metrics, battery, audit, trust, privacy, outbox, autonomy, engine,
-    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, localStt, speechStt, asides, fastify, clientConfig,
+    cfg, clock, bus, db, vault, store, embedder, triager, intents, metrics, battery, audit, trust, auth, privacy, outbox, autonomy, engine,
+    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, localStt, speechStt, asides, capture, webServed: false, fastify, clientConfig,
     idleRecall: async () => void (await Promise.allSettled([...pendingRecall])),
   };
   registerRoutes(fastify, ctx);
+  // one origin for pages, API and WebSocket (pnpm start): needed behind a tunnel for the cookie, the service worker and the socket
+  const serveWeb = cfg.remote.serveWeb === "on" || (cfg.remote.serveWeb === "auto" && webDistReady(cfg.remote.webDist));
+  if (serveWeb) await registerWeb(fastify, cfg.remote.webDist);
+  ctx.webServed = serveWeb;
 
   const timers: Array<ReturnType<typeof setInterval>> = [];
 
@@ -295,7 +339,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
       }
     }
     timers.forEach((t) => t.unref?.());
-    banner(cfg, trust.pairingCode, embedder, vault.kekSource, wispr.mode === "local" ? (wispr.sttProvider() === "sarvam" ? `Sarvam cloud speech (${cfg.stt.sarvam.model}, ${cfg.stt.sarvam.languageCode})` : `local (on-device ${cfg.stt.model})`) : wispr.mode, live ? (cfg.llm.provider === "groq" ? `groq ${cfg.llm.fast}` : cfg.llm.fast) : "mock cortex (no LLM)", clientConfig().integrations);
+    banner(cfg, ctx.webServed, trust.pairingCode, embedder, vault.kekSource, wispr.mode === "local" ? (wispr.sttProvider() === "sarvam" ? `Sarvam cloud speech (${cfg.stt.sarvam.model}, ${cfg.stt.sarvam.languageCode})` : `local (on-device ${cfg.stt.model})`) : wispr.mode, live ? (cfg.llm.provider === "groq" ? `groq ${cfg.llm.fast}` : cfg.llm.fast) : "mock cortex (no LLM)", clientConfig().integrations);
   }
 
   async function backendWarm(): Promise<void> {
@@ -329,13 +373,15 @@ function lanAddresses(): string[] {
   return out;
 }
 
-function banner(cfg: Config, code: string, embedder: Embedder, kek: string, wisprMode: string, llm: string, integ: { github: boolean; jira: boolean }): void {
+function banner(cfg: Config, webServed: boolean, code: string, embedder: Embedder, kek: string, wisprMode: string, llm: string, integ: { github: boolean; jira: boolean }): void {
   const lan = lanAddresses()[0];
   const lines = [
     "",
     "  ┌─ Synapse ─────────────────────────────────────────────",
     `  │ server        http://localhost:${cfg.port}   (api + ws)`,
-    `  │ web           http://localhost:${cfg.webPort}${lan ? `   ·  phone: https://${lan}:${cfg.webPort}  (HTTPS=1 pnpm dev:web)` : ""}`,
+    webServed
+      ? `  │ web           http://localhost:${cfg.port}   (built app, same port)`
+      : `  │ web           http://localhost:${cfg.webPort}${lan ? `   ·  phone: https://${lan}:${cfg.webPort}  (HTTPS=1 pnpm dev:web)` : ""}`,
     `  │ pairing code  ${code}   (only needed for non-local devices)`,
     `  │ wispr         ${wisprMode}${wisprMode === "mock" ? "  (typed input only; WISPR_MODE=client + WISPR_API_KEY for Wispr, or WISPR_MODE=local for on-device speech)" : ""}`,
     `  │ cortex        ${llm}`,

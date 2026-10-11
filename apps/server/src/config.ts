@@ -104,6 +104,15 @@ const EnvSchema = z.object({
   RECURRING_WINDOW_MIN: num(10),
   SUGGESTION_MIN_GAP_S: num(120),
 
+  // --- V1 remote access: the passcode for phones and other clients, and the public URL they reach this server on
+  SYNAPSE_PASSCODE: str(""),
+  // set by `TUNNEL=1` automatically; set it yourself for a named tunnel or a reverse proxy (https://synapse.example.com)
+  PUBLIC_URL: str(""),
+  // 1 = start a cloudflared quick tunnel with the server and print its URL and a QR code
+  TUNNEL: bool(false),
+  // serve the built web app (apps/web/dist) from this server: one origin for pages, API and WebSocket. auto = when the build exists
+  SERVE_WEB: str("auto"),
+
   GITHUB_TOKEN: str(""),
   GITHUB_REPO: str(""),
   JIRA_BASE_URL: str(""),
@@ -188,6 +197,8 @@ export interface Config {
     threadCloseMs: number;
   };
   privacy: { localOnly: boolean; requirePairing: boolean; pseudonymize: boolean };
+  /** V1 remote access */
+  remote: { passcode: string; publicUrl: string; tunnel: boolean; serveWeb: "auto" | "on" | "off"; webDist: string };
   proactive: { autonomyLevel: number; recurringN: number; recurringWindowMin: number; minGapMs: number };
   integrations: {
     github: { token: string; repo: string };
@@ -310,6 +321,13 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
       localOnly: raw.LOCAL_ONLY,
       requirePairing: raw.REQUIRE_PAIRING,
       pseudonymize: raw.PSEUDONYMIZE_PERSONS,
+    },
+    remote: {
+      passcode: raw.SYNAPSE_PASSCODE,
+      publicUrl: raw.PUBLIC_URL,
+      tunnel: raw.TUNNEL,
+      serveWeb: ["1", "true", "on", "yes"].includes(raw.SERVE_WEB.toLowerCase()) ? "on" : ["0", "false", "off", "no"].includes(raw.SERVE_WEB.toLowerCase()) ? "off" : "auto",
+      webDist: path.resolve(REPO_ROOT, "apps/web/dist"),
     },
     proactive: {
       autonomyLevel: Math.max(0, Math.min(3, Math.round(raw.AUTONOMY_LEVEL))),

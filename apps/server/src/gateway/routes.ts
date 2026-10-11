@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { CaptureRequestSchema } from "@synapse/shared";
 import type { AppCtx } from "../app";
+import { CaptureError } from "../capture/service";
 import { runReplay, type ReplayScript } from "../cli/replay-lib";
 import { listEvents, view as calView } from "../integrations/calendar";
 import { graphSnapshot } from "../memory/graph";
@@ -9,8 +11,17 @@ import { parseQuery } from "../recall/engine";
 import { entitiesInText } from "../recall/search";
 import { isAllowedOrigin, isLoopback } from "./trust";
 
-/* REST surface (TRD §14). Everything except /api/health requires a trusted client: loopback, or a
- * paired device token. /api/dev/* additionally requires dev mode and loopback. */
+/* REST surface (TRD §14). Everything except /api/health and the login requires a trusted client: a passcode session, or (on the
+ * LAN only) loopback or a paired device token. With a public URL active (tunnel) only the session counts, for /api, the
+ * WebSocket upgrade and the on-device speech endpoints alike; the capture-only bearer token is accepted on POST /api/capture.
+ * /api/dev/* additionally requires dev mode and a real loopback request (never in tunnel mode). */
+
+/** reachable without a session: logging in needs to work */
+const OPEN = new Set(["/api/health", "/api/auth/login", "/api/auth/logout", "/api/auth/status"]);
+const guarded = (url: string): boolean => url.startsWith("/api") || url === "/ws" || url.startsWith("/local-stt");
+
+/** a 5-minute 16 kHz mono WAV is ~9.6 MB; voice notes shared from other apps may be larger */
+export const MAX_CAPTURE_BYTES = 25 * 1024 * 1024;
 
 const header = (req: FastifyRequest, name: string): string | undefined => {
   const v = req.headers[name];
@@ -18,17 +29,95 @@ const header = (req: FastifyRequest, name: string): string | undefined => {
 };
 
 export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
-  const { cfg, store, trust, engine, privacy, outbox, metrics, battery, audit, autonomy, clock } = ctx;
+  const { cfg, store, trust, auth, engine, privacy, outbox, metrics, battery, audit, autonomy, clock } = ctx;
 
   app.addHook("onRequest", async (req, reply) => {
     const url = req.url.split("?")[0] as string;
-    if (!url.startsWith("/api") || url === "/api/health") return;
-    if (!isAllowedOrigin(header(req, "origin"))) return reply.code(403).send({ error: "origin not allowed" });
+    if (!guarded(url) || OPEN.has(url)) return;
+    // the WebSocket and speech endpoints check the origin themselves (closing with 1008); REST is refused here
+    if (url.startsWith("/api") && !isAllowedOrigin(header(req, "origin"), auth.publicOrigin)) return reply.code(403).send({ error: "origin not allowed" });
     const ip = trust.clientIp(req.raw);
-    const verdict = trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token"));
-    if (!verdict.ok) return reply.code(401).send({ error: verdict.reason ?? "unauthorized" });
-    if (url.startsWith("/api/dev") && (!cfg.dev || !isLoopback(ip))) return reply.code(403).send({ error: "dev routes are localhost-only" });
-    if (url === "/api/pairing" && !isLoopback(ip)) return reply.code(403).send({ error: "the pairing code is only shown on the host" });
+    const local = isLoopback(ip) && !auth.publicMode; // behind a tunnel every request comes from loopback
+    const session = auth.hasSession(header(req, "cookie"));
+    const captureBearer = url === "/api/capture" && req.method === "POST" && auth.verifyCaptureToken(header(req, "authorization"));
+    if (!session && !captureBearer) {
+      if (auth.publicMode) return reply.code(401).send({ error: "sign in with the passcode" });
+      // the WebSocket authenticates in its hello and the speech endpoints with their own short-lived tokens (LAN only)
+      if (url.startsWith("/api")) {
+        const verdict = trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token"));
+        if (!verdict.ok) return reply.code(401).send({ error: verdict.reason ?? "unauthorized" });
+      }
+    }
+    if (url.startsWith("/api/dev") && (!cfg.dev || !local)) return reply.code(403).send({ error: "dev routes are localhost-only" });
+    if (url === "/api/pairing" && !local) return reply.code(403).send({ error: "the pairing code is only shown on the host" });
+  });
+
+  // -------------------------------------------------------------------- auth --
+  const secureReq = (req: FastifyRequest): boolean => header(req, "x-forwarded-proto") === "https" || req.protocol === "https";
+  app.post("/api/auth/login", async (req, reply) => {
+    const b = z.object({ passcode: z.string().max(200) }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "passcode required" });
+    const r = auth.login(b.data.passcode, trust.clientIp(req.raw), secureReq(req));
+    if (r.retryAfterS) void reply.header("retry-after", String(r.retryAfterS));
+    if (!r.ok) return reply.code(r.status).send({ error: r.error });
+    audit.append("signed_in", null, null);
+    return reply.header("set-cookie", r.setCookie).send({ ok: true });
+  });
+  app.post("/api/auth/logout", async (req, reply) => reply.header("set-cookie", auth.logoutCookie(secureReq(req))).send({ ok: true }));
+  app.get("/api/auth/status", async (req) => {
+    const ip = trust.clientIp(req.raw);
+    const legacy = !auth.publicMode && trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token")).ok;
+    return { authenticated: auth.hasSession(header(req, "cookie")) || legacy, passcodeSet: auth.enabled, publicMode: auth.publicMode };
+  });
+  app.get("/api/auth/capture-token", async (_req, reply) => (auth.enabled ? { token: auth.captureToken() } : reply.code(503).send({ error: "SYNAPSE_PASSCODE is not set on the server" })));
+  app.post("/api/auth/capture-token/rotate", async (_req, reply) => {
+    if (!auth.enabled) return reply.code(503).send({ error: "SYNAPSE_PASSCODE is not set on the server" });
+    auth.rotateCaptureToken();
+    audit.append("capture_token_rotated", null, null);
+    return { token: auth.captureToken() };
+  });
+
+  // ----------------------------------------------------------------- capture --
+  app.post("/api/capture", { bodyLimit: MAX_CAPTURE_BYTES }, async (req, reply) => {
+    let fields: Record<string, unknown>;
+    let audio: Uint8Array | undefined;
+    try {
+      if (req.isMultipart()) {
+        fields = {};
+        for await (const part of req.parts()) {
+          if (part.type === "file") {
+            if (part.fieldname !== "audio" || audio) {
+              await part.toBuffer(); // drain it
+              continue;
+            }
+            audio = new Uint8Array(await part.toBuffer());
+          } else fields[part.fieldname] = part.value;
+        }
+        if (typeof fields.context === "string") fields.context = JSON.parse(fields.context);
+        if (typeof fields.capturedAt === "string") fields.capturedAt = Number(fields.capturedAt);
+      } else fields = (req.body ?? {}) as Record<string, unknown>;
+    } catch (err) {
+      audio?.fill(0);
+      const tooBig = (err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
+      return reply.code(tooBig ? 413 : 400).send({ error: tooBig ? "audio too large (25 MB limit)" : "unreadable request" });
+    }
+    const parsed = CaptureRequestSchema.safeParse(fields);
+    if (!parsed.success) {
+      audio?.fill(0);
+      return reply.code(400).send({ error: `invalid capture: ${parsed.error.issues.map((i) => i.path.join(".") || i.message).join(", ")}` });
+    }
+    try {
+      return await ctx.capture.capture({ ...parsed.data, ...(audio ? { audio } : {}) });
+    } catch (err) {
+      if (err instanceof CaptureError) return reply.code(err.status).send({ error: err.message });
+      throw err;
+    } finally {
+      audio?.fill(0);
+    }
+  });
+  app.get("/api/captures", async (req) => {
+    const q = z.object({ limit: z.coerce.number().int().min(1).max(200).default(20) }).parse(req.query);
+    return ctx.capture.list(q.limit);
   });
 
   // ------------------------------------------------------------------ health --

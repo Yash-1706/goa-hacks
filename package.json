@@ -20,9 +20,12 @@
     "eval": "pnpm --filter @synapse/server eval",
     "bench": "pnpm --filter @synapse/server bench",
     "wispr:check": "pnpm --filter @synapse/server exec tsx ../web/scripts/wispr-check.ts",
-    "doctor": "pnpm --filter @synapse/server run doctor"
+    "doctor": "pnpm --filter @synapse/server run doctor",
+    "start": "pnpm --filter @synapse/web build && pnpm --filter @synapse/server start",
+    "tunnel": "TUNNEL=1 pnpm start"
   },
   "devDependencies": {
-    "concurrently": "^10.0.5"
+    "concurrently": "^10.0.5",
+    "playwright": "^1.64.0"
   }
 }

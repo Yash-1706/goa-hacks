@@ -33,6 +33,8 @@ export const TransportSchema = z.enum([
   /** the on-server speech endpoint with a cloud engine (Sarvam) behind it: the audio left this machine */
   "cloud_stt",
   "mock",
+  /** typed or dictated text sent to POST /api/capture (the capture box, Wispr Flow dictation, a Shortcut) */
+  "typed",
   "replay",
 ]);
 
@@ -184,6 +186,54 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   WisprTokenRequestSchema,
 ]);
 
+// ---------------------------------------------------------------- capture (REST)
+
+/** Where a capture came from: the phone app today; the Mac app, iPhone Shortcut and CLI later. */
+export const CAPTURE_SOURCES = ["android", "web", "mac", "ios", "cli"] as const;
+export type CaptureSource = (typeof CAPTURE_SOURCES)[number];
+
+export const CaptureContextSchema = z.object({
+  source: z.enum(CAPTURE_SOURCES),
+  /** frontmost app on a desktop */
+  app: z.string().max(200).optional(),
+  /** "owner/name" when known (the git repo open in the editor): routes a GitHub issue without asking */
+  repo: z.string().max(140).regex(/^[\w.-]+\/[\w.-]+$/).optional(),
+  url: z.string().max(2000).optional(),
+});
+export type CaptureContext = z.infer<typeof CaptureContextSchema>;
+
+/** POST /api/capture as JSON, or the non-file fields of the multipart form (with `context` as a JSON string there). */
+export const CaptureRequestSchema = z.object({
+  text: z.string().max(20_000).optional(),
+  context: CaptureContextSchema.optional(),
+  /** idempotency key: a retried offline upload is processed once */
+  clientId: z.string().min(6).max(80).regex(/^[\w-]+$/).optional(),
+  /** ms epoch when the user spoke (an offline upload arrives later) */
+  capturedAt: z.number().int().positive().optional(),
+});
+export type CaptureRequest = z.infer<typeof CaptureRequestSchema>;
+
+export interface CaptureResponse {
+  captureId: string;
+  transcript: string;
+  thoughtIds: string[];
+  /** this clientId was already processed: the stored result is returned, nothing ran again */
+  duplicate?: boolean;
+  /** memory is paused: the capture was discarded unheard */
+  paused?: boolean;
+  /** the engine was still working when the response deadline passed; the cards keep arriving over the WebSocket */
+  pending?: boolean;
+}
+
+export interface CaptureView {
+  captureId: string;
+  clientId?: string;
+  source: CaptureSource;
+  createdAt: number;
+  capturedAt: number;
+  thoughtIds: string[];
+}
+
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export type FragmentFinal = z.infer<typeof FragmentFinalSchema>;
 export type ClientMessageType = ClientMessage["type"];
@@ -294,6 +344,8 @@ export type ServerMessage =
   | { type: "notice"; level: "info" | "warn" | "success"; text: string; at: number }
   | { type: "metrics.update"; summary: LatencySummary }
   | { type: "calendar.update"; events: CalendarEventView[] }
+  /** a capture finished (phone upload, capture box): drives "Your last captures" and the session summary */
+  | { type: "capture.done"; capture: CaptureView }
   | { type: "error"; code: string; message: string };
 
 export type ServerMessageType = ServerMessage["type"];

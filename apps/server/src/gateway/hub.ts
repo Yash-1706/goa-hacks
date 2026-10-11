@@ -22,6 +22,7 @@ import type { BatteryLog, Metrics } from "../metrics/latency";
 import type { PrivacyService } from "../privacy/service";
 import type { AuditChain } from "../privacy/audit";
 import type { WisprService } from "../wispr/service";
+import type { Auth } from "./auth";
 import { isAllowedOrigin, type Trust } from "./trust";
 
 /* ============================================================================
@@ -43,6 +44,7 @@ export interface HubServices {
   outbox: Outbox;
   audit: AuditChain;
   trust: Trust;
+  auth: Auth;
   asides: { count: number };
   recall: () => RecallApi | undefined;
   proactive: () => ProactiveApi | undefined;
@@ -110,15 +112,17 @@ export class WsHub implements Hub {
   async register(app: FastifyInstance): Promise<void> {
     await app.register(websocket, { options: { maxPayload: MAX_MESSAGE } });
     app.get("/ws", { websocket: true }, (socket, req) => {
-      if (!isAllowedOrigin(req.headers.origin)) {
+      if (!isAllowedOrigin(req.headers.origin, this.s.auth.publicOrigin)) {
         socket.close(1008, "origin not allowed");
         return;
       }
       const ip = this.s.trust.clientIp(req.raw);
+      // a passcode session on the upgrade request authenticates the device (the only way in while a tunnel is up)
+      const session = this.s.auth.hasSession(req.headers.cookie);
       this.pending.add(socket);
       let conn: Conn | undefined;
       socket.on("message", (raw: Buffer) => {
-        void this.onMessage(socket, ip, raw, () => conn, (c) => (conn = c));
+        void this.onMessage(socket, ip, session, raw, () => conn, (c) => (conn = c));
       });
       socket.on("close", () => {
         this.pending.delete(socket);
@@ -136,7 +140,7 @@ export class WsHub implements Hub {
     });
   }
 
-  private async onMessage(socket: WebSocket, ip: string, raw: Buffer, get: () => Conn | undefined, set: (c: Conn) => void): Promise<void> {
+  private async onMessage(socket: WebSocket, ip: string, session: boolean, raw: Buffer, get: () => Conn | undefined, set: (c: Conn) => void): Promise<void> {
     let json: unknown;
     try {
       json = JSON.parse(raw.toString("utf8"));
@@ -152,7 +156,7 @@ export class WsHub implements Hub {
     }
     const msg = parsed.data;
     if (msg.type === "hello") {
-      this.onHello(socket, ip, msg, set);
+      this.onHello(socket, ip, session, msg, set);
       return;
     }
     if (!conn || !conn.authed) return;
@@ -166,8 +170,12 @@ export class WsHub implements Hub {
 
   // ------------------------------------------------------------------- hello --
 
-  private onHello(socket: WebSocket, ip: string, msg: Extract<ClientMessage, { type: "hello" }>, set: (c: Conn) => void): void {
-    const verdict = this.s.trust.check(ip, msg.deviceId, msg.token, msg.pairingCode);
+  private onHello(socket: WebSocket, ip: string, session: boolean, msg: Extract<ClientMessage, { type: "hello" }>, set: (c: Conn) => void): void {
+    const verdict: { ok: boolean; token?: string; reason?: string } = session
+      ? { ok: true }
+      : this.s.auth.publicMode
+        ? { ok: false, reason: "sign in with the passcode" }
+        : this.s.trust.check(ip, msg.deviceId, msg.token, msg.pairingCode);
     if (!verdict.ok) {
       socket.send(JSON.stringify({ type: "auth.required", reason: verdict.reason ?? "pairing required" } satisfies ServerMessage));
       return;

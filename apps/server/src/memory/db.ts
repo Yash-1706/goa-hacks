@@ -101,11 +101,30 @@ export class Db {
 
   private migrate(): void {
     const v = (this.raw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (v >= 1) return;
-    this.raw.exec(SCHEMA_V1);
-    this.raw.exec("PRAGMA user_version = 1");
+    if (v < 1) {
+      this.raw.exec(SCHEMA_V1);
+      this.raw.exec("PRAGMA user_version = 1");
+    }
+    if (v < 2) {
+      this.raw.exec(SCHEMA_V2);
+      this.raw.exec("PRAGMA user_version = 2");
+    }
   }
 }
+
+/**
+ * V1 product additions. `captures` makes POST /api/capture idempotent (a retried offline upload runs once) and lists the
+ * recent captures; it holds ids and routing context only, never the transcript (a retry rebuilds that from the fragments
+ * that still exist, so forgetting a thought also forgets it here). The context is sealed with the day key of the capture.
+ */
+const SCHEMA_V2 = `
+CREATE TABLE IF NOT EXISTS captures (
+  id TEXT PRIMARY KEY, client_id TEXT UNIQUE, source TEXT NOT NULL, session_id TEXT NOT NULL,
+  key_id TEXT NOT NULL, detail_enc BLOB NOT NULL,
+  captured_at INTEGER NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_captures_created ON captures(created_at);
+`;
 
 /**
  * Convention: every `*_enc` column is an AES-256-GCM blob (see crypto.ts).
