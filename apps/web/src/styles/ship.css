@@ -244,3 +244,9 @@
 .ship-why__kept {
   color: var(--faint);
 }
+.ship__improving {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 0.76rem;
+  font-style: italic;
+}

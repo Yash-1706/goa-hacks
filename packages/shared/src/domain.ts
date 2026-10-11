@@ -392,6 +392,8 @@ export interface ThoughtView {
   redactions?: number;
   /** why the live model was bypassed ("timeout", "rate_limit", ...) when source is mock after a live attempt */
   degraded?: string;
+  /** V1.1: an offline draft waiting for the model to re-draft it in place (Groq's free tier was out of budget) */
+  improving?: boolean;
 }
 
 export const SUGGESTION_KINDS = [

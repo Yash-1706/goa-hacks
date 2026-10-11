@@ -105,6 +105,8 @@ export class CortexEngine {
   private runs = new Set<Promise<void>>();
   private seq = 0;
   private shuttingDown = false;
+  /** V1.1: offline drafts waiting for the model (the re-draft queue) */
+  private improving = new Set<string>();
 
   constructor(private d: EngineDeps) {}
 
@@ -143,7 +145,34 @@ export class CortexEngine {
   }
 
   view(t: ThoughtRec): ThoughtView {
-    return { ...this.d.store.toView(t), analyzing: this.isAnalyzing(t.id) };
+    return { ...this.d.store.toView(t), analyzing: this.isAnalyzing(t.id), improving: this.improving.has(t.id) };
+  }
+
+  /** Show (or clear) "improving…" on a card waiting for the model to re-draft it. */
+  setImproving(thoughtId: string, on: boolean): void {
+    if (on === this.improving.has(thoughtId)) return;
+    if (on) this.improving.add(thoughtId);
+    else this.improving.delete(thoughtId);
+    const t = this.d.store.getThought(thoughtId);
+    if (t) this.d.emit({ type: "thought.upsert", thought: this.view(t) });
+  }
+
+  /** Draft an existing thought again with what was said (the re-draft queue): the result is applied in place, never as a new card. */
+  async reanalyze(thoughtId: string): Promise<void> {
+    const t = this.d.store.getThought(thoughtId);
+    if (!t) return;
+    const existing = this.byThought.get(thoughtId);
+    if (existing?.inflight) return;
+    const th =
+      existing ??
+      this.adoptThread(t, { dev: { id: t.deviceId, kind: t.deviceKind, activity: t.activity }, lastSpeechEnd: t.updatedAt, lastRecvAt: t.updatedAt, lastFragmentId: "" } as unknown as Thread);
+    th.lastResult = undefined;
+    th.inflight = true;
+    try {
+      await this.analyzeOnce(th);
+    } finally {
+      th.inflight = false;
+    }
   }
 
   /** Close every open thread (session end / shutdown). */
@@ -596,8 +625,11 @@ export class CortexEngine {
 
   // ------------------------------------------------------------------- apply --
 
-  private sanitize(r: CortexResult, candidates: Candidate[]): CortexResult {
+  private sanitize(r0: CortexResult, candidates: Candidate[]): CortexResult {
+    const r = r0;
     const known = new Set(candidates.map((c) => c.ref));
+    // a capture draft names the card it corrects by code ("T-3"): that is a real thought even if retrieval did not surface it
+    for (const r of r0.references ?? []) if (r.resolved_id && this.d.store.thoughtByCode(r.resolved_id)) known.add(r.resolved_id);
     const confidence = Number.isFinite(r.confidence) ? Math.max(0, Math.min(1, r.confidence)) : 0.5;
     const out: CortexResult = {
       ...r,
@@ -907,7 +939,7 @@ export class CortexEngine {
     const refCode = r.references.find((x) => x.resolved_id)?.resolved_id ?? null;
     const byRef = refCode ? candidates.find((c) => c.ref === refCode) : undefined;
     const fromLast = this.lastOtherThought(th, clock.now());
-    const target = (byRef && store.getThought(byRef.id)) || fromLast;
+    const target = (byRef && store.getThought(byRef.id)) || (refCode ? store.thoughtByCode(refCode) : undefined) || fromLast;
     if (!target || target.id === t.id) {
       this.dropThread(th, t, "aside"); // nothing to correct: treat as noise
       return;

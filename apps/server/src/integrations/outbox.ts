@@ -175,6 +175,7 @@ export class Outbox {
     const next = { ...a.payload, ...patch, kind: a.kind } as Artifact;
     a.payload = next;
     this.d.store.saveArtifact(a);
+    this.d.bus.emit("artifact.edited", { artifactId: a.id, thoughtId: a.thoughtId });
     this.d.emit({ type: "artifact.upsert", thoughtId: a.thoughtId, artifact: this.d.store.artifactView(a) });
   }
 

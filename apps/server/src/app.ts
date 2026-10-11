@@ -27,6 +27,8 @@ import { Outbox } from "./integrations/outbox";
 import { ClaudeCortex } from "./llm/anthropic";
 import { DeepLlm } from "./llm/deep";
 import { FailoverBackend } from "./llm/failover";
+import { BatchDrafter } from "./llm/batch";
+import { RedraftQueue } from "./cortex/redraft";
 import { GroqCortex } from "./llm/groq";
 import { GroqClient } from "./llm/groq-client";
 import { log } from "./log";
@@ -77,6 +79,8 @@ export interface AppOptions {
   groq?: GroqClient;
   /** replace the on-device speech model (tests) */
   sttBackend?: SttBackend;
+  /** whether the model has budget for a re-draft right now (tests) */
+  redraftBudget?: () => boolean;
 }
 
 /** Everything wired together. Services are created in dependency order; the hub is late-bound. */
@@ -124,12 +128,38 @@ export interface AppCtx {
   github: GithubAccount;
   /** where each artifact goes, what it still needs, its handoff links */
   routing: RoutingService;
+  /** offline drafts re-drafted by the model when the free tier has budget again */
+  redraft: RedraftQueue;
   /** this server also serves the built web app (one origin, one port) */
   webServed: boolean;
   fastify: FastifyInstance;
   clientConfig: () => ClientConfig;
   /** resolves when every recall answer started by a spoken question has finished (benchmarks and evals wait before they stop the app) */
   idleRecall: () => Promise<void>;
+}
+
+/**
+ * Results already drafted for a fragment (V1.1: one call per capture drafts every item up front). A one-fragment thread
+ * whose fragment has a preset gets it without another model call; everything else goes to the real backend.
+ */
+class PresetBackend implements CortexBackend {
+  readonly name = "preset";
+  constructor(
+    private presets: Map<string, CortexOutput>,
+    private next: CortexBackend,
+  ) {}
+  analyze(input: CortexInput, onPartial?: PartialCallback): Promise<CortexOutput> {
+    const only = input.fragments.length === 1 ? input.fragments[0]?.id : undefined;
+    const preset = only ? this.presets.get(only) : undefined;
+    if (only && preset) {
+      this.presets.delete(only);
+      return Promise.resolve(preset);
+    }
+    return this.next.analyze(input, onPartial);
+  }
+  async warm(): Promise<void> {
+    await this.next.warm?.();
+  }
 }
 
 class RoutingBackend implements CortexBackend {
@@ -220,7 +250,10 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
       ? new GroqCortex({ client: groq, model: cfg.llm.deep, fallback: mock, outputMode: cfg.llm.groq.outputMode, pseudonymNames, onCloudCall })
       : null;
   const liveBackend: CortexBackend | null = live instanceof GroqCortex && spare ? new FailoverBackend(live, spare) : live;
-  const backend = opts.backend ?? new RoutingBackend(() => (privacy.localOnly || !liveBackend ? mock : liveBackend));
+  const presets = new Map<string, CortexOutput>();
+  const backend = new PresetBackend(presets, opts.backend ?? new RoutingBackend(() => (privacy.localOnly || !liveBackend ? mock : liveBackend)));
+  // V1.1: one call per capture on Groq (the free tier allows ~2-3 calls a minute; a 3-item ramble used to need 3)
+  const batchDrafter = groq ? new BatchDrafter({ client: groq, model: cfg.llm.fast, maxWaitMs: cfg.llm.groq.captureMaxWaitMs, pseudonymNames, onCloudCall }) : null;
   const deep = new DeepLlm(cfg, { isLocalOnly: () => privacy.localOnly, pseudonymNames, onCloudCall, groq: groq ?? undefined });
 
   // on-device speech: nothing is loaded until it is used (or STT_PRELOAD), and its endpoints refuse audio unless it is in use
@@ -297,11 +330,39 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   privacy.attachEngine(engine);
   const proactive = new ProactiveEngine({ cfg, clock, bus, store, embedder, hub: hubIface, emit, recall, deep, outbox, privacy, audit, asides });
 
-  const capture = new CaptureService({ db, clock, store, engine, isPaused: () => privacy.isPaused(), stt: captureStt, emit, ttlHours: cfg.memory.ttlHours });
+  const capture = new CaptureService({
+    db, clock, store, engine, isPaused: () => privacy.isPaused(), stt: captureStt, emit, ttlHours: cfg.memory.ttlHours,
+    batch: () => (privacy.localOnly || !batchDrafter ? null : batchDrafter),
+    presets,
+    user: () => ({ name: cfg.user.firstName, team: profile.team().map((m) => m.name), timezone: profile.get().timezone }),
+  });
   const routing = new RoutingService({ store, profile, capture, github, clock, emit });
   store.decorateArtifact = (a) => routing.view(a);
   outbox.connect({ github: () => github.api(), repoFor: (a) => routing.repoFor(a) });
   profile.attachLlm(deep);
+
+  // V1.1: offline drafts (Groq out of budget) are re-drafted in place once budget returns; hand edits are never overwritten
+  const edited = new Set<string>();
+  bus.on("artifact.edited", ({ artifactId }) => void edited.add(artifactId));
+  const redraft = new RedraftQueue({
+    state: (id) => {
+      const t = store.getThought(id);
+      if (!t || t.category === "correction" || t.retracted) return undefined;
+      const a = t.artifactId ? store.artifacts.get(t.artifactId) : undefined;
+      return { source: t.source, ...(t.degraded ? { degraded: t.degraded } : {}), ...(a ? { artifactStatus: a.status, edited: edited.has(a.id) } : {}) };
+    },
+    reanalyze: (id) => engine.reanalyze(id),
+    setImproving: (id, on) => engine.setImproving(id, on),
+    budget:
+      opts.redraftBudget ??
+      (() => {
+        if (privacy.localOnly || !liveBackend) return false;
+        if (!groq) return true;
+        if (groq.disabledReasonFor(cfg.llm.fast)) return false;
+        return (groq.stats().models[cfg.llm.fast]?.bucketTokens ?? 0) >= 3500; // one more per-thought call fits the free tier's minute
+      }),
+  });
+  bus.on("thought.updated", ({ thoughtId }) => redraft.consider(thoughtId));
   privacy.attachProfile({ profile: () => profile.get(), resetProfile: () => profile.reset(), forgetGithub: () => github.forget() });
 
   const consolidator = new Consolidator({ cfg, clock, store, embedder, deep, emit, audit, isPaused: () => privacy.isPaused() });
@@ -344,7 +405,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
 
   const ctx: AppCtx = {
     cfg, clock, bus, db, vault, store, embedder, triager, intents, metrics, battery, audit, trust, auth, privacy, outbox, autonomy, engine,
-    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, localStt, speechStt, asides, capture, profile, github, routing, webServed: false, fastify, clientConfig,
+    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, localStt, speechStt, asides, capture, profile, github, routing, redraft, webServed: false, fastify, clientConfig,
     idleRecall: async () => void (await Promise.allSettled([...pendingRecall])),
   };
   registerRoutes(fastify, ctx);
@@ -361,6 +422,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
       proactive.start();
       consolidator.start();
       timers.push(
+        setInterval(() => void redraft.tick(), 5_000),
         setInterval(() => store.sweep(), 60_000),
         setInterval(() => metrics.flush(), 5_000),
       );

@@ -9,6 +9,8 @@ export interface BusEvents {
   "thought.removed": { thoughtId: string; reason: string };
   "speech.state": { deviceId: string; speaking: boolean; at: number };
   "artifact.status": { artifactId: string; thoughtId: string; status: ArtifactStatus };
+  /** the user edited a draft by hand: nothing automatic may overwrite it again */
+  "artifact.edited": { artifactId: string; thoughtId: string };
   "privacy.paused": { by: string; at: number };
   "privacy.resumed": { by: string; at: number };
   "suggestion.resolved": { id: string; kind: string; action: "accept" | "dismiss" | "later" };

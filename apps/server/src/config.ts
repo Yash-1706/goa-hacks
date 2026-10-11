@@ -83,6 +83,8 @@ const EnvSchema = z.object({
   GROQ_OUTPUT_MODE: str("auto"),
   GROQ_TPM: num(7000),
   GROQ_MAX_WAIT_MS: num(2000),
+  // V1.1: a whole capture (phone upload, capture box) may wait this long for the free tier's budget; the live mic keeps GROQ_MAX_WAIT_MS
+  GROQ_CAPTURE_MAX_WAIT_MS: num(25000),
   GROQ_MAX_REQUESTS_PER_DAY: num(900),
 
   EMBEDDINGS: str("model"),
@@ -187,6 +189,8 @@ export interface Config {
       tpm: number;
       /** longest a call may queue for the budget before it degrades to the local cortex */
       maxWaitMs: number;
+      /** the capture path (one call per capture) waits longer: a phone upload has no live listener to keep up with */
+      captureMaxWaitMs: number;
       /** local safety cap on requests per UTC day (the free tier allows 1,000); 0 = no cap */
       maxRequestsPerDay: number;
     };
@@ -304,6 +308,7 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
         outputMode: groqMode,
         tpm: Math.max(500, raw.GROQ_TPM),
         maxWaitMs: Math.max(0, raw.GROQ_MAX_WAIT_MS),
+        captureMaxWaitMs: Math.max(0, raw.GROQ_CAPTURE_MAX_WAIT_MS),
         maxRequestsPerDay: Math.max(0, Math.round(raw.GROQ_MAX_REQUESTS_PER_DAY)),
       },
     },

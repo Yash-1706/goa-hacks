@@ -94,3 +94,19 @@ describe("drafts a person would send (offline cortex)", () => {
     expect(e!.t.title).toBe("Email the team: the launch moves to Friday");
   });
 });
+
+describe("comma-joined rambles become the right drafts (V1.1)", () => {
+  it("the exact transcript real Sarvam produced: issue, email draft, reminder at 7", async () => {
+    app = await makeApp({}, NOW);
+    const made = await captured(
+      "That bug from yesterday, the null pointer in cart service, probably the discount code, oh, and email the team that the launch moves to Friday. Remind me to call the landlord tomorrow at 6. Wait, was that my phone? Actually make it 7.",
+    );
+    expect(made.map((m) => m.a?.kind)).toEqual(["github_issue", "email_draft", "reminder"]);
+    expect((made[2]!.a!.payload as ArtifactOf<"reminder">).due_iso).toBe("2026-10-07T19:00:00+05:30");
+  });
+  it.each(["and also", "oh and", "plus", "also"])("'…, %s email Dev that…' is an email draft", async (join) => {
+    app = await makeApp({}, NOW);
+    const made = await captured(`The checkout page crashes on empty carts, ${join} email Dev that the deploy is on hold.`);
+    expect(made.map((m) => m.a?.kind)).toEqual(["github_issue", "email_draft"]);
+  });
+});

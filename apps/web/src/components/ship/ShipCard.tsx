@@ -270,7 +270,11 @@ export function ShipCard({ thought, compact = false }: { thought: ThoughtView; c
         </span>
         <span className="ship__label">{label}</span>
         {dest ? <span className="ship__dest">{dest}</span> : null}
-        {need ? <span className="ship__needs">Needs one answer</span> : null}
+        {need ? <span className="ship__needs">Needs one answer</span> : thought.improving ? (
+          <span className="ship__improving" title="Drafted offline while the model was busy; the model is improving it">
+            improving…
+          </span>
+        ) : null}
       </header>
       <h3 className="ship__title">{thought.title}</h3>
       {text && !compact ? <p className="ship__text">{text}</p> : null}

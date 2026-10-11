@@ -20,16 +20,20 @@ const page = await ctx.newPage();
 await page.goto(base + "/", { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(1500); // let the WebSocket connect
 
-const upload = (withCookie) => {
+const clientId = `e2e-${Date.now().toString(36)}`;
+const upload = () => {
   const form = new FormData();
   form.append("audio", new Blob([fs.readFileSync(wavPath)], { type: "audio/wav" }), "ramble.wav");
   form.append("context", JSON.stringify({ source: "cli" }));
-  return fetch(`${base}/api/capture`, { method: "POST", headers: { origin, ...(withCookie ? { cookie } : {}) }, body: form });
+  form.append("clientId", clientId);
+  return fetch(`${base}/api/capture`, { method: "POST", headers: { origin, cookie }, body: form });
 };
 
-const denied = await upload(false);
+// the "no cookie" probe reads, never writes: an upload without a session would be ACCEPTED on localhost (trusted), and
+// that second capture is what looked like a double upload in the first live check
+const denied = await fetch(`${base}/api/state`, { headers: { origin } });
 const t0 = Date.now();
-const res = await upload(true);
+const res = await upload();
 const body = await res.json();
 const ms = Date.now() - t0;
 const thoughts = await Promise.all(body.thoughtIds.map((id) => fetch(`${base}/api/thoughts/${id}`, { headers: { cookie, origin } }).then((r) => r.json())));

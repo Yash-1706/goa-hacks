@@ -69,3 +69,17 @@ describe("segmentIntents", () => {
     expect(pairs("just one idea without punctuation")).toEqual([["just one idea without punctuation", true]]);
   });
 });
+
+describe("segmentIntents: comma-joined intents (V1.1: what real Sarvam writes)", () => {
+  const BUG = "That bug from yesterday, the null pointer in cart service, probably the discount code";
+  it.each([", oh, and email", ", and also email", ", oh and email", ", plus email", ", also email"])("%s … starts its own thought, and the lead-in stays out of the bug", (join) => {
+    const segs = segmentIntents(`${BUG}${join} the team that the launch moves to Friday.`);
+    expect(segs.map((s) => s.startsThought)).toEqual([true, true]);
+    expect(segs[0]!.text).toBe(BUG);
+    expect(segs[1]!.text).toBe("email the team that the launch moves to Friday.");
+  });
+  it("a plain list joined by 'plus' or 'also' is not split", () => {
+    expect(segmentIntents("Buy milk, eggs, plus some bread").length).toBe(1);
+    expect(segmentIntents("The checkout is slow, also on mobile").length).toBe(1);
+  });
+});

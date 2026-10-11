@@ -53,12 +53,16 @@ const startsAction = (s: string): boolean => {
   return ACTION.test(core) && !PRONOUN_OBJECT.test(core);
 };
 
-/** Split a sentence before ", and <action>" / " and <action>" when the action is aimed at something new. */
+/**
+ * Split a sentence before a joiner + <action> when the action is aimed at something new: " and email…", and the comma-joined
+ * forms speech-to-text writes when there is no full stop (", oh, and email…", ", and also…", ", oh and…", ", plus…", ", also…").
+ * "plus"/"also" only count after a comma, and only before an action ("eggs, plus some bread" is a list).
+ */
 function clauses(sentence: string): string[] {
   const out: string[] = [];
   let rest = sentence;
   for (;;) {
-    const re = /,?\s+and\s+(?=\S)/gi;
+    const re = /,\s*(?:(?:oh|um+|uh+|so),?\s+)?(?:and\s+also|and|also|plus)\s+(?=\S)|\s+and\s+(?:also\s+)?(?=\S)/gi;
     let cut = -1;
     let next = 0;
     for (let m = re.exec(rest); m; m = re.exec(rest)) {

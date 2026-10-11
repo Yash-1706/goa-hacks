@@ -3,7 +3,15 @@
 Plan: [docs/V1_PLAN.md](V1_PLAN.md). Branch `v1` (cut from `main` at 961283c).
 
 ## Current
-Done. Final report: [V1_REPORT.md](V1_REPORT.md); what is left for Sayed: [MANUAL_STEPS.md](MANUAL_STEPS.md).
+**V1.1 run** (2026-10-11, second unattended run): Phase 2 (fixes from review). Phase 1 done. V1 itself is done: [V1_REPORT.md](V1_REPORT.md).
+
+## V1.1 pre-flight (verified, not assumed)
+- `.env`: Sarvam + Groq keys, `GITHUB_SANDBOX_REPO=SayedZahur786/synapse-sandbox`, `LLM_MODE=live`, `WISPR_MODE=sarvam`. **Passcode is 8 digits (not 12+), kept as chosen** → MANUAL_STEPS; doctor warns.
+- Tailscale 1.102.2 installed and signed in but was **stopped**; the run brought it back up with the existing flags (`tailscale up --accept-routes`). **Funnel is not enabled on the tailnet** (`tailscale funnel 8787` prints an approval link) → MANUAL_STEPS. Stable URL once approved: `https://sayeds-macbook-air.tail351c98.ts.net`.
+- ngrok: not installed; it needs an account + authtoken (sign-up is off limits) → not used.
+- So the live public URL for this run is the **cloudflared quick tunnel** (temporary).
+- Mac sleeps after 1 min on AC (`pmset`: AC sleep 1) → MANUAL_STEPS; the run uses `caffeinate -i -s` only for itself.
+- `gh` logged in as SayedZahur786.
 
 ## Pre-flight state at start (2026-10-11)
 - Branch `v1` created by the run.
@@ -108,6 +116,15 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 - Final: minor (deferred): sessions cannot be revoked server-side; open WebSockets not re-checked.
 - Final: Ruling: the reviewer's "declined to judge" items (encrypted IndexedDB queue, mark-shipped-on-tap, default repo before asking, Secure-on-https cookie, LAN pairing kept) stand as ruled above — cost if wrong as stated per ruling.
 
+## V1.1
+### V1.1 Phase 1: card quality on Groq's free tier
+- **One call per capture** (`llm/batch.ts`, `cortex/prompts-batch.ts`): the whole transcript (redacted) goes to Groq once; the answer `{items:[{said, category, title, intent, confidence, artifact, repairs, entities, corrects}]}` is zod-validated (one repair round); each item becomes a one-fragment thread whose result is handed to the engine through a `PresetBackend` (no second call). In-capture corrections are applied inside the item; a correction or retraction of an EARLIER card names its code (`corrects: "T-3"`), which the engine now resolves directly. Asides come back as aside items (counted, dropped). On failure: the existing segmenter + per-thought path. Prompt + transcript + 1600-token allowance < 4.5k tokens (tested). The live mic keeps its streaming per-thought path.
+- **Waiting for budget:** the capture call may queue `GROQ_CAPTURE_MAX_WAIT_MS` (25 s); the live mic keeps `GROQ_MAX_WAIT_MS` (2 s).
+- **Re-draft queue** (`cortex/redraft.ts`): offline drafts degraded for paced / rate_limit / timeout / network are re-drafted in place when the bucket has room (≥3.5k tokens), one at a time, max 5 attempts; `improving` on the view ("improving…" on the card). Shipped, opened, dismissed or hand-edited cards are never overwritten (`artifact.edited` bus event). Same thought, never a duplicate (tested through the real app).
+- **Offline model fix:** the segmenter splits comma-joined intents (", oh, and", ", and also", ", oh and", ", plus", ", also" before an action; lists are not split); an explicit "email/tell/message X…" is a confident communication item. The exact transcript real Sarvam produced now gives issue / email draft / reminder at 7.
+- **"Double upload":** not an idempotency bug. `scripts/e2e/phase1.mjs` sent an unauthenticated probe upload (accepted on localhost) plus the real one, neither with a clientId. The probe is now a read (`GET /api/state`) and the upload carries a clientId. Same-clientId idempotency was already covered by tests.
+- Tests: batch (6), redraft (5), segmenter (+6), reminder/offline (+5). Suite 1135/1135.
+
 ## Decisions
 - Ruling: no `.env` is created by the run. The app's no-`.env` default is mock mode; settings the checks need are passed as process environment. Sayed explicitly declined the `.env` copy — cost if wrong: one `cp` for Sayed, listed in MANUAL_STEPS.
 - Ruling: commit messages carry no AI attribution — Sayed's global CLAUDE.md forbids it and outranks the session default — cost if wrong: none.
@@ -137,6 +154,9 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 - Ruling: the status pill has a fifth state, "Ready" (connected, mic off) — the plan's four states leave the normal idle state unnamed.
 - Ruling: the "no internal ids" check runs in Playwright against the real UI (not a DOM-less unit test), on the screens a user lands on: Inbox, Ask, Settings' default tab, /capture. The Developer tab (Lab) still shows latencies by design.
 - Ruling: engine and model are chosen in `.env` (as before); the Voice engine and AI model tabs explain the current choice and offer the local-only switch rather than editing `.env` from the browser.
+
+- Ruling (V1.1): one call per capture is built for Groq only; with an Anthropic key the per-thought path stays (no free-tier budget problem there) — cost if wrong: more calls per capture on Claude.
+- Ruling (V1.1): a batch item's "needs" are not taken from the model; questions stay computed by the deterministic router from the profile (tested, no hallucinated questions) — cost if wrong: none.
 
 ## Blocked
 - On-device Whisper model download (`Xenova/whisper-tiny.en`) fails here: Hugging Face is unreachable from the run's sandbox (`fetch failed`). The embedding model was already cached. E2E audio runs use the fake Sarvam instead. On Sayed's normal shell this downloads once (MANUAL_STEPS).

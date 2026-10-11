@@ -55,6 +55,9 @@ function reviseArtifact(old: Artifact | undefined, text: string, input: CortexIn
  * labelled "mock" in the UI so nobody mistakes it for the real model.
  * ========================================================================== */
 
+/** an instruction to write to someone: "email the team that…", "tell Dev…", "message Sarah about…" */
+const COMM_LEAD = /^(?:please\s+)?(?:e-?mail|mail|message|text|ping|tell|write to|reply to)\s+(?!me\b)\S/i;
+
 const LEAD_MARKERS = /^(?:uh+|um+|hmm+|er+|so|well|okay|ok|and|or|but|like|yeah|maybe|probably|actually|i think|i guess|then|also)[,.\s]+/i;
 
 export function cleanClause(s: string): string {
@@ -375,6 +378,10 @@ export class MockCortex implements CortexBackend {
       category = "aside"; // a correction we cannot interpret must never be destructive
     }
 
+    // "email the team that…", "tell Dev…": an explicit instruction to write to someone is a message, and not a guess
+    // (speech-to-text often joins it to the thought before with a comma, so it arrives without its "Oh, and" lead-in)
+    const commLead = COMM_LEAD.test(cleanClause(text)) && !REMIND.test(text);
+    if (commLead && !["privacy", "recall_query", "correction", "aside"].includes(category)) category = "communication";
     // "remind me to …": a reminder for the speaker alone (not "remind me to email the team": that is an email)
     const remind = REMIND.test(text) && !["communication", "bug", "aside", "privacy", "recall_query", "correction", "code", "decision"].includes(category);
     // a reminder with a time is scheduling, without one an action (the prompts say the same)
@@ -402,6 +409,7 @@ export class MockCortex implements CortexBackend {
     if (hedged) confidence = Math.min(confidence, 0.6);
     if (category === "aside") confidence = Math.max(confidence, 0.8);
     if (remind) confidence = Math.max(confidence, 0.8); // "remind me" is an explicit instruction, never a guess
+    if (commLead) confidence = Math.max(confidence, 0.8);
 
     const artifact = artifactFor(category, { text, title, intent, input, repairs, entities, hedged, refs: references, summary: titleCase(intentBase), remind });
     const cues: CortexResult["salience_cues"] = [];

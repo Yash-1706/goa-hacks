@@ -8,7 +8,9 @@ import { KeyDestroyedError } from "../memory/crypto";
 import type { Db } from "../memory/db";
 import type { MemoryStore } from "../memory/store";
 import type { LocalStt } from "../wispr/local-stt";
-import { segmentIntents } from "./segment";
+import { itemToOutput, type BatchDrafter } from "../llm/batch";
+import type { CortexOutput } from "../cortex/types";
+import { segmentIntents, type Segment } from "./segment";
 import { WavError, parseWav } from "./wav";
 
 /* ============================================================================
@@ -58,6 +60,11 @@ export interface CaptureDeps {
   /** how long the response waits for the cards (default 15 s); later cards still stream over the WebSocket */
   waitMs?: number;
   ttlHours: number;
+  /** V1.1: drafts a whole capture in one model call (null: offline, local-only, or a provider without it) */
+  batch?: () => Pick<BatchDrafter, "draft"> | null;
+  /** results handed to the engine for a fragment, so it applies them without another model call */
+  presets?: Map<string, CortexOutput>;
+  user?: () => { name: string; team: string[]; timezone: string };
 }
 
 export class CaptureError extends Error {
@@ -156,8 +163,10 @@ export class CaptureService {
       if (!transcript) throw new CaptureError("nothing to capture: send text or audio", 400);
     }
 
-    const segments = segmentIntents(transcript);
     const dev = deviceFor(context.source);
+    // V1.1: one model call drafts every item of the capture; otherwise the local segmenter + one call per thought
+    const drafted = await this.draftAll(transcript, dev.id, captureId);
+    const segments: Segment[] = drafted ? drafted.map((d) => ({ text: d.text, startsThought: true })) : segmentIntents(transcript);
     const sessionId = `${captureId}-s`;
     const fragmentIds = segments.map((_, i) => `${captureId}-${i}`);
     const now = clock.now();
@@ -191,6 +200,7 @@ export class CaptureService {
           const dur = Math.max(700, seg.text.split(/\s+/).length * 330);
           const start = cursor + gap;
           cursor = start + dur;
+          if (drafted?.[i]) this.d.presets?.set(fragmentIds[i] as string, drafted[i].output);
           await this.d.engine.handleFragment(dev, {
             type: "fragment.final",
             fragmentId: fragmentIds[i] as string,
@@ -211,11 +221,36 @@ export class CaptureService {
       });
     }
 
+    for (const fid of fragmentIds) this.d.presets?.delete(fid); // a fragment the engine dropped (noise, "pause memory") never asked for its draft
     const thoughtIds = this.thoughtsOf(fragmentIds);
     const view: CaptureView = { captureId, ...(input.clientId ? { clientId: input.clientId } : {}), source: context.source, createdAt: now, capturedAt, thoughtIds };
     this.d.emit({ type: "capture.done", capture: view });
     log.info("capture", "captured", { id: captureId, source: context.source, chars: transcript.length, segments: segments.length, thoughts: thoughtIds.length, transport });
     return { captureId, transcript, thoughtIds, ...(pending ? { pending: true } : {}) };
+  }
+
+  /** The whole transcript in one model call → one {text, output} per item, in the order said. Null: use the per-thought path. */
+  private async draftAll(transcript: string, deviceId: string, captureId: string): Promise<Array<{ text: string; output: CortexOutput }> | null> {
+    const drafter = this.d.batch?.();
+    const user = this.d.user?.();
+    if (!drafter || !user || !this.d.presets) return null;
+    const now = this.d.clock.now();
+    const recent = [...this.d.store.thoughts.values()]
+      .filter((t) => t.deviceId === deviceId && !t.retracted && now - t.createdAt < 30 * 60_000 && this.d.store.isRecallable(t))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 6)
+      .map((t) => {
+        const a = t.artifactId ? this.d.store.artifacts.get(t.artifactId) : undefined;
+        const due = a?.payload.kind === "reminder" ? a.payload.due_iso : a?.payload.kind === "calendar_event" ? a.payload.start_iso : null;
+        return { ref: t.code, title: t.title, kind: a?.kind ?? t.category, due };
+      });
+    const d = await drafter.draft({ now, timezone: user.timezone, user: { name: user.name, team: user.team }, recent, transcript });
+    if (!d) {
+      log.info("capture", "drafting one call per capture failed: per-thought path", { id: captureId });
+      return null;
+    }
+    log.info("capture", "drafted in one call", { id: captureId, items: d.items.length, calls: d.calls, ms: d.ms });
+    return d.items.filter((it) => it.said.trim()).map((it) => ({ text: it.said.trim(), output: itemToOutput(it, d) }));
   }
 
   /** Close the capture's threads and wait for the analysis, at most `waitMs`. A correction reopens its target, hence the loop. */
