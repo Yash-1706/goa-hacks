@@ -3,7 +3,7 @@
 Plan: [docs/V1_PLAN.md](V1_PLAN.md). Branch `v1` (cut from `main` at 961283c).
 
 ## Current
-Phase 5 (README, demo script, rehearsal, final verification).
+Done. Final report: [V1_REPORT.md](V1_REPORT.md); what is left for Sayed: [MANUAL_STEPS.md](MANUAL_STEPS.md).
 
 ## Pre-flight state at start (2026-10-11)
 - Branch `v1` created by the run.
@@ -90,6 +90,24 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 ### Phase 4 evidence
 `node scripts/e2e/phase4.mjs <tunnel> docs/screenshots/v1` → **34 screenshots** (Inbox empty and with cards, Why?, Ask, 7 Settings tabs, 5 first-run steps, /capture; each at 1440 and 390), **0 violations**: no internal ids, ms timings, autonomy labels or "mock" on Inbox, Ask, Settings (default tab) and /capture; no horizontal overflow on any screen at either width; no page errors. Reviewed by eye; fixed after the first pass: an inverted QR code (some scanners fail), a banner duplicating the email card, cards of one capture shown in reverse, "Recall"/"Desk" copy on Ask.
 
+### Phase 5
+- README rewritten as a product page (old one → `docs/ENGINEERING.md`, links fixed); `docs/DEMO_V1.md`; Settings shows the capture-only token.
+- `scripts/e2e/rehearse.mjs`: the demo on an emulated Pixel 7 (synthetic voice ending "actually make it 7") + a desktop browser, Gmail/Calendar intercepted, video recorded (`docs/screenshots/v1/demo-rehearsal*.webm`, video only). 8/8 beats in 3 runs (once after the review fixes).
+- Final: typecheck clean, 1105/1105 tests, `pnpm build`, `pnpm run doctor`, clean clone of `v1` (frozen install, 1105/1105, typecheck, no secrets / env / data / audio).
+- Tests now use the repo's model cache (a leftover `D:/goa-hack/data` default had created `apps/server/D:/…`, git-ignored, not deleted).
+
+### Final review (fresh-context reviewer, opus) and fix pass
+- Critical: percent-encoded `/%61pi/...` skipped the auth hook → fixed (matched route + decoded path), `review-fixes.test.ts` RED→GREEN, suite 1105/1105.
+- Important, all fixed RED→GREEN: spoofable login limit (Cloudflare client address, global cap, pruning, 8+ char passcode for public mode); routing answers lost on restart (loaded into the wrong table); retry during processing got an empty duplicate; "tonight" → 9 am and past stated times; wipe-all/export missing the profile + GitHub token.
+- Minor re-graded to Important and fixed: one undecryptable phone clip blocked the whole queue; a hand-run tunnel without PUBLIC_URL trusted loopback (now any request with Cloudflare headers needs a session).
+- Final: minor (deferred): mergeInto double-counts moved fragments in the centroid.
+- Final: minor (deferred): /shipped and /answer accept any status (can overwrite a real issue ref).
+- Final: minor (deferred): migrations v2/v3 are not transactional.
+- Final: minor (deferred): whenOptions weekday in UTC+13/14 and DST hour; "remind me at noon to eat" → "At to eat".
+- Final: minor (deferred): contextFor unindexed scan, twice per view.
+- Final: minor (deferred): sessions cannot be revoked server-side; open WebSockets not re-checked.
+- Final: Ruling: the reviewer's "declined to judge" items (encrypted IndexedDB queue, mark-shipped-on-tap, default repo before asking, Secure-on-https cookie, LAN pairing kept) stand as ruled above — cost if wrong as stated per ruling.
+
 ## Decisions
 - Ruling: no `.env` is created by the run. The app's no-`.env` default is mock mode; settings the checks need are passed as process environment. Sayed explicitly declined the `.env` copy — cost if wrong: one `cp` for Sayed, listed in MANUAL_STEPS.
 - Ruling: commit messages carry no AI attribution — Sayed's global CLAUDE.md forbids it and outranks the session default — cost if wrong: none.
@@ -132,6 +150,8 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 | 2 | clean | 1041 / 1041 (web 703, server 338) |
 | 3 | clean | 1091 / 1091 (web 710, server 381) |
 | 4 | clean | 1095 / 1095 (web 714, server 381) |
+| 5 | clean | 1095 / 1095 |
+| review fixes | clean | 1105 / 1105 (web 715, server 390) |
 
 ## Commits
 | Phase | hash |
@@ -140,3 +160,6 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 | 1 | afdf10c |
 | 2 | d8034ea |
 | 3 | eb421bd |
+| 4 | 85a874c |
+| 5 | 356f739 |
+| review fixes | 8386ef6 |
