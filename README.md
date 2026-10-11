@@ -2,6 +2,8 @@
 
 Ramble out loud on your phone or laptop, and Synapse turns it into finished things you can ship: a GitHub issue, an email draft, a reminder, a note. It skips the asides, asks one question when it needs a fact, remembers everything, and answers questions about what you said.
 
+**Website:** https://sayedzahur786.github.io/synapse-site/ · **Your app** runs on your own Mac at a permanent free HTTPS address from **Tailscale Funnel** (`https://<your-mac>.<tailnet>.ts.net`, TLS ends on the Mac). Without Funnel it falls back to an ngrok static domain, then to a temporary Cloudflare URL. Cost: $0.
+
 <!-- 30-second demo GIF goes here (record with docs/DEMO_V1.md). Until then: -->
 <p>
   <img src="docs/screenshots/v1/capture-cards-390.png" alt="The phone app: one ramble made a GitHub issue, an email draft and a reminder" width="260">
@@ -29,21 +31,42 @@ If Synapse needs a fact it doesn't have (which repo, Dev's email, what time), th
 1. **Install.** Node 22.12+ and pnpm 10, then:
    ```bash
    pnpm install
-   brew install cloudflared      # lets your phone reach this Mac from anywhere
+   brew install --cask tailscale # the permanent phone URL (Tailscale Funnel); cloudflared is the fallback:
+   brew install cloudflared
    ```
 2. **Add your keys.** `cp .env.example .env`, then set:
    ```bash
    SARVAM_API_KEY=...        # speech to text for phone recordings (dashboard.sarvam.ai)
    GROQ_API_KEY=...          # the model that writes the cards (free at console.groq.com/keys)
    LLM_MODE=live
-   SYNAPSE_PASSCODE=...      # a passphrase you'll type once on your phone
+   SYNAPSE_PASSCODE=...      # 12+ characters (a few random words): you type it once on your phone
    ```
    Every key is optional: without them Synapse runs on-device speech and an offline model.
 3. **Check it.** `pnpm run doctor` prints ✅ / ⚠️ / ❌ for every piece with a one-line fix.
-4. **Start it with a tunnel.** `TUNNEL=1 pnpm start` builds the app, serves it on port 8787 and prints a public `https://…trycloudflare.com` URL with a QR code. (For a URL that never changes, run a [named Cloudflare tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-local-tunnel/) and set `PUBLIC_URL`.)
-5. **On your Android phone,** scan the QR code, sign in with your passcode, and choose **Add to Home screen** in Chrome's menu. Tap the icon, tap the big button, talk, tap again. No signal? The recording waits on the phone and goes up when you're back online.
+4. **Turn on Funnel once.** Sign in to Tailscale, run `tailscale funnel 8787` and approve Funnel in the page it opens (signed in as the tailnet's owner; a 404 there means the browser is on another Tailscale account). Then `Ctrl-C`.
+5. **Serve it.** `pnpm run serve` builds the app and starts it with the best free tunnel: Tailscale Funnel, else ngrok (`NGROK_DOMAIN`), else a cloudflared quick tunnel (temporary URL, with a warning). It prints the URL and a QR code and saves the URL to `data/public-url.txt`. Force one with `TUNNEL=tailscale|ngrok|cloudflared`.
 
-On the laptop, open the same URL (or `http://localhost:8787`). The first run walks you through connecting GitHub, adding people and putting the app on your phone. Every step can be skipped.
+The laptop app is at `<your URL>/app` (or `http://localhost:8787/app`); `/` is the landing page. The first run walks you through connecting GitHub, adding people and putting the app on your phone. Every step can be skipped.
+
+## Run it as a service (always on)
+
+```bash
+pnpm run service:install     # launchd agent: starts at login, restarts within seconds if it stops
+pnpm run service:status      # state, public URL, last 20 log lines (~/Library/Logs/synapse/)
+pnpm run service:uninstall
+```
+
+- The Mac is the server, so it must stay awake on power: **System Settings → Battery → Options → "Prevent automatic sleeping on power adapter when the display is off"**. `pnpm run doctor` checks it.
+- If the repo is in Desktop, Documents or Downloads, macOS asks once to let `node` read that folder: click **Allow**.
+- While the Mac sleeps, the phone keeps recording: clips wait encrypted on the phone ("Saved on your phone. It will sync when your Mac is awake.") and upload exactly once when it's back.
+
+## Phone setup
+
+1. On your phone open `<your URL>/capture` (scan the QR code `pnpm run serve` prints, or Settings → Put it on your phone).
+2. Sign in with your passcode once.
+3. Chrome menu → **Add to Home screen**. Tap the icon, tap the big button, talk, tap again. No signal? The recording waits on the phone and goes up when you're back online.
+
+Lost a phone? Settings → Profile & connections → **Log out all devices** (or `pnpm run sessions:revoke`).
 
 ## Powered by Wispr Flow
 
@@ -71,7 +94,10 @@ On the laptop, open the same URL (or `http://localhost:8787`). The first run wal
 
 | | |
 |---|---|
-| `pnpm start` | build and serve on :8787 (add `TUNNEL=1` for the phone) |
+| `pnpm run serve` | build and serve on :8787 with the public tunnel |
+| `pnpm start` | build and serve on :8787, local only |
+| `pnpm run service:install` | keep it running (launchd) |
+| `pnpm run site:deploy` | publish the landing page to GitHub Pages |
 | `pnpm dev` | development: API on :8787, web on :5173 |
 | `pnpm run doctor` | what is missing and how to fix it |
 | `pnpm test` · `pnpm typecheck` | tests · type checks |

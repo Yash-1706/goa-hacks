@@ -216,3 +216,73 @@ Each has a line in [V1_PROGRESS.md](V1_PROGRESS.md) with its cost if wrong. In s
 4. A Mac quick-capture app (global hotkey and `context.repo` from the frontmost editor), and an iPhone Shortcut using the capture token.
 5. Send through Slack and WhatsApp, still behind a tap. Add a webhook output.
 6. Gmail and Google Calendar APIs, so drafts and events are created in place rather than opened.
+
+---
+
+## V1.1
+
+Second unattended run, same branch (commits f489d2e → see `git log`). Goal: the Mac as an always-on server with a permanent free HTTPS URL, a public landing page, and card quality that holds up on Groq's free tier. **Cost: $0** (Tailscale Personal, GitHub Pages, Groq free tier, Sarvam credits; nothing paid was enabled).
+
+| | |
+|---|---|
+| **Your app** | **https://sayeds-macbook-air.tail351c98.ts.net** (Tailscale Funnel: permanent, TLS ends on the Mac; `/app` laptop, `/capture` phone) |
+| **Website** | **https://sayedzahur786.github.io/synapse-site/** (GitHub Pages, repo `SayedZahur786/synapse-site`: static landing only) |
+| Tunnel used | Tailscale Funnel (approved during the run). Fallbacks built and tested: ngrok static domain, cloudflared quick tunnel |
+| Sandbox issue | https://github.com/SayedZahur786/synapse-sandbox/issues/1 (filed through the live server from the R9 card; summary / observed / suspected cause, "Captured by voice with Synapse", no internal IDs) |
+
+### What changed
+1. **One Groq call per capture** with an in-place re-draft queue; a rate-limit pause is waited out once and invalid JSON is asked again once, instead of falling back to one call per thought (both found live).
+2. **Review fixes:** revocable sessions ("Log out all devices"), idempotent Create issue / answer / shipped, default-deny auth on canonicalised paths, an "Opened → Done" state for handoffs, transactional migrations, non-extractable phone key (pinned by a test).
+3. **Always-on Mac:** `pnpm run serve` (Funnel → ngrok → cloudflared, URL + QR, `data/public-url.txt`, orphan tunnel cleanup), `pnpm run service:install|status|uninstall` (launchd, restart verified in ~1 s after `kill -9`), the phone's "Saved on your phone. It will sync when your Mac is awake.", doctor checks for tunnel, reachability, service and sleep.
+4. **Honest transit copy:** the Privacy Center, landing page, README and whitepaper say where TLS ends for each tunnel (Funnel: only on the Mac; ngrok/Cloudflare: at their edge).
+5. **Landing page** at `/` (app moved to `/app`, every old URL redirects), OG image, and a static copy on GitHub Pages with a build-time guard against app code, API calls and secrets.
+
+### Verification
+**10 live rambles** (`scripts/e2e/live-rambles.mjs`): macOS voices Rishi, Tara, Aman (Indian English) and Lekha (Hinglish, Devanagari + English), uploaded like the phone does over the permanent Funnel URL, real Sarvam (saaras:v4) + real Groq (qwen3.8-27b), throwaway data deleted afterwards, 45 s apart.
+
+| Target | Run 1 (before fixes, back-to-back) | Final run |
+|---|---|---|
+| Fully right (≥ 8/10) | 8/10 | **9/10** by the automated check; **8/10** on review (R9's reminder was titled "Remind Sarah to follow up": no Sarah was mentioned) |
+| Groq calls per capture (≤ 2) | max 7 (a 429 sent the capture down the per-thought path) | **≤ 2 on 9/10**; 4 on R3, whose transcript Sarvam returned as gibberish |
+| Median upload → final cards (< 8 s) | 13.6 s | **1.6 s** |
+
+| Ramble | Said (voice) | Cards (final run) | |
+|---|---|---|---|
+| R1 demo | bug + email + reminder + aside (Rishi) | GitHub issue · email to the team · reminder tomorrow 18:00; aside dropped | ✓ |
+| R2 comma-joined | email Sarah, and also remind me Monday 9 (Tara) | email to Sarah · reminder Mon 09:00 | ✓ |
+| R3 correction | Friday 5 pm, no wait, Thursday (Aman) | Sarvam heard "Dear Chloe, thermal paste hissing…" → one wrong email | ✗ (STT) |
+| R4 Hinglish | कल सुबह दस बजे Dev को call… guest login idea (Lekha) | reminder "Call Dev" tomorrow 10:00 · note "guest login on checkout" | ✓ |
+| R5 two asides | login 500 bug, Postgres decision, 2 asides (Rishi) | GitHub issue · decision; both asides dropped | ✓ |
+| R6 | message Dev; meeting with Sarah next Tuesday 3 pm (Tara) | message to Dev · event Tue 15:00 | ✓ |
+| R7 idea | CDN caching idea (Aman) | note | ✓ |
+| R8 retraction | milk at 8… forget the milk, bread instead (Rishi) | one reminder: bread tonight 20:00 | ✓ |
+| R9 three comma-joined | slow search bug, email Dev, follow-up Wed 11 (Tara) | issue · email to Dev · reminder Wed 11:00 (title wrongly names Sarah) | ✓/✗ |
+| R10 short | call mom at 9 tonight (Aman) | reminder tonight 21:00 | ✓ |
+
+Budget used this run: about **55 Groq calls** (cap 150) and **29 Sarvam calls** (cap 40).
+
+| Check | Result |
+|---|---|
+| Lighthouse, live Pages URL (mobile) | Performance 100 · Accessibility 100 · Best practices 100 · SEO 100 |
+| Lighthouse, app-served `/` (localhost) | 94 · 100 · 100 · 100 |
+| Lighthouse, app-served `/` via cloudflared | 99 · 100 · 100 · 54 (Cloudflare's quick tunnels add `x-robots-tag: none`; not ours) |
+| Routes | `/`, `/app`, `/app/ask`, `/app/settings/privacy`, 6 old URLs, `/login`, `/capture`, unknown → all correct, no page errors |
+| Demo rehearsal (Pixel 7 + desktop, fakes, tunnel) | 9/9 beats incl. the new "Opened in Gmail → Done" |
+| launchd | `kill -9` → restarted in ~1 s; `service:status` shows state, URL, logs |
+| Tunnel process hygiene | orphan cloudflared from a `kill -9` ended on next start; SIGTERM stops it and removes the pidfile |
+| Mac asleep (Pixel 7, server stopped behind Funnel) | phone showed "Saved on your phone. It will sync when your Mac is awake."; synced on its own after restart; **exactly 1** copy on the server |
+| Restart (`launchctl kickstart -k`, real service) | back in 2.1 s; same session cookie still signed in, profile intact, **same URL**. (Your real database had no thoughts yet, so memory survival rests on the SQLite persistence tests, not this check.) |
+| Tests | typecheck clean · web 730 · server 439 · build OK · the same from a clean clone of `v1` |
+
+### Found and fixed during the run
+- **Funnel detection:** Tailscale 1.102 reports Funnel as a plain `funnel` capability, not the documented URL key; `serve` would have skipped Funnel forever (seen live, fixed with a test).
+- **launchd + ~/Desktop:** a background `node` needs macOS's one-time Desktop-folder consent; the server sat blocked in `open()`. `service:install` now says so up front (you allowed it).
+- **Passcode in a test:** the real passcode had been used as a test literal in Phase 2; scrubbed from the two local commits before anything was pushed, history scanned clean, passcode replaced (now 4 random words in `.env`).
+- **The demo ramble answered empty:** the prompt's worked example WAS the demo ramble, and the model returned `{"items": []}` for it every time (then the repair call fixed it). The example is now a different ramble; the demo drafts in one call.
+- **Groq said wait / invalid JSON:** a 429 or a `json_validate_failed` used to drop the capture to one call per thought (7 calls on R5); now the batch call waits out the pause or asks again once.
+- **Contrast:** the landing's primary button had light text on orange (a specificity bug); fixed, Accessibility 95 → 100.
+
+### Limits (honest)
+- Sarvam occasionally mis-hears synthetic voices (one ramble came back as gibberish, another as a single dictionary word); the same audio transcribed correctly when sent again. Not reproducible, so not "fixed".
+- Groq's free tier allows roughly two capture calls a minute; back-to-back rambles queue for budget (spacing them like real use keeps them fast).
+- A 404 on Tailscale's Funnel approval page means the browser is signed into a different Tailscale account than the tailnet owner.

@@ -3,7 +3,7 @@
 Plan: [docs/V1_PLAN.md](V1_PLAN.md). Branch `v1` (cut from `main` at 961283c).
 
 ## Current
-**V1.1 run** (2026-10-11, second unattended run): Phase 5 (live verification over the public URL). Phases 1–4 done. V1 itself is done: [V1_REPORT.md](V1_REPORT.md).
+**V1.1 run** (2026-10-11, second unattended run): **Done.** V1.1 Phases 1–6 complete; see [V1_REPORT.md](V1_REPORT.md#v11). Service installed and running on real data at https://sayeds-macbook-air.tail351c98.ts.net. V1 itself is done: [V1_REPORT.md](V1_REPORT.md).
 
 ## V1.1 pre-flight (verified, not assumed)
 - `.env`: Sarvam + Groq keys, `GITHUB_SANDBOX_REPO=SayedZahur786/synapse-sandbox`, `LLM_MODE=live`, `WISPR_MODE=sarvam`. **Passcode is 8 digits (not 12+), kept as chosen** → MANUAL_STEPS; doctor warns.
@@ -222,3 +222,12 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 | 4 | 85a874c |
 | 5 | 356f739 |
 | review fixes | 8386ef6 |
+
+### V1.1 Phases 5–6 (fast path, agreed with Sayed mid-run)
+- Sayed approved Tailscale Funnel (the first approval page 404'd: browser on another Tailscale account), allowed node's Desktop access, and asked for a new passcode in `.env` (4 random words, never printed; all old sessions ended).
+- Funnel detection fix: Tailscale 1.102 reports the capability as plain `funnel`.
+- Live rambles: run 1 8/10, max 7 calls, median 13.6 s → fixes (429 wait-and-retry, invalid-JSON re-ask, a non-demo worked example; a sized answer allowance was tried and reverted: it truncated) → final 9/10 automated (8/10 on review), ≤2 calls on 9/10, median 1.6 s. Sarvam garbled 3 synthetic clips across runs; direct re-sends of the same audio transcribed correctly (not reproducible).
+- Sandbox issue: https://github.com/SayedZahur786/synapse-sandbox/issues/1. Mac-asleep check 6/6. kickstart restart: 2.1 s, same session and URL.
+- Skipped on the fast path: re-measuring answer-token usage; a second rehearsal run; screenshots were already taken in Phase 4.
+- Final: typecheck clean, web 730 / server 439, build OK, clean clone OK. Service left running (launchd, Funnel). Throwaway data and synthetic audio deleted.
+
