@@ -33,3 +33,17 @@ export function madeLine(thoughts: Array<Pick<ThoughtView, "category" | "artifac
   if (!thoughts.length) return "Nothing to keep (asides are skipped)";
   return `Made ${thoughts.length} ${thoughts.length === 1 ? "thing" : "things"}: ${thoughts.map(thingLabel).join(" · ")}`;
 }
+
+/**
+ * V1.1: the phone has signal but the Mac does not answer: asleep, off, or the server restarting. A network failure, or an
+ * HTTP error that is not our JSON (a tunnel's own page: Cloudflare 530, Funnel 502, ngrok's "endpoint offline" 404).
+ */
+export function macUnreachable(error: string | undefined): boolean {
+  return error === "network" || /^HTTP (404|5\d\d)$/.test(error ?? "");
+}
+
+export function waitingLine(item: { error?: string }, online: boolean): string {
+  if (!online) return "Waiting for network";
+  if (macUnreachable(item.error)) return "Saved on your phone. It will sync when your Mac is awake.";
+  return "Waiting to send";
+}

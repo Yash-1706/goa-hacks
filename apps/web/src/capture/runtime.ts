@@ -1,4 +1,5 @@
 import type { CaptureView } from "@synapse/shared";
+import { tunnelHeaders } from "@/net/tunnel";
 import { useAuth } from "@/state/auth";
 import { useCaptures } from "@/state/captures";
 import { CaptureQueue, createAesGcmCipher, indexedDbBackend, memoryClipStore } from "./queue";
@@ -50,7 +51,7 @@ export function captureQueue(): CaptureQueue {
 /** The server's recent captures (all devices), for "Your last captures". */
 export async function loadRecentCaptures(): Promise<void> {
   try {
-    const r = await fetch("/api/captures?limit=20", { credentials: "same-origin" });
+    const r = await fetch("/api/captures?limit=20", { credentials: "same-origin", headers: tunnelHeaders() });
     if (r.ok) useCaptures.getState().hydrate((await r.json()) as CaptureView[]);
   } catch {
     /* offline: the local queue still shows what this phone recorded */

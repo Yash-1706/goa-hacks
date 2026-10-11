@@ -18,6 +18,15 @@ const checks = await runDoctor({
   exec,
   fetch,
   modelCached: (model) => fs.existsSync(path.join(cfg.embeddings.cacheDir, "models", ...model.split("/"))),
+  platform: process.platform,
+  uid: process.getuid?.() ?? 0,
+  publicUrl: () => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(cfg.dataDir, "public-url.txt"), "utf8")) as { url: string; kind: string; temporary: boolean };
+    } catch {
+      return null;
+    }
+  },
 });
 console.log(`\nSynapse doctor\n\n${formatChecks(checks)}\n`);
 process.exitCode = checks.some((c) => c.status === "fail") ? 1 : 0; // not process.exit(): on macOS a piped stdout is asynchronous and would be cut off

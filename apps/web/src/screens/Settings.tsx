@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from "react";
+import { tunnelHeaders } from "@/net/tunnel";
 import { NavLink, useParams } from "react-router-dom";
 import { GithubConnect, GithubImport, PeopleSources, ProfileEditor } from "@/components/settings/ProfileParts";
 import { api } from "@/net/api";
@@ -61,7 +62,7 @@ function CaptureToken() {
   const [token, setToken] = useState<string | null>(null);
   const call = async (rotate: boolean): Promise<void> => {
     try {
-      const r = await fetch(rotate ? "/api/auth/capture-token/rotate" : "/api/auth/capture-token", { method: rotate ? "POST" : "GET", credentials: "same-origin" });
+      const r = await fetch(rotate ? "/api/auth/capture-token/rotate" : "/api/auth/capture-token", { method: rotate ? "POST" : "GET", credentials: "same-origin", headers: tunnelHeaders() });
       const j = (await r.json()) as { token?: string; error?: string };
       if (!r.ok || !j.token) throw new Error(j.error ?? `HTTP ${r.status}`);
       setToken(j.token);

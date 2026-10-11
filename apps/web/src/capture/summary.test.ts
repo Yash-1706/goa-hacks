@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ThoughtView } from "@synapse/shared";
-import { madeLine, thingLabel } from "./summary";
+import { macUnreachable, madeLine, thingLabel, waitingLine } from "./summary";
 
 const t = (category: ThoughtView["category"], kind?: string): Pick<ThoughtView, "category" | "artifact"> => ({
   category,
@@ -24,4 +24,17 @@ describe("capture summary", () => {
     expect(madeLine([t("idea", "note")])).toBe("Made 1 thing: Idea");
     expect(madeLine([])).toBe("Nothing to keep (asides are skipped)");
   });
+
+  it("V1.1: a clip waiting because the Mac does not answer says so (the phone is online; the Mac is asleep or off)", () => {
+    expect(macUnreachable("network")).toBe(true); // fetch threw while the phone had signal
+    expect(macUnreachable("HTTP 530")).toBe(true); // Cloudflare: origin unreachable (a proxy page, not our JSON)
+    expect(macUnreachable("HTTP 502")).toBe(true); // Tailscale Funnel with the server down
+    expect(macUnreachable("HTTP 404")).toBe(true); // ngrok: endpoint offline
+    expect(macUnreachable("The server is busy, try again")).toBe(false); // our own JSON error: the Mac answered
+    expect(waitingLine({ error: "network" }, true)).toBe("Saved on your phone. It will sync when your Mac is awake.");
+    expect(waitingLine({ error: "HTTP 530" }, true)).toBe("Saved on your phone. It will sync when your Mac is awake.");
+    expect(waitingLine({ error: "network" }, false)).toBe("Waiting for network");
+    expect(waitingLine({}, true)).toBe("Waiting to send");
+  });
 });
+

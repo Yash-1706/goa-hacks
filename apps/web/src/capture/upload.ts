@@ -1,5 +1,6 @@
 import type { CaptureResponse, CaptureSource } from "@synapse/shared";
 import type { UploadOutcome, UploadRequest } from "./queue";
+import { tunnelHeaders } from "@/net/tunnel";
 
 /* POST /api/capture from this device (same origin: the session cookie rides along). The answer decides what the queue does. */
 
@@ -28,7 +29,7 @@ export async function uploadCapture(req: UploadRequest, o: { fetch?: typeof fetc
   form.append("context", JSON.stringify({ source: o.source }));
   let res: Response;
   try {
-    res = await (o.fetch ?? fetch)("/api/capture", { method: "POST", body: form, credentials: "same-origin" });
+    res = await (o.fetch ?? fetch)("/api/capture", { method: "POST", body: form, credentials: "same-origin", headers: tunnelHeaders() });
   } catch {
     return { kind: "retry", error: "network" };
   }

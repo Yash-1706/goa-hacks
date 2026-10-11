@@ -55,6 +55,7 @@ On the laptop, open the same URL (or `http://localhost:8787`). The first run wal
 - Everything Synapse keeps (thoughts, drafts, your profile, your GitHub token) is encrypted with AES-256-GCM on your Mac. Working memory forgets after 72 hours unless something is worth keeping.
 - API keys stay on your Mac. The browser never sees them.
 - Remote access needs your passcode. Through the tunnel nothing is trusted by default, and only that one public address may talk to the server.
+- With Tailscale Funnel (the default for `pnpm run serve`) the phone's HTTPS is decrypted only on your Mac. The ngrok and Cloudflare fallbacks decrypt it at their edge on the way; the Privacy Center says which one is in use.
 - Local-only mode (Settings) keeps everything on the Mac: on-device speech and the offline model. Say “pause memory” or “forget what I said about X” at any time.
 
 ## Roadmap

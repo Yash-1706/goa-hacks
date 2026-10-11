@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { parseTunnelSetting, type TunnelSetting } from "./tunnel";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(here, "../../..");
@@ -110,8 +111,10 @@ const EnvSchema = z.object({
   SYNAPSE_PASSCODE: str(""),
   // set by `TUNNEL=1` automatically; set it yourself for a named tunnel or a reverse proxy (https://synapse.example.com)
   PUBLIC_URL: str(""),
-  // 1 = start a cloudflared quick tunnel with the server and print its URL and a QR code
-  TUNNEL: bool(false),
+  // V1.1: auto (or 1) = Tailscale Funnel, else ngrok's static domain, else a cloudflared quick tunnel; or name one; 0 = none
+  TUNNEL: str("0"),
+  // ngrok's free static domain (e.g. calm-otter-1234.ngrok-free.app), used when TUNNEL=ngrok or auto finds no Tailscale
+  NGROK_DOMAIN: str(""),
   // serve the built web app (apps/web/dist) from this server: one origin for pages, API and WebSocket. auto = when the build exists
   SERVE_WEB: str("auto"),
 
@@ -206,7 +209,7 @@ export interface Config {
   };
   privacy: { localOnly: boolean; requirePairing: boolean; pseudonymize: boolean };
   /** V1 remote access */
-  remote: { passcode: string; publicUrl: string; tunnel: boolean; serveWeb: "auto" | "on" | "off"; webDist: string };
+  remote: { passcode: string; publicUrl: string; tunnel: TunnelSetting; ngrokDomain: string; serveWeb: "auto" | "on" | "off"; webDist: string };
   proactive: { autonomyLevel: number; recurringN: number; recurringWindowMin: number; minGapMs: number };
   integrations: {
     github: { token: string; repo: string; sandboxRepo: string; apiBase: string };
@@ -334,7 +337,8 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
     remote: {
       passcode: raw.SYNAPSE_PASSCODE,
       publicUrl: raw.PUBLIC_URL,
-      tunnel: raw.TUNNEL,
+      tunnel: parseTunnelSetting(raw.TUNNEL),
+      ngrokDomain: raw.NGROK_DOMAIN.trim(),
       serveWeb: ["1", "true", "on", "yes"].includes(raw.SERVE_WEB.toLowerCase()) ? "on" : ["0", "false", "off", "no"].includes(raw.SERVE_WEB.toLowerCase()) ? "off" : "auto",
       webDist: path.resolve(REPO_ROOT, "apps/web/dist"),
     },

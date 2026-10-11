@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { tunnelHeaders } from "@/net/tunnel";
 
 /* ============================================================================
  * Passcode sign-in (V1). On the LAN, loopback and paired devices are trusted as before; through the tunnel every device signs
@@ -30,7 +31,7 @@ export const useAuth = create<AuthState>()((set, get) => ({
 
   check: async () => {
     try {
-      const r = await fetch("/api/auth/status", { credentials: "same-origin" });
+      const r = await fetch("/api/auth/status", { credentials: "same-origin", headers: tunnelHeaders() });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = (await r.json()) as { authenticated: boolean; passcodeSet: boolean; publicMode: boolean };
       const status: AuthStatus = j.authenticated ? "ok" : "needed";
@@ -45,7 +46,7 @@ export const useAuth = create<AuthState>()((set, get) => ({
   login: async (passcode) => {
     set({ busy: true, error: null });
     try {
-      const r = await fetch("/api/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ passcode }) });
+      const r = await fetch("/api/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", ...tunnelHeaders() }, body: JSON.stringify({ passcode }) });
       if (r.ok) {
         set({ status: "ok", busy: false });
         return true;
@@ -65,7 +66,7 @@ export const useAuth = create<AuthState>()((set, get) => ({
   },
 
   logout: async () => {
-    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin", headers: tunnelHeaders() }).catch(() => undefined);
     set({ status: get().passcodeSet ? "needed" : "ok" });
   },
 

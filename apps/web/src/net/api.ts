@@ -1,5 +1,6 @@
 import type { ArtifactView, CaptureResponse, GithubStatus, ImportSuggestions, Profile, ProfilePerson, ProfileRepo } from "@synapse/shared";
 import { getDeviceId, getToken } from "./device";
+import { tunnelHeaders } from "./tunnel";
 import type {
   AuditResponse,
   AuditVerify,
@@ -32,7 +33,7 @@ export class ApiError extends Error {
 }
 
 export function authHeaders(): Record<string, string> {
-  const h: Record<string, string> = { "x-synapse-device": getDeviceId() };
+  const h: Record<string, string> = { "x-synapse-device": getDeviceId(), ...tunnelHeaders() };
   const token = getToken();
   if (token) h["x-synapse-token"] = token;
   return h;

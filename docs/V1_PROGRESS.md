@@ -3,7 +3,7 @@
 Plan: [docs/V1_PLAN.md](V1_PLAN.md). Branch `v1` (cut from `main` at 961283c).
 
 ## Current
-**V1.1 run** (2026-10-11, second unattended run): Phase 3 (always-on Mac server, permanent free URL). Phases 1–2 done. V1 itself is done: [V1_REPORT.md](V1_REPORT.md).
+**V1.1 run** (2026-10-11, second unattended run): Phase 4 (landing page + GitHub Pages). Phases 1–3 done. V1 itself is done: [V1_REPORT.md](V1_REPORT.md).
 
 ## V1.1 pre-flight (verified, not assumed)
 - `.env`: Sarvam + Groq keys, `GITHUB_SANDBOX_REPO=SayedZahur786/synapse-sandbox`, `LLM_MODE=live`, `WISPR_MODE=sarvam`. **Passcode is 8 digits (not 12+), kept as chosen** → MANUAL_STEPS; doctor warns.
@@ -134,6 +134,19 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 - **"Opened" state:** new `opened` artifact status. Open draft / Add to calendar → "Opened in Gmail" with a one-tap **Done** (and "Open again"); Done → executed ("Sent from Gmail" / "Added to calendar"). Opened cards stay in Needs you. `POST /api/artifacts/:id/done`.
 - **Migrations:** each step + its `user_version` bump in one transaction; v3's column add is idempotent (a half-applied v3 no longer bricks the database: reproduced first).
 - Suite: web 724, server 421.
+
+### V1.1 Phase 3: always-on Mac, free public URL
+- **`pnpm run serve`** = build web + start with `TUNNEL=auto`: Tailscale Funnel (only when signed in AND Funnel is approved for this node, `cap/funnel` in `tailscale status --json`; otherwise `tailscale funnel` blocks waiting for a browser approval), then ngrok (`NGROK_DOMAIN` set and ngrok installed), then a cloudflared quick tunnel with a loud "temporary URL" warning. `TUNNEL=tailscale|ngrok|cloudflared` forces one. URL + QR printed; `data/public-url.txt` = `{url, kind, temporary, at}` (cleared at start); tunnel child pid in `data/tunnel.pid`, an orphan from a `kill -9` is ended on the next start (verified live), a SIGTERM stops it and removes the pidfile (verified live).
+- **This Mac today:** Tailscale 1.102 signed in, but Funnel and HTTPS certificates are NOT enabled on the tailnet (no `cap/funnel`, no CertDomains); ngrok not installed and needs an account. So the live URL in this run is the cloudflared quick tunnel. Approving Funnel is one browser click → MANUAL_STEPS. After that, `serve` picks `https://sayeds-macbook-air.tail351c98.ts.net` automatically.
+- **launchd** (`src/cli/service.ts`, `service-lib.ts`): `pnpm run service:install` builds web, writes `~/Library/LaunchAgents/com.synapse.server.plist` (node + tsx directly, RunAtLoad, KeepAlive, ThrottleInterval 5, logs `~/Library/Logs/synapse/server{,.err}.log`, PATH with Homebrew and /usr/local/bin for the Tailscale CLI, HOME; refuses any secret-looking env key), `bootout` + `bootstrap gui/<uid>`, waits for the URL. `service:status` (state, pid, runs, last exit, URL, last 20 log lines), `service:uninstall`.
+  - **Restart verified live:** `kill -9` of the service's node → launchd restarted it in ~1 s (runs 1 → 2).
+  - **Blocker found live:** the repo is in `~/Desktop`; a launchd-started process needs macOS's one-time "node would like to access files in your Desktop folder" consent. The server sat blocked in `open()` (stack sample) waiting for that click. Can't be clicked unattended (no GUI, no sudo). install/status now say so up front; MANUAL_STEPS. Service booted out again so it can't race the foreground server during this run; reinstalled at the end.
+- **Mac asleep:** the phone queue keeps clips (already); a clip waiting with the phone online and a network error or a tunnel's own HTTP page (530/502/404 non-JSON) now reads "Saved on your phone. It will sync when your Mac is awake." (`waitingLine`, tested).
+- **ngrok:** every fetch from an ngrok host carries `ngrok-skip-browser-warning` (`net/tunnel.ts`, tested); a WebSocket cannot send custom headers and relies on the cookie set by the page load (documented in code).
+- **Doctor:** Tunnel (which one, stable or not, how to approve Funnel), Reachable (`<public url>/api/health` from outside), Service (launchd state), Sleep (`pmset -g custom` AC sleep; this Mac: 1 min → warns with the Battery setting). Live output matches.
+- **Privacy copy:** `lib/transit.ts` (tested) states per tunnel where TLS ends: Funnel = only on this Mac; ngrok/Cloudflare = their edge decrypts. Privacy Center "Phone to this Mac" column, landing bullet, whitepaper row + 2 threat-model rows, README bullet.
+- TDD slips: service-lib's first tests were written with the implementation, not before it (later additions went red first).
+- Suite: web 730, server 436.
 
 ## Decisions
 - Ruling: no `.env` is created by the run. The app's no-`.env` default is mock mode; settings the checks need are passed as process environment. Sayed explicitly declined the `.env` copy — cost if wrong: one `cp` for Sayed, listed in MANUAL_STEPS.

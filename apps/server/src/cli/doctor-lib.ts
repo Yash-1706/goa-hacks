@@ -1,5 +1,7 @@
 import { SarvamError, SarvamStt } from "../wispr/sarvam";
 import { STT_SAMPLE_RATE } from "../wispr/local-stt";
+import { FUNNEL_CAP, parseTunnelSetting } from "../tunnel";
+import { SERVICE_LABEL } from "./service-lib";
 
 /* ============================================================================
  * `pnpm doctor`: one command that says what is missing and how to fix it. Every check is a pure function of its
@@ -26,7 +28,14 @@ export interface DoctorDeps {
   fetch: typeof fetch;
   /** is the embedding model already in the local cache */
   modelCached: (model: string) => boolean;
+  /** the always-on checks (launchd, sleep) only run on macOS */
+  platform?: string;
+  uid?: number;
+  /** what the running server last published to data/public-url.txt */
+  publicUrl?: () => { url: string; kind: string; temporary: boolean } | null;
 }
+
+
 
 const TIMEOUT_MS = 8000;
 const MIN_NODE: [number, number] = [22, 12];
@@ -146,10 +155,66 @@ function checkPasscode(d: DoctorDeps): Check {
   return ok("Passcode", "set (12+ characters)");
 }
 
+/** which public URL the phone would get: Tailscale Funnel (stable), ngrok's static domain (stable) or a cloudflared quick tunnel */
+async function checkTunnel(d: DoctorDeps): Promise<Check> {
+  const off = parseTunnelSetting(d.env.TUNNEL ?? "") === "off" && !d.env.PUBLIC_URL;
+  const suffix = off ? " (TUNNEL is off: pnpm run serve and the service turn it on)" : "";
+  const ts = await d.exec("tailscale", ["status", "--json"]).catch(() => ({ ok: false, stdout: "" }));
+  let self: { DNSName?: string; CapMap?: Record<string, unknown> } | undefined;
+  try {
+    const j = JSON.parse(ts.stdout) as { BackendState?: string; Self?: typeof self };
+    if (ts.ok && j.BackendState === "Running") self = j.Self ?? {};
+  } catch {
+    /* not signed in, or not installed */
+  }
+  if (self && FUNNEL_CAP in (self.CapMap ?? {})) {
+    return ok("Tunnel", `Tailscale Funnel: https://${(self.DNSName ?? "").replace(/\.$/, "")} (stable; TLS ends on this Mac)${suffix}`);
+  }
+  const domain = d.env.NGROK_DOMAIN ?? "";
+  if (domain && (await d.exec("ngrok", ["version"]).catch(() => ({ ok: false, stdout: "" }))).ok) {
+    return ok("Tunnel", `ngrok static domain: https://${domain.replace(/^https?:\/\//, "")} (stable; TLS ends at ngrok)${suffix}`);
+  }
+  if (self) {
+    return warn("Tunnel", "Tailscale is signed in, but Funnel is not approved for this Mac: falling back to a cloudflared quick tunnel", "run `tailscale funnel 8787` once and approve Funnel (and HTTPS) in the browser page it opens");
+  }
+  return warn("Tunnel", "only a cloudflared quick tunnel: the URL changes every restart, so the phone app must be re-added", "install Tailscale (free) and approve Funnel, or set NGROK_DOMAIN (free static domain); see docs/MANUAL_STEPS.md");
+}
+
+/** the URL the server last published answers from outside (through the tunnel, not localhost) */
+async function checkReachable(d: DoctorDeps): Promise<Check> {
+  const rec = d.publicUrl?.() ?? null;
+  if (!rec) return warn("Reachable", "no public URL yet: the server has not opened a tunnel", "pnpm run serve (or pnpm run service:install to keep it running)");
+  try {
+    const res = await d.fetch(`${rec.url}/api/health`, { headers: { "ngrok-skip-browser-warning": "1" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (res.ok) return ok("Reachable", `${rec.url} answers (${rec.kind}${rec.temporary ? ", temporary URL" : ""})`);
+    return warn("Reachable", `${rec.url} answered HTTP ${res.status}`, "is the server running? pnpm run service:status");
+  } catch {
+    return warn("Reachable", `${rec.url} does not answer`, "is the server running? pnpm run service:status");
+  }
+}
+
+async function checkService(d: DoctorDeps): Promise<Check> {
+  const r = await d.exec("launchctl", ["print", `gui/${d.uid ?? 0}/${SERVICE_LABEL}`]).catch(() => ({ ok: false, stdout: "" }));
+  if (!r.ok) return warn("Service", "not installed: Synapse stops when this terminal closes", "pnpm run service:install");
+  const state = r.stdout.match(/^\s*state = (\S+)/m)?.[1] ?? "loaded";
+  return state === "running" ? ok("Service", "launchd: running (restarts on crash and at login)") : warn("Service", `launchd: ${state}`, "pnpm run service:status (logs in ~/Library/Logs/synapse/)");
+}
+
+/** an asleep Mac answers nothing: the phone keeps captures in its queue until it wakes */
+async function checkSleep(d: DoctorDeps): Promise<Check> {
+  const r = await d.exec("pmset", ["-g", "custom"]).catch(() => ({ ok: false, stdout: "" }));
+  const ac = r.stdout.split(/^AC Power:/m)[1] ?? "";
+  const mins = ac.match(/^\s*sleep\s+(\d+)/m)?.[1];
+  if (!r.ok || mins === undefined) return warn("Sleep", "could not read the power settings (pmset -g custom)", "System Settings → Battery → Options");
+  if (mins === "0") return ok("Sleep", "never sleeps on the power adapter");
+  return warn("Sleep", `sleeps after ${mins} min on the power adapter: captures wait on the phone until it wakes`, "System Settings → Battery → Options → turn on 'Prevent automatic sleeping on power adapter when the display is off'");
+}
+
 export async function runDoctor(d: DoctorDeps): Promise<Check[]> {
   const head = [checkNode(d.nodeVersion), await checkPnpm(d), checkEnvFile(d)];
-  const rest = await Promise.all([checkSarvam(d), checkGroq(d), checkEmbeddings(d), checkGithub(d), checkCloudflared(d)]);
-  return [...head, ...rest, checkPasscode(d)];
+  const rest = await Promise.all([checkSarvam(d), checkGroq(d), checkEmbeddings(d), checkGithub(d), checkCloudflared(d), checkTunnel(d), checkReachable(d)]);
+  const mac = d.platform === "darwin" ? await Promise.all([checkService(d), checkSleep(d)]) : [];
+  return [...head, ...rest, checkPasscode(d), ...mac];
 }
 
 const ICON: Record<CheckStatus, string> = { ok: "✅", warn: "⚠️ ", fail: "❌" };

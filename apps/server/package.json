@@ -14,7 +14,10 @@
     "bench": "tsx --disable-warning=ExperimentalWarning src/cli/bench.ts",
     "warm-models": "tsx --disable-warning=ExperimentalWarning src/cli/warm-models.ts",
     "doctor": "tsx --disable-warning=ExperimentalWarning src/cli/doctor.ts",
-    "sessions:revoke": "tsx --disable-warning=ExperimentalWarning src/cli/sessions-revoke.ts"
+    "sessions:revoke": "tsx --disable-warning=ExperimentalWarning src/cli/sessions-revoke.ts",
+    "service:install": "tsx --disable-warning=ExperimentalWarning src/cli/service.ts install",
+    "service:uninstall": "tsx --disable-warning=ExperimentalWarning src/cli/service.ts uninstall",
+    "service:status": "tsx --disable-warning=ExperimentalWarning src/cli/service.ts status"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

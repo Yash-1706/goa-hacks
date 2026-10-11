@@ -47,11 +47,31 @@ const deps = (o: Partial<DoctorDeps> = {}, env: Record<string, string> = {}): Do
   },
   envFilePresent: true,
   nodeVersion: "v26.4.0",
-  exec: async (cmd) => (cmd === "pnpm" ? { ok: true, stdout: "10.28.2\n" } : cmd === "cloudflared" ? { ok: true, stdout: "cloudflared version 2026.9.3\n" } : { ok: false, stdout: "" }),
-  fetch: scriptedFetch(groqOk, ghOk),
+  exec: macExec(),
+  fetch: scriptedFetch(groqOk, ghOk, healthOk),
   modelCached: () => true,
+  platform: "darwin",
+  uid: 501,
+  publicUrl: () => ({ url: TS_URL, kind: "tailscale", temporary: false }),
   ...o,
 });
+
+/** a Mac set up the V1.1 way: Tailscale signed in with Funnel approved, the launchd service running, no sleep on AC power */
+const TS_URL = "https://sayeds-macbook-air.tail0000.ts.net";
+function macExec(o: { funnel?: boolean; tailscale?: boolean; ngrok?: boolean; launchd?: "running" | "missing"; acSleep?: number } = {}): DoctorDeps["exec"] {
+  const { funnel = true, tailscale = true, ngrok = false, launchd = "running", acSleep = 0 } = o;
+  return async (cmd, args) => {
+    if (cmd === "pnpm") return { ok: true, stdout: "10.28.2\n" };
+    if (cmd === "cloudflared") return { ok: true, stdout: "cloudflared version 2026.9.3\n" };
+    if (cmd === "tailscale" && tailscale)
+      return { ok: true, stdout: JSON.stringify({ BackendState: "Running", Self: { DNSName: "sayeds-macbook-air.tail0000.ts.net.", CapMap: funnel ? { "https://tailscale.com/cap/funnel": [] } : {} } }) };
+    if (cmd === "ngrok" && ngrok) return { ok: true, stdout: "ngrok version 3.20.0" };
+    if (cmd === "launchctl") return launchd === "running" && args.join(" ") === "print gui/501/com.synapse.server" ? { ok: true, stdout: "com.synapse.server = {\n\tstate = running\n\tpid = 4242\n}" } : { ok: false, stdout: "" };
+    if (cmd === "pmset") return { ok: true, stdout: `Battery Power:\n sleep                1\nAC Power:\n displaysleep         10\n sleep                ${acSleep}\n` };
+    return { ok: false, stdout: "" };
+  };
+}
+const healthOk: Route = (url) => (url === `${TS_URL}/api/health` ? Response.json({ ok: true }) : undefined);
 
 const byName = (checks: Awaited<ReturnType<typeof runDoctor>>) => Object.fromEntries(checks.map((c) => [c.name, c]));
 
@@ -142,5 +162,49 @@ describe("pnpm doctor: the passcode guards a public URL (V1.1)", () => {
     expect((await pass("short words")).status).toBe("warn");
     expect(await pass("correct horse battery")).toMatchObject({ status: "ok" });
     expect(JSON.stringify(await pass("12345678"))).not.toContain("12345678");
+  });
+});
+
+describe("pnpm doctor: the always-on Mac (V1.1)", () => {
+  it("a fully set-up Mac: Funnel, reachable from outside, launchd running, no sleep on AC power", async () => {
+    const c = byName(await runDoctor(deps()));
+    expect(c["Tunnel"]).toMatchObject({ status: "ok" });
+    expect(c["Tunnel"]?.detail).toMatch(/Tailscale Funnel.*stable/);
+    expect(c["Reachable"]).toMatchObject({ status: "ok" });
+    expect(c["Reachable"]?.detail).toContain(TS_URL);
+    expect(c["Service"]?.detail).toMatch(/running/);
+    expect(c["Sleep"]).toMatchObject({ status: "ok" });
+  });
+
+  it("Tunnel: Funnel not approved says how; nothing stable says the URL changes every restart; ngrok's static domain is stable", async () => {
+    const notApproved = byName(await runDoctor(deps({ exec: macExec({ funnel: false }) })))["Tunnel"];
+    expect(notApproved).toMatchObject({ status: "warn" });
+    expect(notApproved?.fix).toMatch(/tailscale funnel 8787/);
+    const none = byName(await runDoctor(deps({ exec: macExec({ tailscale: false }) })))["Tunnel"];
+    expect(none?.status).toBe("warn");
+    expect(none?.detail).toMatch(/cloudflared.*changes every/);
+    const ngrok = byName(await runDoctor(deps({ exec: macExec({ tailscale: false, ngrok: true }) }, { NGROK_DOMAIN: "calm-otter.ngrok-free.app" })))["Tunnel"];
+    expect(ngrok).toMatchObject({ status: "ok" });
+    expect(ngrok?.detail).toMatch(/ngrok.*calm-otter/);
+  });
+
+  it("Reachable: no URL yet, or a URL that does not answer, warns with what to run", async () => {
+    const none = byName(await runDoctor(deps({ publicUrl: () => null })))["Reachable"];
+    expect(none).toMatchObject({ status: "warn" });
+    expect(none?.fix).toMatch(/pnpm run (serve|service:install)/);
+    const dead = byName(await runDoctor(deps({ fetch: scriptedFetch(groqOk, ghOk) })))["Reachable"];
+    expect(dead).toMatchObject({ status: "warn" });
+    expect(dead?.detail).toContain(TS_URL);
+  });
+
+  it("Service and Sleep: not installed and sleeping on AC power warn with the fix; neither is checked off macOS", async () => {
+    const c = byName(await runDoctor(deps({ exec: macExec({ launchd: "missing", acSleep: 1 }) })));
+    expect(c["Service"]).toMatchObject({ status: "warn", fix: "pnpm run service:install" });
+    expect(c["Sleep"]).toMatchObject({ status: "warn" });
+    expect(c["Sleep"]?.detail).toMatch(/1 min/);
+    expect(c["Sleep"]?.fix).toMatch(/Prevent automatic sleeping/);
+    const linux = byName(await runDoctor(deps({ platform: "linux" })));
+    expect(linux["Service"]).toBeUndefined();
+    expect(linux["Sleep"]).toBeUndefined();
   });
 });

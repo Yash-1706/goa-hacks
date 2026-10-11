@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 import { Ban, Brain, Cloud, Cpu, Mic, Server, ShieldCheck, Waves } from "lucide-react";
 import { llmLabel, type LlmLabel } from "@/lib/llm-provider";
 import { isOnDevice } from "@/lib/speech-engine";
+import { transitOf } from "@/lib/transit";
 import { useSettings } from "@/state/settings";
 import { useThoughts } from "@/state/thoughts";
 
@@ -45,6 +46,7 @@ export const DataFlow = memo(function DataFlow() {
   const wispr = cfg?.wisprMode ?? "mock";
   const llm = cfg?.llmMode ?? "mock";
   const localOnly = Boolean(cfg?.localOnly);
+  const transit = transitOf(cfg?.publicUrl);
 
   return (
     <section className="pv-flow glass panel" aria-labelledby="pv-flow-h">
@@ -111,6 +113,15 @@ export const DataFlow = memo(function DataFlow() {
               <ShieldCheck size={11} /> <span className="tnum">{redactions}</span> <span>value{redactions === 1 ? "" : "s"} masked{thoughtsWithCloud ? ` in ${thoughtsWithCloud} cloud call${thoughtsWithCloud === 1 ? "" : "s"}` : ""}</span>
             </span>
           </div>
+        </div>
+        <div className="pv-flow__col">
+          <div className="eyebrow">Phone to this Mac</div>
+          <p>
+            <b>{transit.label}.</b> {transit.note} {transit.kind !== "none" ? "Every request needs your passcode; a recording waits encrypted on the phone until it is sent, then is deleted there." : null}
+          </p>
+          <span className={`chip chip-tint ${transit.endToEnd || transit.kind === "none" ? "chip-ok" : "chip-warn"}`}>
+            <span>{transit.kind === "none" ? "not exposed" : transit.endToEnd ? "decrypted only on this Mac" : transit.stable ? "TLS ends at the tunnel provider" : "temporary address · TLS ends at Cloudflare"}</span>
+          </span>
         </div>
         <div className="pv-flow__col">
           <div className="eyebrow">Nothing else</div>

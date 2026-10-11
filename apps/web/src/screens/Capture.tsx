@@ -6,7 +6,7 @@ import type { QueueItem } from "@/capture/queue";
 import { ClipRecorder, audioToWav } from "@/capture/recorder";
 import { captureQueue, loadRecentCaptures } from "@/capture/runtime";
 import { takeShared } from "@/capture/share";
-import { madeLine } from "@/capture/summary";
+import { madeLine, waitingLine } from "@/capture/summary";
 import { ShipCard } from "@/components/ship/ShipCard";
 import { api } from "@/net/api";
 import { useCaptures } from "@/state/captures";
@@ -43,7 +43,7 @@ const clock = (ms: number): string => {
 const when = (t: number): string => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 /** One capture: its status on this phone (if it came from here) and what it made. */
-function CaptureRow({ item, capture, thoughts }: { item?: QueueItem; capture?: CaptureView; thoughts: ThoughtView[] }) {
+function CaptureRow({ item, capture, thoughts, online }: { item?: QueueItem; capture?: CaptureView; thoughts: ThoughtView[]; online: boolean }) {
   const status = item?.status ?? "sent";
   const at = item?.capturedAt ?? capture?.capturedAt ?? 0;
   return (
@@ -52,7 +52,7 @@ function CaptureRow({ item, capture, thoughts }: { item?: QueueItem; capture?: C
         <span className="cap-row__time">{when(at)}</span>
         {status === "waiting" ? (
           <span className="cap-badge cap-badge--wait">
-            <CloudOff size={14} aria-hidden /> Waiting for network
+            <CloudOff size={14} aria-hidden /> {waitingLine(item ?? {}, online)}
           </span>
         ) : status === "sending" ? (
           <span className="cap-badge">
@@ -256,7 +256,7 @@ export default function Capture() {
         {rows.length ? (
           <ul className="cap-rows">
             {rows.map((r) => (
-              <CaptureRow key={r.key} item={r.item} capture={r.capture} thoughts={r.ids.map((id) => byId[id]).filter((t): t is ThoughtView => Boolean(t))} />
+              <CaptureRow key={r.key} item={r.item} capture={r.capture} online={online} thoughts={r.ids.map((id) => byId[id]).filter((t): t is ThoughtView => Boolean(t))} />
             ))}
           </ul>
         ) : (
