@@ -23,7 +23,7 @@ step("server stopped (Mac asleep)", true);
 
 const text = `Mac asleep check ${Date.now().toString(36)}: remind me to water the plants tomorrow at 8 am.`;
 await phone.locator(".cap__type input").fill(text);
-await phone.getByRole("button", { name: "Send" }).click();
+await phone.getByRole("button", { name: "Send", exact: true }).click();
 const row = phone.locator(".cap-row").first();
 await waitFor(async () => /sync when your Mac is awake/.test((await row.innerText().catch(() => "")) ?? ""), { timeoutMs: 30_000, what: "the asleep message" }).catch(() => undefined);
 const asleepText = (await row.innerText().catch(() => "")).split("\n").find((l) => /Saved on your phone|Waiting/.test(l)) ?? null;
