@@ -46,6 +46,11 @@ export class ProfileService {
     return this.cache;
   }
 
+  /** Back to the seed from .env (wipe-all). */
+  reset(): void {
+    this.save(this.seed());
+  }
+
   /** Replace the profile (validated). Exactly one default repo is kept when any repo is marked default. */
   put(next: Profile): Profile {
     const p = ProfileSchema.parse(next);

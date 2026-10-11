@@ -302,6 +302,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   store.decorateArtifact = (a) => routing.view(a);
   outbox.connect({ github: () => github.api(), repoFor: (a) => routing.repoFor(a) });
   profile.attachLlm(deep);
+  privacy.attachProfile({ profile: () => profile.get(), resetProfile: () => profile.reset(), forgetGithub: () => github.forget() });
 
   const consolidator = new Consolidator({ cfg, clock, store, embedder, deep, emit, audit, isPaused: () => privacy.isPaused() });
 

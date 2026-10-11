@@ -220,7 +220,6 @@ export function loadEntities(db: Db, v: Vault): EntityRec[] {
         longTerm: ((r.long_term as number) ?? 0) as 0 | 1 | 2,
         expiresAt: (r.expires_at as number | null) ?? null,
         keyId,
-        ...(r.route_enc ? { route: v.openJson<NonNullable<ArtifactRec["route"]>>(keyId, aad("artifacts", id, "route"), r.route_enc as Uint8Array) } : {}),
       });
     } catch {
       db.run("DELETE FROM entities WHERE id = ?", r.id as string);
@@ -293,6 +292,7 @@ export function loadArtifacts(db: Db, v: Vault): ArtifactRec[] {
         updatedAt: r.updated_at as number,
         expiresAt: (r.expires_at as number | null) ?? null,
         keyId,
+        ...(r.route_enc ? { route: v.openJson<NonNullable<ArtifactRec["route"]>>(keyId, aad("artifacts", id, "route"), r.route_enc as Uint8Array) } : {}),
       });
     } catch {
       db.run("DELETE FROM artifacts WHERE id = ?", r.id as string);

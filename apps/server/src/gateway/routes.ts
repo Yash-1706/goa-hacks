@@ -34,16 +34,27 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
   const { cfg, store, trust, auth, engine, privacy, outbox, metrics, battery, audit, autonomy, clock } = ctx;
 
   app.addHook("onRequest", async (req, reply) => {
-    const url = req.url.split("?")[0] as string;
-    if (!guarded(url) || OPEN.has(url)) return;
+    // Decide on what the router will actually serve: the router decodes the path ("/%61pi/state" IS /api/state), so the
+    // raw URL must never be what the guard looks at. The matched route pattern wins; the decoded path covers the rest.
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(req.url.split("?")[0] as string);
+    } catch {
+      return reply.code(400).send({ error: "malformed path" });
+    }
+    const route = req.routeOptions?.url;
+    const url = route && guarded(route) ? route : decoded;
+    if (!guarded(url) && !guarded(decoded)) return;
+    if (route && OPEN.has(route)) return;
     // the WebSocket and speech endpoints check the origin themselves (closing with 1008); REST is refused here
     if (url.startsWith("/api") && !isAllowedOrigin(header(req, "origin"), auth.publicOrigin)) return reply.code(403).send({ error: "origin not allowed" });
     const ip = trust.clientIp(req.raw);
-    const local = isLoopback(ip) && !auth.publicMode; // behind a tunnel every request comes from loopback
+    const tunneled = viaTunnel(req);
+    const local = isLoopback(ip) && !tunneled; // behind a tunnel every request comes from loopback
     const session = auth.hasSession(header(req, "cookie"));
     const captureBearer = url === "/api/capture" && req.method === "POST" && auth.verifyCaptureToken(header(req, "authorization"));
     if (!session && !captureBearer) {
-      if (auth.publicMode) return reply.code(401).send({ error: "sign in with the passcode" });
+      if (tunneled) return reply.code(401).send({ error: "sign in with the passcode" });
       // the WebSocket authenticates in its hello and the speech endpoints with their own short-lived tokens (LAN only)
       if (url.startsWith("/api")) {
         const verdict = trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token"));
@@ -55,11 +66,24 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
   });
 
   // -------------------------------------------------------------------- auth --
+  /** a tunnel is active (PUBLIC_URL / TUNNEL), or this request came through Cloudflare anyway (a tunnel started by hand) */
+  function viaTunnel(req: FastifyRequest): boolean {
+    return auth.publicMode || Boolean(header(req, "cf-connecting-ip") || header(req, "cf-ray"));
+  }
+  /** the address a login attempt is counted against: behind Cloudflare its own client header (a client cannot forge it
+   *  through the tunnel), else the last x-forwarded-for hop (the one the proxy added), else the socket */
+  function loginAddress(req: FastifyRequest): string {
+    if (!viaTunnel(req)) return trust.clientIp(req.raw);
+    const cf = header(req, "cf-connecting-ip");
+    if (cf) return cf;
+    const xff = header(req, "x-forwarded-for")?.split(",").map((x) => x.trim()).filter(Boolean);
+    return xff?.at(-1) ?? req.raw.socket.remoteAddress ?? "unknown";
+  }
   const secureReq = (req: FastifyRequest): boolean => header(req, "x-forwarded-proto") === "https" || req.protocol === "https";
   app.post("/api/auth/login", async (req, reply) => {
     const b = z.object({ passcode: z.string().max(200) }).safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: "passcode required" });
-    const r = auth.login(b.data.passcode, trust.clientIp(req.raw), secureReq(req));
+    const r = auth.login(b.data.passcode, loginAddress(req), secureReq(req));
     if (r.retryAfterS) void reply.header("retry-after", String(r.retryAfterS));
     if (!r.ok) return reply.code(r.status).send({ error: r.error });
     audit.append("signed_in", null, null);
@@ -68,7 +92,7 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
   app.post("/api/auth/logout", async (req, reply) => reply.header("set-cookie", auth.logoutCookie(secureReq(req))).send({ ok: true }));
   app.get("/api/auth/status", async (req) => {
     const ip = trust.clientIp(req.raw);
-    const legacy = !auth.publicMode && trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token")).ok;
+    const legacy = !viaTunnel(req) && trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token")).ok;
     return { authenticated: auth.hasSession(header(req, "cookie")) || legacy, passcodeSet: auth.enabled, publicMode: auth.publicMode };
   });
   app.get("/api/auth/capture-token", async (_req, reply) => (auth.enabled ? { token: auth.captureToken() } : reply.code(503).send({ error: "SYNAPSE_PASSCODE is not set on the server" })));

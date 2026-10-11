@@ -146,3 +146,35 @@ describe("capture queue", () => {
     expect(r.views()).toHaveLength(0);
   });
 });
+
+describe("capture queue: a clip that cannot be opened (review 7)", () => {
+  it("is marked failed and removed; the clips behind it still go up", async () => {
+    const store = memoryClipStore();
+    const uploads: string[] = [];
+    let views: QueueItem[] = [];
+    const real = createAesGcmCipher((() => {
+      const k: { k?: CryptoKey } = {};
+      return { get: async () => k.k, set: async (x: CryptoKey) => void (k.k = x) };
+    })());
+    let broken = true;
+    const cipher = { seal: real.seal, open: async (iv: Uint8Array, data: Uint8Array) => (broken ? ((broken = false), Promise.reject(new Error("OperationError"))) : real.open(iv, data)) };
+    const net = { on: false };
+    const q = new CaptureQueue({
+      store,
+      cipher,
+      online: () => net.on,
+      now: () => 1000,
+      setTimer: () => () => undefined,
+      upload: async (r) => (uploads.push(r.clientId), ok(r.clientId)),
+      onChange: (items) => void (views = items),
+    });
+    const first = await q.add({ audio: clip(), capturedAt: 1 });
+    const second = await q.add({ audio: clip(), capturedAt: 2 });
+    net.on = true;
+    await q.flush();
+    await q.idle();
+    expect(views.find((v) => v.clientId === first)).toMatchObject({ status: "failed" });
+    expect(uploads).toEqual([second]);
+    expect(await store.all()).toHaveLength(0);
+  });
+});

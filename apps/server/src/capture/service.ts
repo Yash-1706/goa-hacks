@@ -84,10 +84,11 @@ export class CaptureService {
   async capture(input: CaptureInput): Promise<CaptureResponse> {
     const { clientId } = input;
     if (clientId) {
-      const stored = this.byClientId(clientId);
-      if (stored) return { ...stored, duplicate: true };
+      // still running: share its result (its row already exists, but its thoughts do not yet)
       const running = this.inflight.get(clientId);
       if (running) return running.then((r) => ({ ...r, duplicate: true }));
+      const stored = this.byClientId(clientId);
+      if (stored) return { ...stored, duplicate: true };
     }
     const job = this.run(input);
     if (clientId) {

@@ -147,7 +147,16 @@ export class CaptureQueue {
       this.items.set(clip.clientId, { ...item, status: "sending" });
       this.changed();
 
-      const plain = await this.d.cipher.open(clip.iv, clip.data);
+      let plain: Uint8Array;
+      try {
+        plain = await this.d.cipher.open(clip.iv, clip.data);
+      } catch {
+        // its key is gone or the bytes are damaged: it can never be sent, and must not block the clips behind it
+        await this.d.store.delete(clip.clientId);
+        this.items.set(clip.clientId, { ...item, status: "failed", error: "This recording could not be read back on this phone." });
+        this.changed();
+        continue;
+      }
       let outcome: UploadOutcome;
       try {
         outcome = await this.d.upload({ clientId: clip.clientId, capturedAt: clip.capturedAt, ...(clip.kind === "audio" ? { audio: plain } : { text: new TextDecoder().decode(plain) }) });

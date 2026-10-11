@@ -140,7 +140,7 @@ async function checkCloudflared(d: DoctorDeps): Promise<Check> {
 function checkPasscode(d: DoctorDeps): Check {
   const p = d.env.SYNAPSE_PASSCODE ?? "";
   if (!p) return warn("Passcode", "SYNAPSE_PASSCODE is not set: the tunnel will refuse to start", "add SYNAPSE_PASSCODE=<a passphrase you can type on your phone> to .env");
-  if (p.length < 6) return warn("Passcode", "SYNAPSE_PASSCODE is shorter than 6 characters", "use a longer passphrase: the URL is public");
+  if (p.length < 8) return warn("Passcode", "SYNAPSE_PASSCODE is shorter than 8 characters: the tunnel refuses it", "use a longer passphrase: the URL is public");
   return ok("Passcode", "set");
 }
 

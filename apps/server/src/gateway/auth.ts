@@ -20,6 +20,11 @@ export const SESSION_COOKIE = "synapse_session";
 const SESSION_TTL_MS = 90 * 24 * 3600_000;
 const FAIL_WINDOW_MS = 15 * 60_000;
 const MAX_FAILS = 5;
+/** one user: this many wrong passcodes from everywhere together in the window locks logins for everyone (spraying) */
+const MAX_FAILS_GLOBAL = 40;
+const MAX_TRACKED = 1000;
+/** the URL is public: a passcode shorter than this is too guessable to expose */
+export const MIN_PUBLIC_PASSCODE = 8;
 
 export interface LoginResult {
   ok: boolean;
@@ -67,6 +72,7 @@ export class Auth {
     }
     const u = new URL(url); // throws on garbage
     if (u.protocol !== "https:" && u.hostname !== "localhost") throw new Error("a public URL must be https");
+    if (this.enabled && this.o.passcode.length < MIN_PUBLIC_PASSCODE) throw new Error(`SYNAPSE_PASSCODE must be at least ${MIN_PUBLIC_PASSCODE} characters before this server is reachable from the internet`);
     this.publicUrl = u;
     log.info("auth", "public URL active: loopback is no longer trusted", { origin: u.origin });
   }
@@ -76,9 +82,12 @@ export class Auth {
   login(passcode: string, ip: string, secure: boolean): LoginResult {
     if (!this.enabled) return { ok: false, status: 503, error: "SYNAPSE_PASSCODE is not set on the server" };
     const now = this.clock.now();
-    const recent = (this.fails.get(ip) ?? []).filter((t) => now - t < FAIL_WINDOW_MS);
-    if (recent.length >= MAX_FAILS) {
-      const retryAfterS = Math.ceil((FAIL_WINDOW_MS - (now - (recent[0] as number))) / 1000);
+    this.prune(now);
+    const recent = this.fails.get(ip) ?? [];
+    const all = [...this.fails.values()].flat().sort((a, b) => a - b);
+    const locked = recent.length >= MAX_FAILS ? recent : all.length >= MAX_FAILS_GLOBAL ? all : null;
+    if (locked) {
+      const retryAfterS = Math.ceil((FAIL_WINDOW_MS - (now - (locked[0] as number))) / 1000);
       return { ok: false, status: 429, retryAfterS, error: "too many attempts" };
     }
     if (!safeEqual(this.digest("passcode", passcode), this.digest("passcode", this.o.passcode))) {
@@ -93,6 +102,16 @@ export class Auth {
     const body = `v1.${issued}.${nonce}`;
     const value = `${body}.${this.sign("session", body)}`;
     return { ok: true, status: 200, setCookie: cookie(value, SESSION_TTL_MS / 1000, secure) };
+  }
+
+  /** forget failures older than the window, and never track more than MAX_TRACKED addresses */
+  private prune(now: number): void {
+    for (const [ip, times] of this.fails) {
+      const fresh = times.filter((t) => now - t < FAIL_WINDOW_MS);
+      if (fresh.length) this.fails.set(ip, fresh);
+      else this.fails.delete(ip);
+    }
+    while (this.fails.size > MAX_TRACKED) this.fails.delete(this.fails.keys().next().value as string);
   }
 
   logoutCookie(secure: boolean): string {

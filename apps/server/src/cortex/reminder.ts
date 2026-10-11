@@ -31,7 +31,8 @@ export function spokenTime(text: string, now: number, tz: string): SpokenTime | 
   const daySaid = s.isCertain("day") || s.isCertain("weekday");
   // the day that was said, or today (chrono's forwardDate would already have pushed a bare "at 4" past 04:00 to tomorrow)
   const day = startOfDay(daySaid ? s.date().getTime() : now, tz);
-  let hour = 9; // a day without a time ("tomorrow", "on Friday"): 9 in the morning
+  // a day without a time: the part of day said ("tonight" 21:00, "this evening" 19:00, "this afternoon" 15:00), else 9:00
+  let hour = /\btonight\b/i.test(text) ? 21 : /\b(this|in the) evening\b/i.test(text) ? 19 : /\b(this|in the) afternoon\b/i.test(text) ? 15 : 9;
   let minute = 0;
   if (s.isCertain("hour")) {
     hour = s.get("hour") ?? 0;
@@ -39,7 +40,10 @@ export function spokenTime(text: string, now: number, tz: string): SpokenTime | 
     if (!s.isCertain("meridiem") && hour >= 1 && hour <= 7) hour += 12;
   }
   let at = day + hour * HOUR + minute * MIN;
-  if (at <= now && !daySaid) at += 24 * HOUR;
+  if (at <= now) {
+    if (daySaid) return null; // "today at 8am" at 10:00: better to ask "When?" than to set a reminder in the past
+    at += 24 * HOUR;
+  }
   return { at, matched: r.text };
 }
 
