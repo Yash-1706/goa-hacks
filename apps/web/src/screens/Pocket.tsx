@@ -158,7 +158,7 @@ export default function Pocket() {
           </AnimatePresence>
           {ids.length === 0 ? <p className="pk-cards__empty">What you say lands here as small cards. They are read-only: open the Desk to edit or push them.</p> : null}
         </div>
-        <Link to="/" className="btn btn-ghost btn-sm" style={{ justifySelf: "center" }}>
+        <Link to="/app" className="btn btn-ghost btn-sm" style={{ justifySelf: "center" }}>
           Open the Desk
         </Link>
       </section>

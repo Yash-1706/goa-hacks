@@ -5,9 +5,9 @@ import { useRecall } from "@/state/recall";
 import { useSettings } from "@/state/settings";
 
 const ITEMS = [
-  { to: "/", label: "Inbox", Icon: Inbox, end: true },
-  { to: "/ask", label: "Ask", Icon: Search, end: false },
-  { to: "/settings", label: "Settings", Icon: Settings, end: false },
+  { to: "/app", label: "Inbox", Icon: Inbox, end: true },
+  { to: "/app/ask", label: "Ask", Icon: Search, end: false },
+  { to: "/app/settings", label: "Settings", Icon: Settings, end: false },
 ] as const;
 
 export function Nav() {

@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "site:build": "VITE_SITE_URL=${SITE_URL:-https://sayedzahur786.github.io/synapse-site/} VITE_SITE_APP_URL=${SITE_APP_URL:-https://sayeds-macbook-air.tail351c98.ts.net/app} vite build -c vite.site.config.ts && node scripts/site-check.mjs",
+    "og": "node scripts/og-image.mjs"
   },
   "dependencies": {
     "@ricky0123/vad-web": "^0.0.31",

@@ -422,7 +422,7 @@ function RecallBody({ a, t, streaming }: { a: ArtifactView; t: ThoughtView; stre
         <Skeleton lines={2} />
       ) : null}
       {q ? (
-        <Link to="/recall" className="ab__hint" style={{ color: "var(--cyan)" }} onClick={() => useRecall.getState().setActive(q.id)}>
+        <Link to="/app/ask" className="ab__hint" style={{ color: "var(--cyan)" }} onClick={() => useRecall.getState().setActive(q.id)}>
           Open in Recall <ExternalLink size={11} style={{ display: "inline" }} />
         </Link>
       ) : null}

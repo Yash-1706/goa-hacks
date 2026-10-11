@@ -61,7 +61,7 @@ const cookie = await login(base, passcode);
 const desk = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 await desk.addCookies([cookieFor(base, cookie)]);
 const d = await desk.newPage();
-await d.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+await d.goto(`${base}/app`, { waitUntil: "domcontentloaded" });
 const titles = await row.locator(".ship__title").allInnerTexts();
 out.deskSeesCards = await waitFor(async () => {
   const text = await d.locator("body").innerText();

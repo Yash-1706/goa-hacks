@@ -26,3 +26,5 @@ certs/
 .DS_Store
 Thumbs.db
 *.log
+site-dist/
+site-deploy/

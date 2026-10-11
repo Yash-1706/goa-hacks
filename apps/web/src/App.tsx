@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { MotionConfig } from "motion/react";
 import { LoginScreen } from "@/components/LoginScreen";
 import { Nav } from "@/components/Nav";
@@ -16,17 +16,24 @@ import { useAuth } from "@/state/auth";
 import { useConnection } from "@/state/connection";
 import { usePrivacy } from "@/state/privacy";
 import { useSettings } from "@/state/settings";
+import "./index.css";
 
 // heavy or rarely-opened screens are code-split (the graph pulls in a canvas force-layout engine)
 const Settings = lazy(() => import("@/screens/Settings"));
 const Capture = lazy(() => import("@/screens/Capture"));
 
 const TITLES: Record<string, string> = {
-  "/": "Inbox",
+  "/app": "Inbox",
   "/capture": "Capture",
-  "/ask": "Ask",
-  "/settings": "Settings",
+  "/app/ask": "Ask",
+  "/app/settings": "Settings",
 };
+
+/** V1.1: the app lives under /app (the landing page has /); every older URL keeps working */
+function OldSettingsTab() {
+  const { tab } = useParams();
+  return <Navigate to={`/app/settings/${tab ?? ""}`} replace />;
+}
 
 function RouteFallback() {
   return (
@@ -86,18 +93,22 @@ function Shell() {
           ) : null}
           <Suspense fallback={<RouteFallback />}>
             <Routes>
-              <Route path="/" element={<Inbox />} />
-              <Route path="/ask" element={<Recall />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/settings/:tab" element={<Settings />} />
-              {/* V1: the old screens live in Settings now; their URLs keep working */}
+              <Route path="/app" element={<Inbox />} />
+              <Route path="/app/ask" element={<Recall />} />
+              <Route path="/app/settings" element={<Settings />} />
+              <Route path="/app/settings/:tab" element={<Settings />} />
+              {/* older URLs keep working: V1's top-level screens, then the screens V1 moved into Settings */}
+              <Route path="/ask" element={<Navigate to="/app/ask" replace />} />
+              <Route path="/settings" element={<Navigate to="/app/settings" replace />} />
+              <Route path="/settings/:tab" element={<OldSettingsTab />} />
+              <Route path="/login" element={<Navigate to="/app" replace />} />
               <Route path="/pocket" element={<Navigate to="/capture" replace />} />
-              <Route path="/recall" element={<Navigate to="/ask" replace />} />
-              <Route path="/privacy" element={<Navigate to="/settings/privacy" replace />} />
-              <Route path="/graph" element={<Navigate to="/settings/memory" replace />} />
-              <Route path="/outbox" element={<Navigate to="/settings/outbox" replace />} />
-              <Route path="/lab" element={<Navigate to="/settings/developer" replace />} />
-              <Route path="*" element={<Inbox />} />
+              <Route path="/recall" element={<Navigate to="/app/ask" replace />} />
+              <Route path="/privacy" element={<Navigate to="/app/settings/privacy" replace />} />
+              <Route path="/graph" element={<Navigate to="/app/settings/memory" replace />} />
+              <Route path="/outbox" element={<Navigate to="/app/settings/outbox" replace />} />
+              <Route path="/lab" element={<Navigate to="/app/settings/developer" replace />} />
+              <Route path="*" element={<Navigate to="/app" replace />} />
             </Routes>
           </Suspense>
         </main>

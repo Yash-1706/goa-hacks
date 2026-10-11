@@ -265,7 +265,7 @@ export default function Capture() {
       </section>
 
       <footer className="cap__foot">
-        <Link to="/">Open the full app</Link>
+        <Link to="/app">Open the full app</Link>
       </footer>
     </div>
   );

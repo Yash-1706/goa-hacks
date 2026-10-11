@@ -103,7 +103,7 @@ export const LabHero = memo(function LabHero({ summary, rows }: { summary: Laten
           <div className="lab-hero__empty">
             <GaugeIcon size={26} aria-hidden />
             <p>
-              <b>No fragments measured yet.</b> Speak or type a thought on <Link to="/">Desk</Link> and the first numbers land here within a second.
+              <b>No fragments measured yet.</b> Speak or type a thought on <Link to="/app">Desk</Link> and the first numbers land here within a second.
             </p>
           </div>
         )}

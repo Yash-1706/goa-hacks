@@ -3,7 +3,7 @@
 Plan: [docs/V1_PLAN.md](V1_PLAN.md). Branch `v1` (cut from `main` at 961283c).
 
 ## Current
-**V1.1 run** (2026-10-11, second unattended run): Phase 4 (landing page + GitHub Pages). Phases 1–3 done. V1 itself is done: [V1_REPORT.md](V1_REPORT.md).
+**V1.1 run** (2026-10-11, second unattended run): Phase 5 (live verification over the public URL). Phases 1–4 done. V1 itself is done: [V1_REPORT.md](V1_REPORT.md).
 
 ## V1.1 pre-flight (verified, not assumed)
 - `.env`: Sarvam + Groq keys, `GITHUB_SANDBOX_REPO=SayedZahur786/synapse-sandbox`, `LLM_MODE=live`, `WISPR_MODE=sarvam`. **Passcode is 8 digits (not 12+), kept as chosen** → MANUAL_STEPS; doctor warns.
@@ -146,6 +146,22 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 - **Doctor:** Tunnel (which one, stable or not, how to approve Funnel), Reachable (`<public url>/api/health` from outside), Service (launchd state), Sleep (`pmset -g custom` AC sleep; this Mac: 1 min → warns with the Battery setting). Live output matches.
 - **Privacy copy:** `lib/transit.ts` (tested) states per tunnel where TLS ends: Funnel = only on this Mac; ngrok/Cloudflare = their edge decrypts. Privacy Center "Phone to this Mac" column, landing bullet, whitepaper row + 2 threat-model rows, README bullet.
 - TDD slips: service-lib's first tests were written with the implementation, not before it (later additions went red first).
+- Suite: web 730, server 436.
+
+### V1.1 Phase 4: landing page + GitHub Pages
+- **Routes:** `/` = landing (lazy `LandingRoute`; signed-in visitors get "Open app" as the primary button), the app under `/app`, `/app/ask`, `/app/settings/:tab`; `/capture` unchanged; `/login` → `/app` once signed in; every older URL redirects (`/ask`, `/settings/*`, `/privacy`, `/recall`, `/graph`, `/outbox`, `/lab`, `/pocket`, unknown → `/app`). 10 paths checked in Chromium, no page errors. All in-app links and the PWA "Inbox" shortcut moved to `/app`.
+- **Bundle:** `main.tsx` lazy-loads either the landing or the app: `/` downloads the React entry + LandingRoute (13 kB) + its CSS (8 kB); the App chunk (261 kB) and the app CSS (164 kB, moved from main.tsx into App.tsx) never load on the landing page.
+- **Meta + OG:** title, description, og:* and twitter:* (summary_large_image) on both copies; `public/og.png` 1200×630 rendered by `apps/web/scripts/og-image.mjs` (cached Chromium) in the landing's tokens.
+- **Pages:** `pnpm run site:build` → `site-dist/` (separate entry `apps/web/site/index.html` + `src/landing/site.tsx`, relative base, no PWA, no app code; `VITE_SITE_APP_URL` defaults to `https://sayeds-macbook-air.tail351c98.ts.net/app`, `VITE_SITE_URL` to the Pages URL). `scripts/site-check.mjs` fails the build if the bundle contains `/api/`, `/ws`, the device header, a key-shaped string or SYNAPSE_PASSCODE. `pnpm run site:deploy` (`scripts/site-deploy.mjs`): allow-list of the 6 built files only, separate clone in `site-deploy/` (gitignored), gh's token per command (`gh auth git-credential`, never stored or printed), creates the public repo + enables Pages via `gh api` the first time, waits until live.
+  - **Live:** https://sayedzahur786.github.io/synapse-site/ (repo SayedZahur786/synapse-site holds exactly: .nojekyll, index.html, favicon.svg, og.png, assets/index-*.js, assets/index-*.css; author Sayed Zahur, no attribution lines). 2 deploys.
+- **Lighthouse 12.8.2** (mobile, simulated throttling; Performance / Accessibility / Best practices / SEO):
+  - live Pages URL: **100 / 100 / 100 / 100** (twice, after the fixes below)
+  - app-served `/` on localhost: **94 / 100 / 100 / 100**
+  - app-served `/` through the cloudflared quick tunnel: 99 / 100 / 100 / **54**: Cloudflare's quick tunnels add `x-robots-tag: none` and their own robots.txt (not ours). Funnel and Pages don't; the indexable copy is Pages.
+  - fixed on the way: `.lp a { color: inherit }` out-ranked `.lp-btn--primary` (light text on orange, 2.4:1) → `:where(a)`; struck aside words too faint; demo words faded in (a mid-fade word fails contrast) → appear at once.
+- **e2e scripts** use `/app` routes; the rehearsal taps **Done** on the opened email and reminder. Rehearsal over a cloudflared tunnel with fakes: **9/9 beats**, 34 s.
+- **Screenshots** (`docs/screenshots/v1/v11-*.png`): landing (app-served and Pages, identical) and app inbox / privacy at 390 and 1440, capture at 390. Throwaway e2e data only.
+- **Ruling (V1.1):** the real passcode had been used as a "digits only" test literal in Phase 2 (`doctor.test.ts`). Found by a pre-commit scan, replaced with `12345678` and scrubbed from the two local commits that had it (`git filter-branch` on `ce44a77^..v1`, never pushed; backup refs deleted). A scan of every tracked file + all of v1's history for the real Sarvam/Groq keys and the passcode finds nothing. The passcode should be changed anyway (8 digits; MANUAL_STEPS).
 - Suite: web 730, server 436.
 
 ## Decisions

@@ -54,7 +54,7 @@ async function both(name, { check = false, full = true } = {}) {
 
 // ---- Inbox, empty
 await setOnboarded(true);
-await page.goto(`${base}/`, { waitUntil: "networkidle" });
+await page.goto(`${base}/app`, { waitUntil: "networkidle" });
 await page.getByText("Ramble. Synapse turns it into things you can ship.").waitFor();
 await both("inbox-empty", { check: true });
 
@@ -92,7 +92,7 @@ const whyText = await page.locator(".ship-why").first().innerText();
 if (/local heuristic/i.test(whyText)) violations.push({ screen: "why", what: "classifier phrasing" });
 
 // ---- Ask
-await page.goto(`${base}/ask`, { waitUntil: "networkidle" });
+await page.goto(`${base}/app/ask`, { waitUntil: "networkidle" });
 await page.getByPlaceholder(/What was that idea/).fill("what was that cart bug?");
 await page.keyboard.press("Enter");
 await page.locator(".rc-answer:not(.rc-answer--wait)").waitFor({ timeout: 30_000 });
@@ -102,7 +102,7 @@ const askText = await page.locator(".rc-answer").first().innerText();
 
 // ---- Settings, every tab (the default one is checked)
 for (const tab of ["profile", "voice", "model", "privacy", "memory", "outbox", "developer"]) {
-  await page.goto(`${base}/settings/${tab}`, { waitUntil: "networkidle" });
+  await page.goto(`${base}/app/settings/${tab}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(800);
   await both(`settings-${tab}`, { check: tab === "profile", full: tab !== "memory" });
 }

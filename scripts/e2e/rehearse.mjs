@@ -38,7 +38,7 @@ for (const host of ["https://mail.google.com/**", "https://calendar.google.com/*
 
 const phone = await phoneCtx.newPage();
 const desk = await deskCtx.newPage();
-await desk.goto(`${base}/`, { waitUntil: "networkidle" });
+await desk.goto(`${base}/app`, { waitUntil: "networkidle" });
 
 // 0:00 phone: sign in (already done on a real phone), open the app
 await phone.goto(`${base}/capture`, { waitUntil: "domcontentloaded" });
@@ -89,6 +89,10 @@ await gmail.waitForLoadState().catch(() => undefined);
 const g = new URL(gmail.url());
 beat("Open draft → Gmail prefilled", g.host === "mail.google.com" && g.searchParams.get("to") === "sarah@acme.io,dev@acme.io", { to: g.searchParams.get("to"), subject: g.searchParams.get("su") });
 await gmail.close();
+// V1.1: an opened draft waits as "Opened in Gmail" until one tap on Done (Synapse cannot see whether it was sent)
+await emailCard.locator(".ship__done", { hasText: "Opened" }).waitFor({ timeout: 10_000 });
+await emailCard.getByRole("button", { name: "Done", exact: true }).click();
+beat("Opened in Gmail → tap Done", true);
 
 // 1:25 Add to calendar
 const remCard = desk.locator('.inbox .ship[data-kind="reminder"]').first();
@@ -99,6 +103,8 @@ const tomorrow = new Intl.DateTimeFormat("sv-SE", { timeZone: TZ, year: "numeric
 const expectedStart = new Date(`${tomorrow}T19:00:00+05:30`).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 beat("Add to calendar → tomorrow 19:00", c.host === "calendar.google.com" && (c.searchParams.get("dates") ?? "").startsWith(expectedStart), { text: c.searchParams.get("text"), dates: c.searchParams.get("dates") });
 await cal.close();
+await remCard.locator(".ship__done", { hasText: "Opened" }).waitFor({ timeout: 10_000 });
+await remCard.getByRole("button", { name: "Done", exact: true }).click();
 await desk.waitForTimeout(1200);
 const done = await desk.locator(".inbox-sec", { hasText: "Done" }).locator(".ship").count().catch(() => 0);
 beat("shipped cards move to Done", done >= 3, { done });

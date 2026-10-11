@@ -189,7 +189,7 @@ export default function Settings() {
       <h1 className="settings__title">Settings</h1>
       <nav className="settings__tabs" aria-label="Settings">
         {SETTINGS_TABS.map((t) => (
-          <NavLink key={t.id} to={`/settings/${t.id}`} className={({ isActive }) => `settings__tab${isActive || (t.id === "profile" && current === "profile") ? " is-active" : ""}`}>
+          <NavLink key={t.id} to={`/app/settings/${t.id}`} className={({ isActive }) => `settings__tab${isActive || (t.id === "profile" && current === "profile") ? " is-active" : ""}`}>
             {t.label}
           </NavLink>
         ))}

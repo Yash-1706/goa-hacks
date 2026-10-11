@@ -54,7 +54,7 @@ export default defineConfig(async () => {
         ],
         shortcuts: [
           { name: "Capture", short_name: "Capture", url: "/capture?autostart=1", description: "Record a thought (one tap to start)", icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png" }] },
-          { name: "Inbox", url: "/" },
+          { name: "Inbox", url: "/app" },
         ],
         // "Share → Synapse" from a voice recorder or any app: handled by public/share-target.js inside the service worker
         share_target: {

@@ -17,7 +17,7 @@ const browser = await launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 await ctx.addCookies([cookieFor(base, cookie)]);
 const page = await ctx.newPage();
-await page.goto(base + "/", { waitUntil: "domcontentloaded" });
+await page.goto(base + "/app", { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(1500); // let the WebSocket connect
 
 const clientId = `e2e-${Date.now().toString(36)}`;

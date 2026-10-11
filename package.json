@@ -27,7 +27,9 @@
     "serve": "pnpm --filter @synapse/web build && TUNNEL=${TUNNEL:-auto} NODE_ENV=${NODE_ENV:-production} pnpm --filter @synapse/server start",
     "service:install": "pnpm --filter @synapse/server run service:install",
     "service:uninstall": "pnpm --filter @synapse/server run service:uninstall",
-    "service:status": "pnpm --filter @synapse/server run service:status"
+    "service:status": "pnpm --filter @synapse/server run service:status",
+    "site:build": "pnpm --filter @synapse/web run site:build",
+    "site:deploy": "pnpm run site:build && node scripts/site-deploy.mjs"
   },
   "devDependencies": {
     "concurrently": "^10.0.5",
