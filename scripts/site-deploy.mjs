@@ -22,7 +22,7 @@ const tryJson = (cmd, args) => {
 const git = (args) => sh("git", ["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential", ...args], { cwd: work });
 
 // 1. only the built landing page may go out
-const ALLOWED = /^(index\.html|favicon\.svg|og\.png|\.nojekyll|assets\/index-[\w-]+\.(js|css))$/;
+const ALLOWED = /^(index\.html|favicon\.svg|og\.png|\.nojekyll|assets\/index-[\w-]+\.(js|css)|media\/synapse-launch-landscape\.(mp4|jpg))$/;
 const files = fs.readdirSync(dist, { recursive: true }).map(String).filter((f) => fs.statSync(path.join(dist, f)).isFile());
 const stray = files.filter((f) => !ALLOWED.test(f.split(path.sep).join("/")));
 if (stray.length || !files.includes("index.html")) {

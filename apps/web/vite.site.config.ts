@@ -10,11 +10,12 @@ import { defineConfig, type Plugin } from "vite";
 const here = import.meta.dirname;
 const out = path.resolve(here, "../../site-dist");
 
-/** only the two public files the page uses (favicon, share image), plus .nojekyll so Pages serves the files as they are */
+/** only the public files the page uses (favicon, share image, the hero's launch video and poster), plus .nojekyll so Pages serves the files as they are */
 const copyAssets = (): Plugin => ({
   name: "synapse-site-assets",
   closeBundle() {
-    for (const f of ["favicon.svg", "og.png"]) fs.copyFileSync(path.join(here, "public", f), path.join(out, f));
+    fs.mkdirSync(path.join(out, "media"), { recursive: true });
+    for (const f of ["favicon.svg", "og.png", "media/synapse-launch-landscape.mp4", "media/synapse-launch-landscape.jpg"]) fs.copyFileSync(path.join(here, "public", f), path.join(out, f));
     fs.writeFileSync(path.join(out, ".nojekyll"), "");
   },
 });

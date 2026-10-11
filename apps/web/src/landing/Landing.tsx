@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import DemoStrip from "./DemoStrip";
 import "./landing.css";
 
@@ -100,6 +101,24 @@ function GitHubIcon() {
   );
 }
 
+/* The launch video (docs/media, made with /brag): muted, looping, inline. Written as markup because React does not emit the
+ * `muted` attribute, which iOS needs before it autoplays; reduced-motion visitors get it paused on its poster. Paths are
+ * relative to the page base, so the same markup works on the Mac (/) and on GitHub Pages (/synapse-site/). */
+const MEDIA = `${import.meta.env.BASE_URL}media/synapse-launch-landscape`;
+const HERO_VIDEO = `<video class="lp-hero__video" autoplay muted loop playsinline preload="metadata" poster="${MEDIA}.jpg" aria-label="Synapse launch video: a spoken ramble becomes a GitHub issue, an email draft and a reminder"><source src="${MEDIA}.mp4" type="video/mp4" /><img src="${MEDIA}.jpg" alt="A spoken ramble next to the three cards Synapse made from it" /></video>`;
+
+function HeroVideo() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const v = ref.current?.querySelector("video");
+    if (!v) return;
+    // the `autoplay` attribute alone does not start when the landing mounts lazily (the app's "/" route); start it here
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
+    else void v.play().catch(() => undefined); // blocked (e.g. data saver): the poster stays
+  }, []);
+  return <div ref={ref} className="lp-hero__media" dangerouslySetInnerHTML={{ __html: HERO_VIDEO }} />;
+}
+
 function Check() {
   return (
     <svg className="lp-check" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -151,6 +170,7 @@ export default function Landing({ appUrl, repoUrl, loggedIn = false }: LandingPr
               Ramble on a walk. Get the GitHub issue, the email draft and the reminder, ready to send.
             </p>
             <div className="lp-hero__actions">{loggedIn ? [openApp, github] : [github, openApp]}</div>
+            <HeroVideo />
           </div>
         </section>
 
