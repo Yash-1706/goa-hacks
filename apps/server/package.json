@@ -12,7 +12,8 @@
     "seed": "tsx --disable-warning=ExperimentalWarning src/cli/seed.ts",
     "eval": "tsx --disable-warning=ExperimentalWarning src/cli/eval.ts",
     "bench": "tsx --disable-warning=ExperimentalWarning src/cli/bench.ts",
-    "warm-models": "tsx --disable-warning=ExperimentalWarning src/cli/warm-models.ts"
+    "warm-models": "tsx --disable-warning=ExperimentalWarning src/cli/warm-models.ts",
+    "doctor": "tsx --disable-warning=ExperimentalWarning src/cli/doctor.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
