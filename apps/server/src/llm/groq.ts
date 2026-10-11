@@ -89,6 +89,7 @@ const EMPTY_DEFAULTS: Record<string, Obj> = {
   email_draft: {},
   message_draft: {},
   calendar_event: { start_iso: null, end_iso: null, time_expression: null, attendees: [], is_reschedule: false },
+  reminder: { due_iso: null, due_text: null, recurrence: null },
   code_snippet: { signature: null, needs_enrichment: false },
   code_comment: { target: null },
   decision: { chosen: null, rejected: [], rationale: null },

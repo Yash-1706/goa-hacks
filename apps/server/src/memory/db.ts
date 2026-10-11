@@ -109,6 +109,11 @@ export class Db {
       this.raw.exec(SCHEMA_V2);
       this.raw.exec("PRAGMA user_version = 2");
     }
+    if (v < 3) {
+      // V1 routing answers (which repo, whose address, when), sealed with the artifact's own key
+      this.raw.exec("ALTER TABLE artifacts ADD COLUMN route_enc BLOB");
+      this.raw.exec("PRAGMA user_version = 3");
+    }
   }
 }
 

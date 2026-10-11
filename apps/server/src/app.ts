@@ -1,4 +1,5 @@
 import "./silence";
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -43,6 +44,16 @@ import { RecallEngine } from "./recall/engine";
 import { LocalStt, LocalSttAuth, type SttBackend } from "./wispr/local-stt";
 import { registerLocalStt } from "./wispr/local-ws";
 import { SarvamStt } from "./wispr/sarvam";
+import { GithubAccount } from "./profile/github";
+import { ProfileService } from "./profile/service";
+import { RoutingService } from "./routing/service";
+
+/** `gh auth token`: the GitHub CLI's token on this Mac, or null (not installed, not logged in). Never logged. */
+function ghCliToken(): Promise<string | null> {
+  return new Promise((resolve) =>
+    execFile("gh", ["auth", "token"], { timeout: 5000 }, (err, stdout) => resolve(err ? null : String(stdout).trim() || null)),
+  );
+}
 import { WisprService } from "./wispr/service";
 
 export interface AppOptions {
@@ -52,6 +63,8 @@ export interface AppOptions {
   embedder?: Embedder;
   /** replace the cortex backend (tests / benchmarks) */
   backend?: CortexBackend;
+  /** `gh auth token` (tests replace it: the real CLI must never be read by a test) */
+  ghToken?: () => Promise<string | null>;
   /** do not start timers (tests) */
   quiet?: boolean;
   /** supply the master key directly (tests); skips passphrase / OS keyring / keyfile */
@@ -105,6 +118,12 @@ export interface AppCtx {
   asides: { count: number };
   /** POST /api/capture: text or audio from any client, through the same engine */
   capture: CaptureService;
+  /** V1 context profile: repos, people, learned answers (encrypted) */
+  profile: ProfileService;
+  /** the connected GitHub account (token server-side only) */
+  github: GithubAccount;
+  /** where each artifact goes, what it still needs, its handoff links */
+  routing: RoutingService;
   /** this server also serves the built web app (one origin, one port) */
   webServed: boolean;
   fastify: FastifyInstance;
@@ -149,14 +168,20 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   const intents = new ControlIntents(embedder);
   await Promise.all([triager.init(), intents.init()]);
 
-  // ---- seeds: teammates are pinned entities + dictionary terms; a realistic calendar
-  for (const m of cfg.user.team) {
-    const e = await store.upsertEntity(m.name, "person");
-    if (e && e.longTerm !== 2) store.pinEntity(e);
-    store.upsertDict(m.name, "person", "team", 0.9);
-  }
+  // ---- the context profile (seeded from USER_TEAM the first time); its people are pinned entities + dictionary terms
+  const profile = new ProfileService({ db, vault, cfg });
+  const pinPeople = async (): Promise<void> => {
+    for (const p of profile.get().people) {
+      const e = await store.upsertEntity(p.name, "person");
+      if (e && e.longTerm !== 2) store.pinEntity(e);
+      store.upsertDict(p.name, "person", "team", 0.9);
+    }
+  };
+  await pinPeople();
+  profile.onChange = () => void pinPeople().catch((err) => log.warn("profile", `could not pin people: ${(err as Error).message}`));
   store.upsertDict(cfg.user.firstName, "person", "seed", 0.9);
   seedCalendar(store, cfg, clock.now());
+  const github = new GithubAccount({ db, vault, envToken: cfg.integrations.github.token, apiBase: cfg.integrations.github.apiBase, ghToken: opts.ghToken ?? ghCliToken });
 
   // ---- services (hub is created first and late-bound so services can depend on it)
   const trust = new Trust(db, cfg);
@@ -267,11 +292,16 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
     cfg, clock, bus, store, embedder, triager, intents, backend, emit, hub: hubIface, metrics, autonomy, controls: privacy, asides,
     onRecallQuery: (t, dev) => trackRecall(recall.answerForThought(t, dev).catch((e) => log.warn("recall", `failed: ${(e as Error).message}`))),
     vocabulary: () => store.topDictionary(40),
+    team: () => profile.team(),
   });
   privacy.attachEngine(engine);
   const proactive = new ProactiveEngine({ cfg, clock, bus, store, embedder, hub: hubIface, emit, recall, deep, outbox, privacy, audit, asides });
 
   const capture = new CaptureService({ db, clock, store, engine, isPaused: () => privacy.isPaused(), stt: captureStt, emit, ttlHours: cfg.memory.ttlHours });
+  const routing = new RoutingService({ store, profile, capture, github, clock, emit });
+  store.decorateArtifact = (a) => routing.view(a);
+  outbox.connect({ github: () => github.api(), repoFor: (a) => routing.repoFor(a) });
+  profile.attachLlm(deep);
 
   const consolidator = new Consolidator({ cfg, clock, store, embedder, deep, emit, audit, isPaused: () => privacy.isPaused() });
 
@@ -311,7 +341,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
 
   const ctx: AppCtx = {
     cfg, clock, bus, db, vault, store, embedder, triager, intents, metrics, battery, audit, trust, auth, privacy, outbox, autonomy, engine,
-    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, localStt, speechStt, asides, capture, webServed: false, fastify, clientConfig,
+    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, localStt, speechStt, asides, capture, profile, github, routing, webServed: false, fastify, clientConfig,
     idleRecall: async () => void (await Promise.allSettled([...pendingRecall])),
   };
   registerRoutes(fastify, ctx);

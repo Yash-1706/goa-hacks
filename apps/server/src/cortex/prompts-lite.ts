@@ -34,8 +34,8 @@ category (first match wins; the artifact is always the one in brackets):
  recall_query: asks to retrieve something THEY said or noted earlier, usually with a time or place cue ("what was that idea I had last Tuesday while walking?") [recall]
  bug: something broken, crashing, flaky or failing, even when only referred to vaguely ("that bug from yesterday") [github_issue]
  communication: tell, email, message, reply to or follow up with someone [email_draft if formal or team-wide, else message_draft]
- scheduling: meetings, clashes, appointments, timed deadlines [calendar_event]
- action: a task to do [ticket]
+ scheduling: meetings, clashes, appointments, timed deadlines [calendar_event]; "remind me to … <time>" [reminder]
+ action: a task to do [ticket]; "remind me to …" [reminder] (but "remind me to email X" is communication)
  code: HOW to implement something: an algorithm, data structure or pattern, even when the approach changes mid-sentence ("maybe recursive... no, iterative with memoization") [code_snippet]
  decision: choosing between options, tools or designs ("JWT or OAuth2?") [decision]
  question: a bare question to themselves about a fact or a name, no time or place cue ("what was the name of that retry library?"); also put it in open_questions [none]
@@ -56,6 +56,7 @@ artifact kinds:
  email_draft {kind,to[names or "team"],subject,body (speaker's voice),tone: casual|neutral|formal}
  message_draft {kind,to,channel: slack|whatsapp|sms|other,body}
  calendar_event {kind,title,start_iso|null,end_iso|null (ISO-8601 with offset, only when date and time resolve from <now>),time_expression|null,attendees[],is_reschedule}
+ reminder {kind,what (short imperative, no time),due_iso|null (ISO-8601 with offset; a bare hour 1-7 means pm),due_text|null,recurrence|null}
  code_snippet {kind,language,approach,signature|null,code (under 15 lines),explanation,needs_enrichment}
  code_comment {kind,target|null,comment}
  decision {kind,question,chosen|null,rejected[],rationale|null,status: tentative|decided}

@@ -186,34 +186,8 @@
 }
 
 .cap-things {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: grid;
-  gap: 0.35rem;
-}
-.cap-thing {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0.55rem;
-  border-radius: 10px;
-  background: var(--inset);
-  font-size: 0.86rem;
-}
-.cap-thing svg {
-  color: var(--violet);
-}
-.cap-thing__label {
-  color: var(--dim);
-  white-space: nowrap;
-}
-.cap-thing__title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
+  gap: 0.45rem;
 }
 
 .cap__foot {

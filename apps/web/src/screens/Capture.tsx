@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { AlertTriangle, Bell, Bug, Check, CloudOff, Loader2, Mail, Mic, NotebookPen, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, CloudOff, Loader2, Mic, Square, Trash2 } from "lucide-react";
 import type { CaptureView, ThoughtView } from "@synapse/shared";
 import type { QueueItem } from "@/capture/queue";
 import { ClipRecorder, audioToWav } from "@/capture/recorder";
 import { captureQueue, loadRecentCaptures } from "@/capture/runtime";
 import { takeShared } from "@/capture/share";
-import { madeLine, thingLabel } from "@/capture/summary";
+import { madeLine } from "@/capture/summary";
+import { ShipCard } from "@/components/ship/ShipCard";
 import { api } from "@/net/api";
 import { useCaptures } from "@/state/captures";
+import { useProfile } from "@/state/profile";
 import { useThoughts } from "@/state/thoughts";
 
 /* ============================================================================
@@ -39,20 +41,6 @@ const clock = (ms: number): string => {
 };
 
 const when = (t: number): string => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-const ICON: Record<string, typeof Bug> = { "GitHub issue": Bug, Email: Mail, Reminder: Bell, Event: Bell };
-
-function Thing({ t }: { t: ThoughtView }) {
-  const label = thingLabel(t);
-  const Icon = ICON[label] ?? NotebookPen;
-  return (
-    <li className="cap-thing">
-      <Icon size={16} aria-hidden />
-      <span className="cap-thing__label">{label}</span>
-      <span className="cap-thing__title">{t.title}</span>
-    </li>
-  );
-}
 
 /** One capture: its status on this phone (if it came from here) and what it made. */
 function CaptureRow({ item, capture, thoughts }: { item?: QueueItem; capture?: CaptureView; thoughts: ThoughtView[] }) {
@@ -90,11 +78,11 @@ function CaptureRow({ item, capture, thoughts }: { item?: QueueItem; capture?: C
         <>
           <p className="cap-row__made">{madeLine(thoughts)}</p>
           {thoughts.length ? (
-            <ul className="cap-things">
+            <div className="cap-things">
               {thoughts.map((t) => (
-                <Thing key={t.id} t={t} />
+                <ShipCard key={t.id} thought={t} compact />
               ))}
-            </ul>
+            </div>
           ) : null}
         </>
       ) : null}
@@ -118,6 +106,7 @@ export default function Capture() {
   useEffect(() => {
     captureQueue();
     void loadRecentCaptures();
+    void useProfile.getState().load();
   }, []);
 
   // "Share → Synapse" from another app lands here with ?shared=1

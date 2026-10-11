@@ -62,3 +62,8 @@
 {"id":"rec03","fragments":["Remind me what I decided about the database"],"expect":{"category":"recall_query"}}
 {"id":"rec04","fragments":["Find that thing I mentioned about retries"],"expect":{"category":"recall_query"}}
 {"id":"rec05","fragments":["What were my thoughts on the pricing page?"],"expect":{"category":"recall_query"}}
+{"id":"rem01","fragments":["Remind me to call the landlord tomorrow at 6"],"expect":{"category":"scheduling"},"tags":["v1-reminder"]}
+{"id":"rem02","fragments":["Remind me to drink water at 4"],"expect":{"category":"scheduling"},"tags":["v1-reminder"]}
+{"id":"rem03","fragments":["Don't let me forget to renew the passport next week"],"expect":{"category":"scheduling"},"tags":["v1-reminder"]}
+{"id":"rem05","fragments":["Remind me to renew the car insurance"],"expect":{"category":"action"},"tags":["v1-reminder"]}
+{"id":"rem04","fragments":["Remind me every Monday to submit the timesheet"],"expect":{"category":"scheduling"},"tags":["v1-reminder"]}

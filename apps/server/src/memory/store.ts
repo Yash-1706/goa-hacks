@@ -857,7 +857,17 @@ export class MemoryStore {
     };
   }
 
+  /** V1: routing adds route / needs / links to every view (set by the app; absent in bare tests) */
+  decorateArtifact: ((a: ArtifactRec) => Partial<ArtifactView>) | null = null;
+
   artifactView(a: ArtifactRec): ArtifactView {
+    return {
+      ...this.baseView(a),
+      ...(this.decorateArtifact?.(a) ?? {}),
+    };
+  }
+
+  private baseView(a: ArtifactRec): ArtifactView {
     return {
       id: a.id,
       code: a.code,

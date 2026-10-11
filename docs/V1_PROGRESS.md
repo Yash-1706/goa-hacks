@@ -3,7 +3,7 @@
 Plan: [docs/V1_PLAN.md](V1_PLAN.md). Branch `v1` (cut from `main` at 961283c).
 
 ## Current
-Phase 3 (context profile, ask-cards, usable outputs).
+Phase 4 (laptop UI: Inbox, Ask, Settings, first-run).
 
 ## Pre-flight state at start (2026-10-11)
 - Branch `v1` created by the run.
@@ -62,6 +62,22 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 ### Phase 2 evidence (Playwright Chromium, Pixel 7 emulation at 390×844, fake mic playing the synthetic ramble WAV, through a real tunnel)
 `node scripts/e2e/phase2.mjs <tunnel> <wav> docs/screenshots/v1` → signed in with the passcode; service worker active; record 13.5 s → stop → **"Made 3 things: GitHub issue · Email · Note" 0.5 s after stop** (fake Sarvam + mock cortex); the **desktop tab showed the same cards**; offline recording showed **"Waiting for network"**, server had **0** captures for its clientId while offline and **exactly 1** after going online; manifest `start_url /capture`, shortcut `/capture?autostart=1`, share target `POST /capture/share` (files: audio). Screenshots: `docs/screenshots/v1/capture-*-390.png`.
 
+### Phase 3
+- New artifact kind `reminder` {what, due_iso, due_text, recurrence} in the shared schema, both prompts (Claude + Groq lite), Groq empty-defaults, eval mapping and 5 new eval items. Offline cortex: `cortex/reminder.ts` (bare hour 1–7 = pm, day without time = 09:00, past → tomorrow; "make it 7" keeps the day, "make it Friday" keeps the time). Timed reminder = scheduling, untimed = action.
+- Quality fixes from Phase 0: issue body without internal ids or "(re: …)", footer "Captured by voice with Synapse"; email body says the thing ("The launch moves to Friday.", no "[add details]"), subject from the clause; titles no longer echo the sentence ("Call the landlord", "Email the team: the launch moves to Friday"). A correction finds the right card when one capture makes several thoughts in the same millisecond (tie-break on T-n).
+- Duplicate decisions: the same decision continued in a new thread (same question, a shared option/component, or close embedding) joins the earlier card and is re-analysed whole (`engine.mergeInto`).
+- Context profile (`profile/service.ts`): sealed with the long-term key, seeded once from USER_TEAM / TIMEZONE / GITHUB_SANDBOX_REPO; people pinned as entities; the cortex reads the team from it; learned facts (newest per question). `GET/PUT /api/profile`, `/merge`, `/parse` (vCard, CSV, "Name <email>", loose lines; the model for free text when one is configured).
+- GitHub (`profile/github.ts`): saved token (sealed) > GITHUB_TOKEN > `gh auth token` (offered, saved only on "Use it"); `/api/github/{status,use-gh,token,import}`; import = 30 newest repos (5 preselected, newest default, aliases from name words + topics), teammates from the preselected repos' commits without the user, bots and noreply.
+- Routing (`routing/router.ts`, pure, 17 tests; `routing/service.ts`): repo = answer > capture context > name/alias in speech > learned alias > only repo > default repo > ask "Which repo?" (top 3); email = address > answer > learned > profile (one / "Which Dev?" / "Dev's email?"), "the team" asks once and is saved as a group; reminder/event = answer > speech > ask "When?" (Tonight 9 pm / Tomorrow 9 am / This weekend / free text). Answers stored on the artifact (migration v3 `route_enc`, sealed with its key) and learned. Views carry `route`, `needs`, `links`, `canCreate`. `POST /api/artifacts/:id/answer`, `/shipped`.
+- Handoffs: GitHub new-issue URL; mailto + Gmail compose; Google Calendar template (15 min, UTC dates, ctz) + `.ics` with VALARM; WhatsApp `wa.me`. Real issue creation goes to the routed repo through the connected account (`GITHUB_API_URL` lets tests use a recording fake). Autonomy L3 only auto-creates issues in the sandbox repo (a team repo notifies people).
+- Web: `ShipCard` (label, destination, preview, ask block with option chips + free text, ONE primary action, done state "Created #1 ↗ / Opened in Gmail / Added to calendar", copy / .ics / forget), used on `/capture`; `lib/ship.ts` tested.
+
+### Phase 3 evidence
+- `node scripts/e2e/phase3.mjs <tunnel> <wav> <fake-github-peek>` (Pixel 7 emulation, fake mic, fake Sarvam, fake GitHub as `SayedZahur786/synapse-sandbox`): 3 cards (aside dropped); **Create issue** → "Created #1", filed in the sandbox repo with the footer and no internal ids; email asked **"Who is “the team”?"** with Open draft disabled, then enabled; mailto and Gmail decode to `sarah@acme.io,dev@acme.io`, "The launch moves to Friday", the full body; reminder **2026-10-12T18:00:00+05:30** (tomorrow 18:00 IST), calendar dates `20261012T123000Z/…124500Z`, `.ics` with VALARM; a **second identical ramble asked nothing**; "Actually make it 7." → **19:00**. Screenshots `docs/screenshots/v1/capture-{cards,ask,second-ramble}-390.png`.
+- Real GitHub import, read-only via `gh auth token` (`scripts/e2e/import-check.ts`, counts only): 30 repos (5 preselected, 1 default), 16 teammates with email (8 preselected), 4.7 s. Two earlier attempts timed out on the network (transient).
+- No live issue was created: `GITHUB_SANDBOX_REPO` is not configured (→ MANUAL_STEPS).
+- Offline eval: dev set 100% (69 threads); held-out 87.3% macro-F1, **identical to `main`** on this machine (checked in a temporary worktree; the committed EVAL.md is older).
+
 ## Decisions
 - Ruling: no `.env` is created by the run. The app's no-`.env` default is mock mode; settings the checks need are passed as process environment. Sayed explicitly declined the `.env` copy — cost if wrong: one `cp` for Sayed, listed in MANUAL_STEPS.
 - Ruling: commit messages carry no AI attribution — Sayed's global CLAUDE.md forbids it and outranks the session default — cost if wrong: none.
@@ -80,6 +96,14 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 - Ruling: shared audio (Web Share Target) is held in service-worker memory, never in Cache Storage or IndexedDB, until the page takes it — cost if wrong: a share is lost if the browser kills the worker in the second between the share and the page opening.
 - Ruling: `/capture` has an "Or type it" box as well as the mic button — typed and dictated text use the same queue — cost if wrong: one input to remove.
 
+- Ruling: the default repo is used before asking "Which repo?" (order: answer > context > named > learned > only repo > default > ask). The plan lists "ask" after "only one repo" but also wants the demo to file into the default sandbox repo with one tap; with no default, it asks — cost if wrong: issues go to the default repo silently; the card always shows the destination before the tap.
+- Ruling: answers live on the artifact (new `route_enc` column, sealed with the artifact's own key) and learned facts in the profile — cost if wrong: none for privacy (both encrypted).
+- Ruling: link handoffs (Gmail, mail app, calendar) are marked shipped when tapped (`POST /shipped`), so the card moves to Done; Synapse itself sends nothing — cost if wrong: a draft the user then abandons shows as Done.
+- Ruling: a GitHub issue is "self-only" for autonomy L3 only in the sandbox repo — draft-first; a real team repo notifies watchers.
+- Ruling: teammates are read from commits only (not the contributors endpoint): commits carry names and emails, contributors only logins — cost if wrong: people with no recent commits are not suggested.
+- Ruling: the old integration test that wanted the thought code (T-n) in the issue body was changed to assert the opposite (plan: no internal ids in anything other people read).
+- Ruling: the Mac's idle sleep (1 min) froze the test run twice for ~4 min; the run now keeps it awake with `caffeinate -i -s` (pre-flight step 4 was not done).
+
 ## Blocked
 - On-device Whisper model download (`Xenova/whisper-tiny.en`) fails here: Hugging Face is unreachable from the run's sandbox (`fetch failed`). The embedding model was already cached. E2E audio runs use the fake Sarvam instead. On Sayed's normal shell this downloads once (MANUAL_STEPS).
 
@@ -90,9 +114,11 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 | 0 | clean | 978 / 978 |
 | 1 | clean | 1021 / 1021 (web 683, server 338) |
 | 2 | clean | 1041 / 1041 (web 703, server 338) |
+| 3 | clean | 1091 / 1091 (web 710, server 381) |
 
 ## Commits
 | Phase | hash |
 |---|---|
 | 0 | 522f703 |
 | 1 | afdf10c |
+| 2 | d8034ea |

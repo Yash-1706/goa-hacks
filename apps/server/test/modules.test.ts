@@ -184,7 +184,7 @@ describe("reference ambiguity + salience", () => {
 
 describe("outbox + autonomy ladder (end to end)", () => {
   it("L2 stages a bug issue; push is simulated without credentials, promotes the thought, audits, and can be undone", async () => {
-    app = await makeApp({ AUTONOMY_LEVEL: "2" });
+    app = await makeApp({ AUTONOMY_LEVEL: "2", GITHUB_SANDBOX_REPO: "acme/synapse-sandbox" }); // the issue's destination (V1: no repo → the card asks)
     await app.say("There's a null pointer exception in the cart service when applying a discount code");
     await app.settle();
     const t = [...app.ctx.store.thoughts.values()][0]!;
@@ -205,7 +205,7 @@ describe("outbox + autonomy ladder (end to end)", () => {
   });
 
   it("L3 auto-executes ONLY private/self-only actions at high confidence; never emails", async () => {
-    app = await makeApp({ AUTONOMY_LEVEL: "3" });
+    app = await makeApp({ AUTONOMY_LEVEL: "3", GITHUB_SANDBOX_REPO: "acme/synapse-sandbox" });
     app.ctx.autonomy.setLevel(3);
     const mk = (kind: "email_draft" | "github_issue", confidence: number, tentative = false) => {
       const t = app!.ctx.store.createThought({ sessionId: "s", deviceId: "d", deviceKind: "desk", activity: "desk", category: kind === "github_issue" ? "bug" : "communication", title: "x", intent: "x", emb: new Float32Array(384), source: "mock" });

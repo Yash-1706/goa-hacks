@@ -220,6 +220,7 @@ export function loadEntities(db: Db, v: Vault): EntityRec[] {
         longTerm: ((r.long_term as number) ?? 0) as 0 | 1 | 2,
         expiresAt: (r.expires_at as number | null) ?? null,
         keyId,
+        ...(r.route_enc ? { route: v.openJson<NonNullable<ArtifactRec["route"]>>(keyId, aad("artifacts", id, "route"), r.route_enc as Uint8Array) } : {}),
       });
     } catch {
       db.run("DELETE FROM entities WHERE id = ?", r.id as string);
@@ -258,15 +259,16 @@ export function loadEdges(db: Db): EdgeRec[] {
 export function saveArtifact(db: Db, v: Vault, a: ArtifactRec): void {
   db.run(
     `INSERT INTO artifacts(id, code, thought_id, kind, status, autonomy_level, key_id, payload_enc,
-       external_ref, external_url, simulated, created_at, updated_at, expires_at)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       external_ref, external_url, simulated, created_at, updated_at, expires_at, route_enc)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, status=excluded.status, autonomy_level=excluded.autonomy_level,
        key_id=excluded.key_id, payload_enc=excluded.payload_enc, external_ref=excluded.external_ref,
        external_url=excluded.external_url, simulated=excluded.simulated, updated_at=excluded.updated_at,
-       expires_at=excluded.expires_at`,
+       expires_at=excluded.expires_at, route_enc=excluded.route_enc`,
     a.id, a.code, a.thoughtId, a.kind, a.status, a.autonomyLevel, a.keyId,
     v.sealJson(a.keyId, aad("artifacts", a.id, "payload"), a.payload),
     a.externalRef ?? null, a.externalUrl ?? null, a.simulated, a.createdAt, a.updatedAt, a.expiresAt,
+    a.route ? v.sealJson(a.keyId, aad("artifacts", a.id, "route"), a.route) : null,
   );
 }
 

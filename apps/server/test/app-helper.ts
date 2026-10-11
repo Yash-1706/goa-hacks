@@ -42,11 +42,16 @@ export async function makeApp(env: Record<string, string> = {}, start = "2026-10
     WISPR_MODE: "mock",
     SARVAM_API_KEY: "", // a developer's real key in .env must never reach a test (tests that need Sarvam pass a fake key and a fake URL)
     STT_PROVIDER: "",
+    // GitHub: never the developer's real token, never the real API from a test (tests that need it pass a fake URL)
+    GITHUB_TOKEN: "",
+    GITHUB_REPO: "",
+    GITHUB_SANDBOX_REPO: "",
+    GITHUB_API_URL: "http://127.0.0.1:9",
     REQUIRE_PAIRING: "0",
     SUGGESTION_MIN_GAP_S: "0",
     ...env,
   });
-  const { ctx, stop } = await createApp(cfg, { dbFile, clock, embedder: await modelEmbedder(), kek, quiet: true, ...extra });
+  const { ctx, stop } = await createApp(cfg, { dbFile, clock, embedder: await modelEmbedder(), kek, quiet: true, ghToken: async () => null, ...extra });
   const sent: ServerMessage[] = [];
   const orig = ctx.hub.broadcast.bind(ctx.hub);
   ctx.hub.broadcast = (m: ServerMessage) => {

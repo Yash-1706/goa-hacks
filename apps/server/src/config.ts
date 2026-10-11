@@ -115,6 +115,10 @@ const EnvSchema = z.object({
 
   GITHUB_TOKEN: str(""),
   GITHUB_REPO: str(""),
+  // V1: a throwaway repo for real issue tests; seeds the profile's default repo the first time
+  GITHUB_SANDBOX_REPO: str(""),
+  // the GitHub REST API (tests point it at a recording fake)
+  GITHUB_API_URL: str("https://api.github.com"),
   JIRA_BASE_URL: str(""),
   JIRA_EMAIL: str(""),
   JIRA_API_TOKEN: str(""),
@@ -201,7 +205,7 @@ export interface Config {
   remote: { passcode: string; publicUrl: string; tunnel: boolean; serveWeb: "auto" | "on" | "off"; webDist: string };
   proactive: { autonomyLevel: number; recurringN: number; recurringWindowMin: number; minGapMs: number };
   integrations: {
-    github: { token: string; repo: string };
+    github: { token: string; repo: string; sandboxRepo: string; apiBase: string };
     jira: { baseUrl: string; email: string; token: string; projectKey: string };
   };
 }
@@ -336,7 +340,7 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
       minGapMs: Math.max(0, raw.SUGGESTION_MIN_GAP_S) * 1000,
     },
     integrations: {
-      github: { token: raw.GITHUB_TOKEN, repo: raw.GITHUB_REPO },
+      github: { token: raw.GITHUB_TOKEN, repo: raw.GITHUB_REPO, sandboxRepo: raw.GITHUB_SANDBOX_REPO, apiBase: raw.GITHUB_API_URL.replace(/\/$/, "") },
       jira: {
         baseUrl: raw.JIRA_BASE_URL.replace(/\/$/, ""),
         email: raw.JIRA_EMAIL,

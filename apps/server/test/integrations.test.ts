@@ -53,7 +53,7 @@ function stage(kind: "github_issue" | "ticket") {
 
 describe("GitHub adapter (stubbed fetch)", () => {
   it("creates the issue in the configured repo with the documented request shape and maps the response", async () => {
-    app = await makeApp({ GITHUB_TOKEN: GH_TOKEN, GITHUB_REPO: "acme/synapse-sandbox" });
+    app = await makeApp({ GITHUB_TOKEN: GH_TOKEN, GITHUB_REPO: "acme/synapse-sandbox", GITHUB_API_URL: "https://api.github.com" });
     const { a, t } = stage("github_issue");
     expect(app.ctx.outbox.githubReady()).toBe(true);
     const calls = stubFetch(() => json(201, { number: 42, html_url: "https://github.com/acme/synapse-sandbox/issues/42" }));
@@ -73,8 +73,8 @@ describe("GitHub adapter (stubbed fetch)", () => {
     const sent = JSON.parse(c.init.body as string) as { title: string; body: string; labels: string[] };
     expect(sent.title).toBe("NPE in cart-service discount-code path");
     expect(sent.body).toContain("Crashes with an empty discount code.");
-    expect(sent.body).toContain("Drafted by Synapse from a voice thought");
-    expect(sent.body).toContain(t.code); // traceable back to the thought
+    expect(sent.body).toContain("Captured by voice with Synapse");
+    expect(sent.body).not.toMatch(/\b[TA]-\d+\b/); // no internal ids in something other people read
     expect(sent.labels).toEqual(["bug", "cart-service"]);
 
     expect(res).toMatchObject({ simulated: false, system: "github", externalRef: "acme/synapse-sandbox#42", url: "https://github.com/acme/synapse-sandbox/issues/42" });
@@ -85,7 +85,7 @@ describe("GitHub adapter (stubbed fetch)", () => {
   });
 
   it("a GitHub error is reported and the artifact stays staged: no phantom success", async () => {
-    app = await makeApp({ GITHUB_TOKEN: GH_TOKEN, GITHUB_REPO: "acme/synapse-sandbox" });
+    app = await makeApp({ GITHUB_TOKEN: GH_TOKEN, GITHUB_REPO: "acme/synapse-sandbox", GITHUB_API_URL: "https://api.github.com" });
     const { a } = stage("github_issue");
     stubFetch(() => json(422, { message: "Validation Failed" }));
 
@@ -102,7 +102,7 @@ describe("GitHub adapter (stubbed fetch)", () => {
   });
 
   it("a network failure or timeout is an error too (and a later retry can still succeed)", async () => {
-    app = await makeApp({ GITHUB_TOKEN: GH_TOKEN, GITHUB_REPO: "acme/synapse-sandbox" });
+    app = await makeApp({ GITHUB_TOKEN: GH_TOKEN, GITHUB_REPO: "acme/synapse-sandbox", GITHUB_API_URL: "https://api.github.com" });
     const { a } = stage("github_issue");
     let n = 0;
     stubFetch(() => {
@@ -118,7 +118,7 @@ describe("GitHub adapter (stubbed fetch)", () => {
   });
 
   it("undo closes the real issue as not planned", async () => {
-    app = await makeApp({ GITHUB_TOKEN: GH_TOKEN, GITHUB_REPO: "acme/synapse-sandbox" });
+    app = await makeApp({ GITHUB_TOKEN: GH_TOKEN, GITHUB_REPO: "acme/synapse-sandbox", GITHUB_API_URL: "https://api.github.com" });
     const { a } = stage("github_issue");
     const calls = stubFetch((c) => (c.init.method === "POST" ? json(201, { number: 9, html_url: "https://github.com/acme/synapse-sandbox/issues/9" }) : json(200, {})));
     await app.ctx.outbox.push(a);
@@ -131,8 +131,22 @@ describe("GitHub adapter (stubbed fetch)", () => {
     expect(a.status).toBe("undone");
   });
 
-  it("without credentials (or with a malformed repo) it is simulated and the network is never touched", async () => {
-    const cases: Array<Record<string, string>> = [{}, { GITHUB_TOKEN: GH_TOKEN, GITHUB_REPO: "not-a-repo" }, { GITHUB_TOKEN: "", GITHUB_REPO: "acme/synapse-sandbox" }];
+  it("with a token but no known repo, the card asks \"Which repo?\" instead of guessing; the network is never touched", async () => {
+    app = await makeApp({ GITHUB_TOKEN: GH_TOKEN, GITHUB_REPO: "not-a-repo" });
+    const { a } = stage("github_issue");
+    const calls = stubFetch(() => {
+      throw new Error("the network must not be used");
+    });
+    expect(app.ctx.outbox.githubReady()).toBe(true); // the account is connected; the destination is per card
+    expect(app.ctx.store.artifactView(a).needs?.[0]).toMatchObject({ field: "repo", question: "Which repo?" });
+    await expect(app.ctx.outbox.push(a)).rejects.toThrow(/Which repo/);
+    expect(calls).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
+  it("without credentials it is simulated and the network is never touched", async () => {
+    // the repo is known (no question to ask) but no token: the outbox labels it a simulation (the card itself offers the prefilled link)
+    const cases: Array<Record<string, string>> = [{ GITHUB_REPO: "acme/synapse-sandbox" }, { GITHUB_TOKEN: "", GITHUB_SANDBOX_REPO: "acme/synapse-sandbox" }];
     for (const env of cases) {
       app = await makeApp(env);
       const { a } = stage("github_issue");
@@ -245,5 +259,20 @@ describe("secrets stay server-side", () => {
     }
     // the client only learns THAT the integrations are connected
     expect(app.ctx.clientConfig().integrations).toEqual({ github: true, jira: true });
+  });
+});
+
+describe("autonomy L3 and real repos (V1)", () => {
+  it("a real issue in a team repo is never auto-created; the sandbox repo (or a simulation) is", async () => {
+    const a1 = await makeApp({ GITHUB_TOKEN: "ghp_x", GITHUB_REPO: "acme/team-repo", GITHUB_API_URL: "http://127.0.0.1:9" });
+    const t = a1.ctx.store.createThought({ sessionId: "s", deviceId: "d", deviceKind: "desk", activity: "desk", category: "bug", title: "x", intent: "x", emb: new Float32Array(384), source: "mock" });
+    const art = a1.ctx.store.createArtifact(t, { kind: "github_issue", title: "x", body_markdown: "x", labels: [], hypotheses: [] }, 3);
+    expect(a1.ctx.outbox.isSelfOnly(art)).toBe(false);
+    await a1.stop();
+    const a2 = await makeApp({ GITHUB_TOKEN: "ghp_x", GITHUB_SANDBOX_REPO: "acme/synapse-sandbox", GITHUB_API_URL: "http://127.0.0.1:9" });
+    const t2 = a2.ctx.store.createThought({ sessionId: "s", deviceId: "d", deviceKind: "desk", activity: "desk", category: "bug", title: "x", intent: "x", emb: new Float32Array(384), source: "mock" });
+    const art2 = a2.ctx.store.createArtifact(t2, { kind: "github_issue", title: "x", body_markdown: "x", labels: [], hypotheses: [] }, 3);
+    expect(a2.ctx.outbox.isSelfOnly(art2)).toBe(true);
+    await a2.stop();
   });
 });

@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { CaptureRequestSchema } from "@synapse/shared";
+import { CaptureRequestSchema, ProfilePersonSchema, ProfileRepoSchema, ProfileSchema } from "@synapse/shared";
 import type { AppCtx } from "../app";
 import { CaptureError } from "../capture/service";
 import { runReplay, type ReplayScript } from "../cli/replay-lib";
+import type { GithubError } from "../profile/github";
+import { AnswerError } from "../routing/router";
 import { listEvents, view as calView } from "../integrations/calendar";
 import { graphSnapshot } from "../memory/graph";
 import { ENERGY, STAGES, stagesOf } from "../metrics/latency";
@@ -235,6 +237,27 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
       return reply.code(409).send({ error: (err as Error).message });
     }
   });
+  // V1: answer the card's question ("Which repo?", "Dev's email?", "When?"); remembered so it is not asked again
+  app.post<{ Params: { id: string } }>("/api/artifacts/:id/answer", async (req, reply) => {
+    const a = store.artifacts.get(req.params.id);
+    if (!a) return reply.code(404).send({ error: "not found" });
+    const b = z.object({ field: z.string().min(1).max(80), value: z.string().min(1).max(1000) }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "field and value are required" });
+    try {
+      return store.artifactView(ctx.routing.answer(a, b.data.field, b.data.value));
+    } catch (err) {
+      return reply.code(err instanceof AnswerError ? 400 : 409).send({ error: (err as Error).message });
+    }
+  });
+  // V1: a link handoff happened (Gmail draft opened, calendar event added): the card moves to Done
+  app.post<{ Params: { id: string } }>("/api/artifacts/:id/shipped", async (req, reply) => {
+    const a = store.artifacts.get(req.params.id);
+    if (!a) return reply.code(404).send({ error: "not found" });
+    const b = z.object({ via: z.string().min(1).max(24) }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "via is required" });
+    outbox.markShipped(a, b.data.via);
+    return store.artifactView(a);
+  });
   app.patch<{ Params: { id: string } }>("/api/artifacts/:id", async (req, reply) => {
     const a = store.artifacts.get(req.params.id);
     if (!a) return reply.code(404).send({ error: "not found" });
@@ -254,6 +277,59 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
     }
     const mailto = outbox.mailto(a);
     return mailto ? { mailto } : reply.code(409).send({ error: "not an email draft" });
+  });
+
+  // ----------------------------------------------------------------- profile --
+  app.get("/api/profile", async () => ctx.profile.get());
+  app.put("/api/profile", async (req, reply) => {
+    const b = ProfileSchema.safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: `invalid profile: ${b.error.issues.map((i) => i.path.join(".")).join(", ")}` });
+    const p = ctx.profile.put(b.data);
+    ctx.hub.broadcast({ type: "config.update", config: ctx.clientConfig() });
+    return p;
+  });
+  app.post("/api/profile/merge", async (req, reply) => {
+    const b = z.object({ repos: z.array(ProfileRepoSchema).max(100).optional(), people: z.array(ProfilePersonSchema).max(500).optional() }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "invalid import" });
+    return ctx.profile.merge(b.data);
+  });
+  app.post("/api/profile/parse", async (req, reply) => {
+    const b = z.object({ text: z.string().min(1).max(50_000) }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "text is required" });
+    return { people: await ctx.profile.parse(b.data.text) };
+  });
+  app.get("/api/github/status", async () => ctx.github.status());
+  app.post("/api/github/use-gh", async (_req, reply) => {
+    try {
+      const login = await ctx.github.useGh();
+      ctx.hub.broadcast({ type: "config.update", config: ctx.clientConfig() });
+      return { login };
+    } catch (err) {
+      return reply.code((err as GithubError).status === 404 ? 404 : 400).send({ error: (err as Error).message });
+    }
+  });
+  app.post("/api/github/token", async (req, reply) => {
+    const b = z.object({ token: z.string().min(10).max(400) }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "token is required" });
+    try {
+      const login = await ctx.github.saveToken(b.data.token);
+      ctx.hub.broadcast({ type: "config.update", config: ctx.clientConfig() });
+      return { login };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+  app.delete("/api/github/token", async () => {
+    ctx.github.forget();
+    ctx.hub.broadcast({ type: "config.update", config: ctx.clientConfig() });
+    return { ok: true };
+  });
+  app.get("/api/github/import", async (_req, reply) => {
+    try {
+      return await ctx.github.importSuggestions();
+    } catch (err) {
+      return reply.code((err as GithubError).status === 409 ? 409 : 503).send({ error: (err as Error).message });
+    }
   });
 
   // ----------------------------------------------------------------- privacy --
