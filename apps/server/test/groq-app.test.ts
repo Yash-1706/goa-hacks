@@ -77,7 +77,7 @@ describe("LLM provider selection (config)", () => {
   it("Groq knobs: models, budget, wait and daily cap, with sane bounds", () => {
     const g = cfg({ GROQ_API_KEY: KEY, GROQ_MODEL_FAST: "qwen/qwen3.8-27b", GROQ_MODEL_DEEP: "openai/gpt-oss-120b", GROQ_TPM: "6000", GROQ_MAX_WAIT_MS: "500", GROQ_MAX_REQUESTS_PER_DAY: "50", GROQ_OUTPUT_MODE: "json_schema", GROQ_BASE_URL: "https://example.test/v1/" });
     expect(g).toMatchObject({ provider: "groq", fast: "qwen/qwen3.8-27b", deep: "openai/gpt-oss-120b" });
-    expect(g.groq).toEqual({ apiKey: KEY, baseUrl: "https://example.test/v1", fast: "qwen/qwen3.8-27b", deep: "openai/gpt-oss-120b", outputMode: "json_schema", tpm: 6000, maxWaitMs: 500, maxRequestsPerDay: 50 });
+    expect(g.groq).toEqual({ apiKey: KEY, baseUrl: "https://example.test/v1", fast: "qwen/qwen3.8-27b", deep: "openai/gpt-oss-120b", outputMode: "json_schema", tpm: 6000, maxWaitMs: 500, captureMaxWaitMs: 25000, maxRequestsPerDay: 50 });
     const d = cfg({ GROQ_API_KEY: KEY, GROQ_TPM: "10", GROQ_OUTPUT_MODE: "nonsense" }).groq;
     expect(d).toMatchObject({ outputMode: "auto", tpm: 500, maxWaitMs: 2000, maxRequestsPerDay: 900, baseUrl: "https://api.groq.com/openai/v1" });
   });

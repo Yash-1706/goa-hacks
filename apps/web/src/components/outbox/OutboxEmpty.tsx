@@ -19,7 +19,7 @@ export function OutboxEmpty() {
         ))}
       </ul>
       <div className="ob-empty__foot">
-        <Link to="/" className="btn btn-primary btn-sm">
+        <Link to="/app" className="btn btn-primary btn-sm">
           Open the Desk <ArrowRight size={13} aria-hidden />
         </Link>
         <span className="ob-empty__lock">

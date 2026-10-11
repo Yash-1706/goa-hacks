@@ -55,6 +55,8 @@ export interface EngineDeps {
   onRecallQuery?: (t: ThoughtRec, dev: DeviceRef) => void;
   /** jargon the user is known to use */
   vocabulary: () => string[];
+  /** the people the cortex knows (V1: from the profile; USER_TEAM otherwise) */
+  team?: () => Config["user"]["team"];
 }
 
 interface Thread {
@@ -92,6 +94,8 @@ function isPureRetraction(text: string): boolean {
   return text.replace(RETRACTION_ALL, " ").replace(RETRACTION_FILLER, " ").split(/[^\p{L}\p{N}]+/u).filter(Boolean).length <= 1;
 }
 
+const codeSeq = (code: string): number => Number(code.replace(/^\D+/, "")) || 0;
+
 export class CortexEngine {
   private open = new Map<string, Thread>();
   private recentClosed = new Map<string, Thread>();
@@ -101,6 +105,8 @@ export class CortexEngine {
   private runs = new Set<Promise<void>>();
   private seq = 0;
   private shuttingDown = false;
+  /** V1.1: offline drafts waiting for the model (the re-draft queue) */
+  private improving = new Set<string>();
 
   constructor(private d: EngineDeps) {}
 
@@ -139,7 +145,34 @@ export class CortexEngine {
   }
 
   view(t: ThoughtRec): ThoughtView {
-    return { ...this.d.store.toView(t), analyzing: this.isAnalyzing(t.id) };
+    return { ...this.d.store.toView(t), analyzing: this.isAnalyzing(t.id), improving: this.improving.has(t.id) };
+  }
+
+  /** Show (or clear) "improving…" on a card waiting for the model to re-draft it. */
+  setImproving(thoughtId: string, on: boolean): void {
+    if (on === this.improving.has(thoughtId)) return;
+    if (on) this.improving.add(thoughtId);
+    else this.improving.delete(thoughtId);
+    const t = this.d.store.getThought(thoughtId);
+    if (t) this.d.emit({ type: "thought.upsert", thought: this.view(t) });
+  }
+
+  /** Draft an existing thought again with what was said (the re-draft queue): the result is applied in place, never as a new card. */
+  async reanalyze(thoughtId: string): Promise<void> {
+    const t = this.d.store.getThought(thoughtId);
+    if (!t) return;
+    const existing = this.byThought.get(thoughtId);
+    if (existing?.inflight) return;
+    const th =
+      existing ??
+      this.adoptThread(t, { dev: { id: t.deviceId, kind: t.deviceKind, activity: t.activity }, lastSpeechEnd: t.updatedAt, lastRecvAt: t.updatedAt, lastFragmentId: "" } as unknown as Thread);
+    th.lastResult = undefined;
+    th.inflight = true;
+    try {
+      await this.analyzeOnce(th);
+    } finally {
+      th.inflight = false;
+    }
   }
 
   /** Close every open thread (session end / shutdown). */
@@ -531,7 +564,7 @@ export class CortexEngine {
     const input: CortexInput = {
       now,
       timezone: this.d.cfg.timezone,
-      user: { name: this.d.cfg.user.firstName, role: this.d.cfg.user.role, team: this.d.cfg.user.team },
+      user: { name: this.d.cfg.user.firstName, role: this.d.cfg.user.role, team: this.d.team?.() ?? this.d.cfg.user.team },
       device: { kind: th.dev.kind, activity: th.dev.activity },
       threadRef: t.code,
       fragments: frags.map((f, i) => ({
@@ -560,7 +593,8 @@ export class CortexEngine {
     return [...this.d.store.thoughts.values()]
       // provisional thoughts count: "scratch that" often arrives while the previous card is still being analysed
       .filter((x) => x.id !== th.thoughtId && x.deviceId === th.dev.id && !x.retracted && this.d.store.isRecallable(x) && now - x.createdAt < 10 * 60_000)
-      .sort((a, b) => b.createdAt - a.createdAt)[0];
+      // one capture creates several thoughts within the same millisecond: the creation sequence (T-n) breaks the tie
+      .sort((a, b) => b.createdAt - a.createdAt || codeSeq(b.code) - codeSeq(a.code))[0];
   }
 
   /** Streamed preview: the card "types in" while the model is still generating. */
@@ -591,8 +625,11 @@ export class CortexEngine {
 
   // ------------------------------------------------------------------- apply --
 
-  private sanitize(r: CortexResult, candidates: Candidate[]): CortexResult {
+  private sanitize(r0: CortexResult, candidates: Candidate[]): CortexResult {
+    const r = r0;
     const known = new Set(candidates.map((c) => c.ref));
+    // a capture draft names the card it corrects by code ("T-3"): that is a real thought even if retrieval did not surface it
+    for (const r of r0.references ?? []) if (r.resolved_id && this.d.store.thoughtByCode(r.resolved_id)) known.add(r.resolved_id);
     const confidence = Number.isFinite(r.confidence) ? Math.max(0, Math.min(1, r.confidence)) : 0.5;
     const out: CortexResult = {
       ...r,
@@ -638,6 +675,14 @@ export class CortexEngine {
     }
     if (r.thread_relation === "new_thought" && th.fragIds.length > 1) {
       if (await this.splitLast(th, t)) return;
+    }
+    // the same decision, continued after a pause: one card, re-read as a whole (never a second "Which auth approach?")
+    if (r.category === "decision") {
+      const earlier = this.sameDecision(th, t, r);
+      if (earlier) {
+        this.mergeInto(th, t, earlier);
+        return;
+      }
     }
 
     // ---- fold the result into the thought
@@ -894,7 +939,7 @@ export class CortexEngine {
     const refCode = r.references.find((x) => x.resolved_id)?.resolved_id ?? null;
     const byRef = refCode ? candidates.find((c) => c.ref === refCode) : undefined;
     const fromLast = this.lastOtherThought(th, clock.now());
-    const target = (byRef && store.getThought(byRef.id)) || fromLast;
+    const target = (byRef && store.getThought(byRef.id)) || (refCode ? store.thoughtByCode(refCode) : undefined) || fromLast;
     if (!target || target.id === t.id) {
       this.dropThread(th, t, "aside"); // nothing to correct: treat as noise
       return;
@@ -933,6 +978,45 @@ export class CortexEngine {
     tgtThread.llmStartWall = th.llmStartWall;
     await this.apply(tgtThread, target, { ...out, result: revised }, candidates);
     this.resetTimer(tgtThread);
+  }
+
+  /** A recent decision of this session on the same topic (same question, or a close embedding), if any. */
+  private sameDecision(th: Thread, t: ThoughtRec, r: CortexResult): ThoughtRec | undefined {
+    const { store, clock, embedder } = this.d;
+    const question = r.artifact.kind === "decision" ? fold(r.artifact.question) : "";
+    const generic = !question || /^which option for this/.test(question);
+    return [...store.thoughts.values()]
+      .filter((x) => x.id !== t.id && x.sessionId === th.sessionId && x.deviceId === th.dev.id && x.category === "decision" && !x.retracted && clock.now() - x.createdAt < 30 * 60_000)
+      .filter((x) => {
+        const art = x.artifactId ? store.artifacts.get(x.artifactId) : undefined;
+        if (art?.status === "executed" || art?.status === "dismissed") return false;
+        const q = art?.payload.kind === "decision" ? fold(art.payload.question) : "";
+        if (!generic && q && q === question) return true;
+        // the same options or component named again ("JWT") is the same decision
+        const names = new Set(x.entityIds.map((id) => store.entities.get(id)).filter((e) => e && e.type !== "person").map((e) => fold(e!.name)));
+        if (r.entities.some((e) => e.type !== "person" && names.has(fold(e.name)))) return true;
+        return embedder.calibrate(dot(th.centroid, x.emb)) >= T.decisionTopic;
+      })
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+  }
+
+  /** Move this thread's fragments into an earlier thought and analyse that thought again with everything said. */
+  private mergeInto(th: Thread, t: ThoughtRec, target: ThoughtRec): void {
+    const { store } = this.d;
+    for (const f of store.fragmentsOf(t)) store.moveFragment(f, target);
+    const tgt = this.byThought.get(target.id) ?? this.adoptThread(target, th);
+    tgt.fragIds.push(...th.fragIds);
+    tgt.embs.push(...th.embs);
+    tgt.centroid = centroid(tgt.embs);
+    tgt.lastFragmentId = th.lastFragmentId;
+    tgt.lastRecvAt = th.lastRecvAt;
+    tgt.lastSpeechEnd = th.lastSpeechEnd;
+    tgt.lastResult = undefined;
+    this.dropThread(th, t, "merged");
+    if (tgt.closed) this.reopen(tgt);
+    this.open.set(tgt.dev.id, tgt);
+    this.resetTimer(tgt);
+    this.schedule(tgt);
   }
 
   private adoptThread(target: ThoughtRec, from: Thread): Thread {

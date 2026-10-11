@@ -1,0 +1,261 @@
+/* ==========================================================================
+   The V1 card (ShipCard): flat surface, a type icon and plain label, the destination, one primary action.
+   Shared tokens only; works from 320 px up.
+   ========================================================================== */
+
+.ship {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.8rem 0.9rem;
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.ship--compact {
+  background: var(--inset);
+  border-radius: 10px;
+  padding: 0.65rem 0.7rem;
+}
+.ship[data-status="executed"] {
+  opacity: 0.86;
+}
+
+.ship__head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+}
+.ship__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--inset);
+  color: var(--violet);
+}
+.ship--compact .ship__icon {
+  background: var(--surface);
+}
+.ship__label {
+  color: var(--ink);
+  font-weight: 600;
+}
+.ship__dest {
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+}
+.ship__dest::before {
+  content: "·";
+  margin-right: 0.45rem;
+  color: var(--faint);
+}
+.ship__needs {
+  margin-left: auto;
+  color: var(--warn);
+  font-weight: 550;
+}
+
+.ship__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 620;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.ship--compact .ship__title {
+  font-size: 0.9rem;
+}
+.ship__text {
+  margin: 0;
+  color: var(--dim);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ship-ask {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.6rem;
+  border-radius: 10px;
+  background: var(--inset);
+  border: 1px solid rgba(250, 204, 21, 0.25);
+}
+.ship--compact .ship-ask {
+  background: var(--surface);
+}
+.ship-ask__q {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+.ship-ask__opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.ship-ask__free {
+  display: flex;
+  gap: 0.4rem;
+}
+.ship-ask__free .input {
+  flex: 1;
+  min-width: 0;
+}
+.ship-ask__err {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.8rem;
+}
+
+.chip-btn {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip-btn:hover:not(:disabled) {
+  border-color: var(--violet);
+}
+.chip-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.ship__foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.ship__primary {
+  min-height: 36px;
+}
+.ship__done {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--ok);
+  font-size: 0.85rem;
+  font-weight: 550;
+  text-decoration: none;
+}
+.ship__saved {
+  color: var(--faint);
+  font-size: 0.8rem;
+}
+.ship__tools {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 0.15rem;
+}
+
+.ship-menu {
+  position: relative;
+}
+.ship-menu__list {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 20;
+  min-width: 10rem;
+  display: grid;
+  padding: 0.25rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.ship-menu__item {
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+.ship-menu__item:hover,
+.ship-menu__item:focus-visible {
+  background: var(--inset);
+}
+.ship-edit {
+  display: grid;
+  gap: 0.5rem;
+}
+.ship-edit__field {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+.ship-edit__row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+.ship-why {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  background: var(--inset);
+  font-size: 0.84rem;
+}
+.ship-why h4 {
+  margin: 0.2rem 0 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.ship-why ul {
+  margin: 0;
+  padding-left: 1rem;
+}
+.ship-why p {
+  margin: 0;
+}
+.ship-why__kept {
+  color: var(--faint);
+}
+.ship__improving {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 0.76rem;
+  font-style: italic;
+}
+.ship__opened {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.ship__done--opened {
+  color: var(--dim);
+}

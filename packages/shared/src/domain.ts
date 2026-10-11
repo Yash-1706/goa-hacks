@@ -70,6 +70,7 @@ export const ARTIFACT_KINDS = [
   "email_draft",
   "message_draft",
   "calendar_event",
+  "reminder",
   "code_snippet",
   "code_comment",
   "decision",
@@ -119,6 +120,18 @@ export const ArtifactSchema = z.discriminatedUnion("kind", [
     time_expression: z.string().nullable(),
     attendees: z.array(z.string()),
     is_reschedule: z.boolean(),
+  }),
+  // V1: "remind me to …" → a timed nudge for the user alone (Google Calendar template link / .ics with an alarm)
+  z.object({
+    kind: z.literal("reminder"),
+    /** what to do, as an imperative without the time ("Call the landlord") */
+    what: z.string(),
+    /** ISO 8601 with offset when a time was said; null when it was not (the card then asks "When?") */
+    due_iso: z.string().nullable(),
+    /** the time as spoken ("tomorrow at 6") */
+    due_text: z.string().nullable(),
+    /** "daily", "every Monday", … or null */
+    recurrence: z.string().nullable(),
   }),
   z.object({
     kind: z.literal("code_snippet"),
@@ -170,6 +183,8 @@ export const ARTIFACT_STATUSES = [
   "draft",
   "staged",
   "accepted",
+  /** V1.1: handed to another app (Gmail, Calendar); one tap on Done finishes it */
+  "opened",
   "executed",
   "dismissed",
   "undone",
@@ -232,7 +247,7 @@ export interface FragmentView {
   transport: FragmentTransport;
 }
 
-export type FragmentTransport = "wispr_ws" | "wispr_rest" | "wispr_proxy" | "local_stt" | "cloud_stt" | "mock" | "replay";
+export type FragmentTransport = "wispr_ws" | "wispr_rest" | "wispr_proxy" | "local_stt" | "cloud_stt" | "mock" | "typed" | "replay";
 
 export interface ReferenceView {
   mention: string;
@@ -257,6 +272,40 @@ export interface EntityRefView {
   type: EntityType;
 }
 
+/** Where an artifact goes when shipped: resolved from the capture's context, the profile and answered questions. */
+export interface ArtifactRoute {
+  /** github_issue: "owner/name" */
+  repo?: string;
+  /** email_draft: resolved addresses */
+  to?: string[];
+  /** reminder / calendar_event: when (ISO 8601) */
+  dueAt?: string;
+}
+
+/** "Ask instead of guess": one question the card needs answered before it can ship. */
+export interface ArtifactNeed {
+  /** what the answer fills: "repo", "to:<name>", "due" */
+  field: string;
+  question: string;
+  options: Array<{ label: string; value: string }>;
+  allowFreeText: boolean;
+  /** hint for the free-text box ("name@example.com", "owner/repo", "Friday 5pm") */
+  placeholder?: string;
+}
+
+/** One-tap handoffs into the apps people already use (all prefilled; nothing is sent without the user). */
+export interface ArtifactLinks {
+  /** github_issue: prefilled https://github.com/{repo}/issues/new */
+  newIssue?: string;
+  mailto?: string;
+  gmail?: string;
+  /** reminder / calendar_event: Google Calendar template */
+  calendar?: string;
+  /** reminder / calendar_event: this server's .ics export (with an alarm) */
+  ics?: string;
+  whatsapp?: string;
+}
+
 export interface ArtifactView {
   id: string;
   code: string;
@@ -270,6 +319,14 @@ export interface ArtifactView {
   simulated?: boolean;
   createdAt: number;
   updatedAt: number;
+  /** V1 routing: the resolved destination */
+  route?: ArtifactRoute;
+  /** V1: open questions; the primary action stays disabled while any remain */
+  needs?: ArtifactNeed[];
+  /** V1: prefilled deep links */
+  links?: ArtifactLinks;
+  /** V1: a real GitHub account is connected, so "Create issue" files it directly */
+  canCreate?: boolean;
 }
 
 export type ThoughtSource = "llm" | "local" | "mock";
@@ -337,6 +394,8 @@ export interface ThoughtView {
   redactions?: number;
   /** why the live model was bypassed ("timeout", "rate_limit", ...) when source is mock after a live attempt */
   degraded?: string;
+  /** V1.1: an offline draft waiting for the model to re-draft it in place (Groq's free tier was out of budget) */
+  improving?: boolean;
 }
 
 export const SUGGESTION_KINDS = [

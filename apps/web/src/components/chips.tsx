@@ -145,7 +145,7 @@ export const PrivacyShield = memo(function PrivacyShield() {
     }
   }
   return (
-    <Link to="/privacy" className={cls} title="Privacy Center: what is stored, what leaves this device, and how to forget it. Audio is never stored.">
+    <Link to="/app/settings/privacy" className={cls} title="Privacy Center: what is stored, what leaves this device, and how to forget it. Audio is never stored.">
       <Icon size={15} />
       <b>{main}</b>
       <span className="hide-md" style={{ color: "var(--dim)" }}>
@@ -215,7 +215,7 @@ export const LatencyChip = memo(function LatencyChip() {
     .filter(Boolean)
     .join("\n");
   return (
-    <Link to="/lab" className="tchip hide-sm" title={title}>
+    <Link to="/app/settings/developer" className="tchip hide-sm" title={title}>
       <Zap size={14} style={{ color: color ?? "var(--faint)" }} />
       <Sparkline values={series.slice(-24)} />
       <b className="tnum" style={{ color }}>

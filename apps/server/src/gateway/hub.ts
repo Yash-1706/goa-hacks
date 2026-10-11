@@ -22,6 +22,7 @@ import type { BatteryLog, Metrics } from "../metrics/latency";
 import type { PrivacyService } from "../privacy/service";
 import type { AuditChain } from "../privacy/audit";
 import type { WisprService } from "../wispr/service";
+import type { Auth } from "./auth";
 import { isAllowedOrigin, type Trust } from "./trust";
 
 /* ============================================================================
@@ -43,6 +44,7 @@ export interface HubServices {
   outbox: Outbox;
   audit: AuditChain;
   trust: Trust;
+  auth: Auth;
   asides: { count: number };
   recall: () => RecallApi | undefined;
   proactive: () => ProactiveApi | undefined;
@@ -57,6 +59,8 @@ interface Conn {
   offsets: number[];
   lastSpeechEnd: number;
   badMessages: number;
+  /** signed in with a passcode session: re-checked so "Log out all devices" closes the socket too */
+  cookie?: string;
 }
 
 const MAX_MESSAGE = 512 * 1024;
@@ -110,15 +114,18 @@ export class WsHub implements Hub {
   async register(app: FastifyInstance): Promise<void> {
     await app.register(websocket, { options: { maxPayload: MAX_MESSAGE } });
     app.get("/ws", { websocket: true }, (socket, req) => {
-      if (!isAllowedOrigin(req.headers.origin)) {
+      if (!isAllowedOrigin(req.headers.origin, this.s.auth.publicOrigin)) {
         socket.close(1008, "origin not allowed");
         return;
       }
       const ip = this.s.trust.clientIp(req.raw);
+      // a passcode session on the upgrade request authenticates the device (the only way in while a tunnel is up)
+      const session = this.s.auth.hasSession(req.headers.cookie);
+      const sessionCookie = session ? req.headers.cookie : undefined;
       this.pending.add(socket);
       let conn: Conn | undefined;
       socket.on("message", (raw: Buffer) => {
-        void this.onMessage(socket, ip, raw, () => conn, (c) => (conn = c));
+        void this.onMessage(socket, ip, sessionCookie, raw, () => conn, (c) => (conn = c));
       });
       socket.on("close", () => {
         this.pending.delete(socket);
@@ -136,7 +143,7 @@ export class WsHub implements Hub {
     });
   }
 
-  private async onMessage(socket: WebSocket, ip: string, raw: Buffer, get: () => Conn | undefined, set: (c: Conn) => void): Promise<void> {
+  private async onMessage(socket: WebSocket, ip: string, sessionCookie: string | undefined, raw: Buffer, get: () => Conn | undefined, set: (c: Conn) => void): Promise<void> {
     let json: unknown;
     try {
       json = JSON.parse(raw.toString("utf8"));
@@ -152,7 +159,7 @@ export class WsHub implements Hub {
     }
     const msg = parsed.data;
     if (msg.type === "hello") {
-      this.onHello(socket, ip, msg, set);
+      this.onHello(socket, ip, sessionCookie, msg, set);
       return;
     }
     if (!conn || !conn.authed) return;
@@ -166,8 +173,12 @@ export class WsHub implements Hub {
 
   // ------------------------------------------------------------------- hello --
 
-  private onHello(socket: WebSocket, ip: string, msg: Extract<ClientMessage, { type: "hello" }>, set: (c: Conn) => void): void {
-    const verdict = this.s.trust.check(ip, msg.deviceId, msg.token, msg.pairingCode);
+  private onHello(socket: WebSocket, ip: string, sessionCookie: string | undefined, msg: Extract<ClientMessage, { type: "hello" }>, set: (c: Conn) => void): void {
+    const verdict: { ok: boolean; token?: string; reason?: string } = sessionCookie
+      ? { ok: true }
+      : this.s.auth.publicMode
+        ? { ok: false, reason: "sign in with the passcode" }
+        : this.s.trust.check(ip, msg.deviceId, msg.token, msg.pairingCode);
     if (!verdict.ok) {
       socket.send(JSON.stringify({ type: "auth.required", reason: verdict.reason ?? "pairing required" } satisfies ServerMessage));
       return;
@@ -185,7 +196,7 @@ export class WsHub implements Hub {
       activity: msg.kind === "desk" ? "desk" : "unknown",
       mode: "normal",
     };
-    const conn: Conn = { socket, ip, authed: true, info, offsets: [], lastSpeechEnd: 0, badMessages: 0 };
+    const conn: Conn = { socket, ip, authed: true, info, offsets: [], lastSpeechEnd: 0, badMessages: 0, ...(sessionCookie ? { cookie: sessionCookie } : {}) };
     this.conns.set(msg.deviceId, conn);
     this.pending.delete(socket);
     set(conn);
@@ -361,6 +372,11 @@ export class WsHub implements Hub {
     } catch (err) {
       warn((err as Error).message);
     }
+  }
+
+  /** Close the sockets whose passcode session was revoked (called after "Log out all devices" and periodically). */
+  recheckSessions(): void {
+    for (const c of this.conns.values()) if (c.cookie && !this.s.auth.hasSession(c.cookie)) c.socket.close(4001, "signed out");
   }
 
   closeAll(): void {

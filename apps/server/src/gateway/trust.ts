@@ -16,10 +16,12 @@ export const isLoopback = (ip: string | undefined): boolean =>
  * Browser-origin guard. Loopback is trusted, so without this ANY website the user visits could
  * `fetch("http://localhost:8787/api/state")` and read their memory (and DNS rebinding would too).
  * Allowed: no Origin header (CLI, curl, native clients) or an origin on this machine / a private
- * network (the Vite dev server, a phone on the LAN, Tailscale). Everything else is refused.
+ * network (the Vite dev server, a phone on the LAN, Tailscale), plus exactly the active public URL's origin when a tunnel is
+ * up (never a wildcard: another *.trycloudflare.com site is just a website). Everything else is refused.
  */
-export function isAllowedOrigin(origin: string | undefined): boolean {
+export function isAllowedOrigin(origin: string | undefined, publicOrigin: string | null = null): boolean {
   if (!origin || origin === "null") return !origin; // opaque origins (file://, sandboxed iframes) are refused
+  if (publicOrigin && origin === publicOrigin) return true;
   let host: string;
   try {
     host = new URL(origin).hostname.replace(/^\[|\]$/g, "");

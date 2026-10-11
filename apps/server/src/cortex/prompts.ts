@@ -52,8 +52,8 @@ Your job is to infer what they MEANT, decide what (if anything) deserves to exis
 3. recall_query: a question aimed at the speaker's own past thoughts ("what was that idea I had about caching last Tuesday while I was walking?"). artifact recall.
 4. bug: something is broken, crashing, wrong, flaky or failing. artifact github_issue.
 5. communication: the speaker needs to tell, email, message, reply to or follow up with someone. artifact email_draft (formal-ish written messages, team-wide notes) or message_draft (quick chat to one person).
-6. scheduling: meetings, conflicts, appointments, deadlines with times, reschedules. artifact calendar_event.
-7. action: a task the speaker should do ("I should refactor the auth module", "need to rotate the keys Friday"). artifact ticket.
+6. scheduling: meetings, conflicts, appointments, deadlines with times, reschedules. artifact calendar_event; a nudge for the speaker alone ("remind me to call the landlord tomorrow at 6") is artifact reminder.
+7. action: a task the speaker should do ("I should refactor the auth module", "need to rotate the keys Friday"). artifact ticket; "remind me to …" is artifact reminder (but "remind me to email the team" is communication: email_draft).
 8. code: a half-formed implementation idea, algorithm or pattern ("maybe a recursive... no, iterative approach with memoization"). artifact code_snippet.
 9. decision: the speaker is weighing or choosing between options ("JWT or OAuth2?"). artifact decision (chosen null while undecided, status tentative when hedged).
 10. question: the speaker asks themselves something they want answered ("what did Sarah say?", "what's that library called?"). Put the question in open_questions. artifact none.
@@ -67,6 +67,7 @@ Your job is to infer what they MEANT, decide what (if anything) deserves to exis
 - email_draft: to = the resolved recipients by name or "team" (never invent addresses). subject specific and short. body is written in the speaker's voice, brief, friendly, no filler, with facts only from speech and candidates; use [brackets] for unknown specifics. tone casual|neutral|formal.
 - message_draft: to = person name. channel defaults to slack. body 1-3 lines in the speaker's voice.
 - calendar_event: title, attendees (names), start_iso/end_iso as ISO-8601 with the timezone offset ONLY when a concrete date and time can be resolved from <now>; otherwise null and keep the spoken phrase in time_expression. is_reschedule true when moving or resolving a conflict. A conflict mention produces a "Resolve ... conflict" event with start_iso null.
+- reminder: what = the thing to do as a short imperative WITHOUT the time ("Call the landlord"), due_iso = ISO-8601 with the timezone offset when a time can be resolved from <now> (a bare hour from 1 to 7 means pm; a day without a time means 09:00), else null; due_text = the time phrase as spoken or null; recurrence = "every Monday", "daily", … or null. The card title is the same short imperative, never the whole sentence.
 - code_snippet: language = the language the context implies (default TypeScript). approach = one line naming the approach, repairs captured separately. signature = function signature or null. code = a compact (under ~25 lines) generic implementation of the approach; comments for any assumption. explanation = 1-3 lines. needs_enrichment true only if a proper solution needs much more than a sketch.
 - code_comment: a note to attach to code ("this retry loop needs jitter"). target = file/function if named else null.
 - decision: question = the choice being made, chosen = the last committed option or null, rejected = options dropped (from repairs or explicit "not X"), rationale only if stated, status "decided" only when committed, else "tentative".

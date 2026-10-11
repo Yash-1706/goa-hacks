@@ -1,7 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { CaptureRequestSchema, ProfilePersonSchema, ProfileRepoSchema, ProfileSchema } from "@synapse/shared";
 import type { AppCtx } from "../app";
+import { CaptureError } from "../capture/service";
 import { runReplay, type ReplayScript } from "../cli/replay-lib";
+import type { GithubError } from "../profile/github";
+import { AnswerError } from "../routing/router";
 import { listEvents, view as calView } from "../integrations/calendar";
 import { graphSnapshot } from "../memory/graph";
 import { ENERGY, STAGES, stagesOf } from "../metrics/latency";
@@ -9,8 +13,34 @@ import { parseQuery } from "../recall/engine";
 import { entitiesInText } from "../recall/search";
 import { isAllowedOrigin, isLoopback } from "./trust";
 
-/* REST surface (TRD §14). Everything except /api/health requires a trusted client: loopback, or a
- * paired device token. /api/dev/* additionally requires dev mode and loopback. */
+/* REST surface (TRD §14). Everything except /api/health and the login requires a trusted client: a passcode session, or (on the
+ * LAN only) loopback or a paired device token. With a public URL active (tunnel) only the session counts, for /api, the
+ * WebSocket upgrade and the on-device speech endpoints alike; the capture-only bearer token is accepted on POST /api/capture.
+ * /api/dev/* additionally requires dev mode and a real loopback request (never in tunnel mode). */
+
+/**
+ * Default deny (V1.1). Public, by exact matched route only: health and sign-in. Public by method: GET/HEAD of the app's static
+ * shell (pages, scripts, styles, manifest, service worker, icons: public code, no user data). Everything else needs a session
+ * (or, on the LAN, loopback / a paired device): every /api route, the WebSocket, the speech endpoints, and any other method.
+ */
+const OPEN = new Set(["/api/health", "/api/auth/login", "/api/auth/logout", "/api/auth/status"]);
+const PROTECTED = /^\/(api|ws|local-stt)(\/|$)/;
+
+/** The path the way a lenient server, proxy or OS might read it: decoded, slashes collapsed, dot segments resolved, trailing
+ *  dots dropped, lowercased. Only used to decide whether a request is protected; never to serve anything. */
+export function canonicalPath(decoded: string): string {
+  const out: string[] = [];
+  for (const raw of decoded.split(/[\\/]+/)) {
+    const seg = raw.replace(/\.+$/, "").toLowerCase();
+    if (!seg || seg === ".") continue;
+    if (raw === "..") out.pop();
+    else out.push(seg);
+  }
+  return `/${out.join("/")}`;
+}
+
+/** a 5-minute 16 kHz mono WAV is ~9.6 MB; voice notes shared from other apps may be larger */
+export const MAX_CAPTURE_BYTES = 25 * 1024 * 1024;
 
 const header = (req: FastifyRequest, name: string): string | undefined => {
   const v = req.headers[name];
@@ -18,17 +48,131 @@ const header = (req: FastifyRequest, name: string): string | undefined => {
 };
 
 export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
-  const { cfg, store, trust, engine, privacy, outbox, metrics, battery, audit, autonomy, clock } = ctx;
+  const { cfg, store, trust, auth, engine, privacy, outbox, metrics, battery, audit, autonomy, clock } = ctx;
 
   app.addHook("onRequest", async (req, reply) => {
-    const url = req.url.split("?")[0] as string;
-    if (!url.startsWith("/api") || url === "/api/health") return;
-    if (!isAllowedOrigin(header(req, "origin"))) return reply.code(403).send({ error: "origin not allowed" });
+    // Decide on what the router will actually serve: the router decodes the path ("/%61pi/state" IS /api/state), so the
+    // raw URL must never be what the guard looks at. The matched route pattern wins; the decoded path covers the rest.
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(req.url.split("?")[0] as string);
+    } catch {
+      return reply.code(400).send({ error: "malformed path" });
+    }
+    const route = req.routeOptions?.url;
+    if (route && OPEN.has(route)) return;
+    const canonical = canonicalPath(decoded);
+    const isProtected = PROTECTED.test(canonical) || Boolean(route && PROTECTED.test(route));
+    const readOnly = req.method === "GET" || req.method === "HEAD";
+    if (!isProtected && readOnly) return; // the static shell and client-side routes
+    // what the guard reasons about: the matched route, else the canonical spelling ("/API//state." is /api/state)
+    const url = route && PROTECTED.test(route) ? route : canonical;
+    const realtime = url === "/ws" || url.startsWith("/local-stt");
+    // the WebSocket and speech endpoints check the origin themselves (closing with 1008); REST is refused here
+    if (!realtime && !isAllowedOrigin(header(req, "origin"), auth.publicOrigin)) return reply.code(403).send({ error: "origin not allowed" });
     const ip = trust.clientIp(req.raw);
-    const verdict = trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token"));
-    if (!verdict.ok) return reply.code(401).send({ error: verdict.reason ?? "unauthorized" });
-    if (url.startsWith("/api/dev") && (!cfg.dev || !isLoopback(ip))) return reply.code(403).send({ error: "dev routes are localhost-only" });
-    if (url === "/api/pairing" && !isLoopback(ip)) return reply.code(403).send({ error: "the pairing code is only shown on the host" });
+    const tunneled = viaTunnel(req);
+    const local = isLoopback(ip) && !tunneled; // behind a tunnel every request comes from loopback
+    const session = auth.hasSession(header(req, "cookie"));
+    const captureBearer = url === "/api/capture" && req.method === "POST" && auth.verifyCaptureToken(header(req, "authorization"));
+    if (!session && !captureBearer) {
+      if (tunneled) return reply.code(401).send({ error: "sign in with the passcode" });
+      // the WebSocket authenticates in its hello and the speech endpoints with their own short-lived tokens (LAN only)
+      if (!realtime) {
+        const verdict = trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token"));
+        if (!verdict.ok) return reply.code(401).send({ error: verdict.reason ?? "unauthorized" });
+      }
+    }
+    if (url.startsWith("/api/dev") && (!cfg.dev || !local)) return reply.code(403).send({ error: "dev routes are localhost-only" });
+    if (url === "/api/pairing" && !local) return reply.code(403).send({ error: "the pairing code is only shown on the host" });
+  });
+
+  // -------------------------------------------------------------------- auth --
+  /** a tunnel is active (PUBLIC_URL / TUNNEL), or this request came through Cloudflare anyway (a tunnel started by hand) */
+  function viaTunnel(req: FastifyRequest): boolean {
+    return auth.publicMode || Boolean(header(req, "cf-connecting-ip") || header(req, "cf-ray"));
+  }
+  /** the address a login attempt is counted against: behind Cloudflare its own client header (a client cannot forge it
+   *  through the tunnel), else the last x-forwarded-for hop (the one the proxy added), else the socket */
+  function loginAddress(req: FastifyRequest): string {
+    if (!viaTunnel(req)) return trust.clientIp(req.raw);
+    const cf = header(req, "cf-connecting-ip");
+    if (cf) return cf;
+    const xff = header(req, "x-forwarded-for")?.split(",").map((x) => x.trim()).filter(Boolean);
+    return xff?.at(-1) ?? req.raw.socket.remoteAddress ?? "unknown";
+  }
+  const secureReq = (req: FastifyRequest): boolean => header(req, "x-forwarded-proto") === "https" || req.protocol === "https";
+  app.post("/api/auth/login", async (req, reply) => {
+    const b = z.object({ passcode: z.string().max(200) }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "passcode required" });
+    const r = auth.login(b.data.passcode, loginAddress(req), secureReq(req));
+    if (r.retryAfterS) void reply.header("retry-after", String(r.retryAfterS));
+    if (!r.ok) return reply.code(r.status).send({ error: r.error });
+    audit.append("signed_in", null, null);
+    return reply.header("set-cookie", r.setCookie).send({ ok: true });
+  });
+  app.post("/api/auth/logout", async (req, reply) => reply.header("set-cookie", auth.logoutCookie(secureReq(req))).send({ ok: true }));
+  app.get("/api/auth/status", async (req) => {
+    const ip = trust.clientIp(req.raw);
+    const legacy = !viaTunnel(req) && trust.check(ip, header(req, "x-synapse-device") ?? "rest", header(req, "x-synapse-token")).ok;
+    return { authenticated: auth.hasSession(header(req, "cookie")) || legacy, passcodeSet: auth.enabled, publicMode: auth.publicMode };
+  });
+  // "Log out all devices": every session and the capture token stop working, open sockets close
+  app.post("/api/auth/revoke-all", async (req, reply) => {
+    auth.revokeAll();
+    audit.append("sessions_revoked", null, null);
+    ctx.hub.recheckSessions();
+    return reply.header("set-cookie", auth.logoutCookie(secureReq(req))).send({ ok: true });
+  });
+  app.get("/api/auth/capture-token", async (_req, reply) => (auth.enabled ? { token: auth.captureToken() } : reply.code(503).send({ error: "SYNAPSE_PASSCODE is not set on the server" })));
+  app.post("/api/auth/capture-token/rotate", async (_req, reply) => {
+    if (!auth.enabled) return reply.code(503).send({ error: "SYNAPSE_PASSCODE is not set on the server" });
+    auth.rotateCaptureToken();
+    audit.append("capture_token_rotated", null, null);
+    return { token: auth.captureToken() };
+  });
+
+  // ----------------------------------------------------------------- capture --
+  app.post("/api/capture", { bodyLimit: MAX_CAPTURE_BYTES }, async (req, reply) => {
+    let fields: Record<string, unknown>;
+    let audio: Uint8Array | undefined;
+    try {
+      if (req.isMultipart()) {
+        fields = {};
+        for await (const part of req.parts()) {
+          if (part.type === "file") {
+            if (part.fieldname !== "audio" || audio) {
+              await part.toBuffer(); // drain it
+              continue;
+            }
+            audio = new Uint8Array(await part.toBuffer());
+          } else fields[part.fieldname] = part.value;
+        }
+        if (typeof fields.context === "string") fields.context = JSON.parse(fields.context);
+        if (typeof fields.capturedAt === "string") fields.capturedAt = Number(fields.capturedAt);
+      } else fields = (req.body ?? {}) as Record<string, unknown>;
+    } catch (err) {
+      audio?.fill(0);
+      const tooBig = (err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
+      return reply.code(tooBig ? 413 : 400).send({ error: tooBig ? "audio too large (25 MB limit)" : "unreadable request" });
+    }
+    const parsed = CaptureRequestSchema.safeParse(fields);
+    if (!parsed.success) {
+      audio?.fill(0);
+      return reply.code(400).send({ error: `invalid capture: ${parsed.error.issues.map((i) => i.path.join(".") || i.message).join(", ")}` });
+    }
+    try {
+      return await ctx.capture.capture({ ...parsed.data, ...(audio ? { audio } : {}) });
+    } catch (err) {
+      if (err instanceof CaptureError) return reply.code(err.status).send({ error: err.message });
+      throw err;
+    } finally {
+      audio?.fill(0);
+    }
+  });
+  app.get("/api/captures", async (req) => {
+    const q = z.object({ limit: z.coerce.number().int().min(1).max(200).default(20) }).parse(req.query);
+    return ctx.capture.list(q.limit);
   });
 
   // ------------------------------------------------------------------ health --
@@ -133,6 +277,7 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
           outbox.dismiss(a);
           break;
         case "push":
+          if (a.status === "executed") break; // a retried request: the issue exists, answer with the card
           await outbox.push(a);
           break;
         case "undo":
@@ -145,6 +290,42 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
     } catch (err) {
       return reply.code(409).send({ error: (err as Error).message });
     }
+  });
+  // V1: answer the card's question ("Which repo?", "Dev's email?", "When?"); remembered so it is not asked again
+  app.post<{ Params: { id: string } }>("/api/artifacts/:id/answer", async (req, reply) => {
+    const a = store.artifacts.get(req.params.id);
+    if (!a) return reply.code(404).send({ error: "not found" });
+    const b = z.object({ field: z.string().min(1).max(80), value: z.string().min(1).max(1000) }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "field and value are required" });
+    try {
+      return store.artifactView(ctx.routing.answer(a, b.data.field, b.data.value));
+    } catch (err) {
+      return reply.code(err instanceof AnswerError ? 400 : 409).send({ error: (err as Error).message });
+    }
+  });
+  // V1: a link handoff happened (Gmail draft opened, calendar event added): the card moves to Done
+  app.post<{ Params: { id: string } }>("/api/artifacts/:id/shipped", async (req, reply) => {
+    const a = store.artifacts.get(req.params.id);
+    if (!a) return reply.code(404).send({ error: "not found" });
+    const b = z.object({ via: z.string().min(1).max(24) }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "via is required" });
+    try {
+      outbox.markShipped(a, b.data.via);
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+    return store.artifactView(a);
+  });
+  // the one tap after a handoff ("Opened in Gmail" → Done)
+  app.post<{ Params: { id: string } }>("/api/artifacts/:id/done", async (req, reply) => {
+    const a = store.artifacts.get(req.params.id);
+    if (!a) return reply.code(404).send({ error: "not found" });
+    try {
+      outbox.markDone(a);
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+    return store.artifactView(a);
   });
   app.patch<{ Params: { id: string } }>("/api/artifacts/:id", async (req, reply) => {
     const a = store.artifacts.get(req.params.id);
@@ -165,6 +346,59 @@ export function registerRoutes(app: FastifyInstance, ctx: AppCtx): void {
     }
     const mailto = outbox.mailto(a);
     return mailto ? { mailto } : reply.code(409).send({ error: "not an email draft" });
+  });
+
+  // ----------------------------------------------------------------- profile --
+  app.get("/api/profile", async () => ctx.profile.get());
+  app.put("/api/profile", async (req, reply) => {
+    const b = ProfileSchema.safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: `invalid profile: ${b.error.issues.map((i) => i.path.join(".")).join(", ")}` });
+    const p = ctx.profile.put(b.data);
+    ctx.hub.broadcast({ type: "config.update", config: ctx.clientConfig() });
+    return p;
+  });
+  app.post("/api/profile/merge", async (req, reply) => {
+    const b = z.object({ repos: z.array(ProfileRepoSchema).max(100).optional(), people: z.array(ProfilePersonSchema).max(500).optional() }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "invalid import" });
+    return ctx.profile.merge(b.data);
+  });
+  app.post("/api/profile/parse", async (req, reply) => {
+    const b = z.object({ text: z.string().min(1).max(50_000) }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "text is required" });
+    return { people: await ctx.profile.parse(b.data.text) };
+  });
+  app.get("/api/github/status", async () => ctx.github.status());
+  app.post("/api/github/use-gh", async (_req, reply) => {
+    try {
+      const login = await ctx.github.useGh();
+      ctx.hub.broadcast({ type: "config.update", config: ctx.clientConfig() });
+      return { login };
+    } catch (err) {
+      return reply.code((err as GithubError).status === 404 ? 404 : 400).send({ error: (err as Error).message });
+    }
+  });
+  app.post("/api/github/token", async (req, reply) => {
+    const b = z.object({ token: z.string().min(10).max(400) }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "token is required" });
+    try {
+      const login = await ctx.github.saveToken(b.data.token);
+      ctx.hub.broadcast({ type: "config.update", config: ctx.clientConfig() });
+      return { login };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+  app.delete("/api/github/token", async () => {
+    ctx.github.forget();
+    ctx.hub.broadcast({ type: "config.update", config: ctx.clientConfig() });
+    return { ok: true };
+  });
+  app.get("/api/github/import", async (_req, reply) => {
+    try {
+      return await ctx.github.importSuggestions();
+    } catch (err) {
+      return reply.code((err as GithubError).status === 409 ? 409 : 503).send({ error: (err as Error).message });
+    }
   });
 
   // ----------------------------------------------------------------- privacy --

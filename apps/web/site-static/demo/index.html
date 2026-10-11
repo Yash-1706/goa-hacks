@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0c0c0d" />
+    <meta name="color-scheme" content="dark" />
+    <title>Synapse · Demo</title>
+    <meta name="description" content="Synapse in 24 seconds: thoughts said on a treadmill, at the coffee kiosk and over a burger become a GitHub issue, a reminder and an email draft, already written when you are back at your desk." />
+    <meta property="og:title" content="Synapse · Demo" />
+    <meta property="og:description" content="Think out loud. Synapse files it." />
+    <meta property="og:image" content="https://sayedzahur786.github.io/synapse-site/og.png" />
+    <meta property="og:type" content="video.other" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+    <style>
+      :root { --bg: #0c0c0d; --surface: #141416; --line: rgba(255, 255, 255, 0.12); --ink: #ededed; --dim: #a1a1aa; --accent: #ff6a3d; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font-family: Helvetica, "Helvetica Neue", Arial, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      main { max-width: 1080px; margin: 0 auto; padding: 40px 20px 64px; }
+      nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
+      a { color: var(--ink); }
+      .brand { font-weight: 600; text-decoration: none; }
+      h1 { font-size: clamp(2rem, 6vw, 3.25rem); letter-spacing: -0.03em; line-height: 1.05; margin: 0 0 12px; }
+      h1 span { color: var(--accent); }
+      p { color: var(--dim); line-height: 1.55; margin: 0 0 28px; max-width: 46rem; }
+      h2 { font-size: 0.8rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); margin: 44px 0 14px; font-weight: 600; }
+      video { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); }
+      .vertical { max-width: 420px; }
+      footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--dim); font-size: 0.9rem; line-height: 1.6; }
+      footer a { color: var(--dim); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <nav><a class="brand" href="../">Synapse</a><a href="https://github.com/Yash-1706/goa-hacks">View on GitHub</a></nav>
+      <h1>Think out loud. <span>Synapse files it.</span></h1>
+      <p>Three moments where a thought arrives: on a treadmill, grabbing a coffee, over a burger. Each is said out loud and becomes a real Synapse card (a GitHub issue, a reminder, an email draft). Back at the desk, all three are already written and waiting. The people are illustrations; every Synapse screen and card is the real app, on demo data.</p>
+      <h2>Landscape · 24 s · sound on</h2>
+      <video controls playsinline preload="metadata" poster="../media/synapse-launch-landscape.jpg" width="1920" height="1080">
+        <source src="../media/synapse-launch-landscape.mp4" type="video/mp4" />
+      </video>
+      <h2>Vertical · for phones</h2>
+      <video class="vertical" controls playsinline preload="metadata" poster="../media/synapse-launch-vertical.jpg" width="1080" height="1920">
+        <source src="../media/synapse-launch-vertical.mp4" type="video/mp4" />
+      </video>
+      <footer>
+        Music: “Happy Beats / Business Moves Vol. 12” by <a href="https://ende.app/en">ende.app</a> (royalty-free). Made with /brag (latent-spaces) and Hyperframes.<br />
+        <a href="../">Back to the landing page</a> · <a href="https://github.com/Yash-1706/goa-hacks">Source on GitHub</a>
+      </footer>
+    </main>
+  </body>
+</html>

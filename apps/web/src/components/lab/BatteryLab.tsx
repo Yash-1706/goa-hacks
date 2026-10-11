@@ -108,7 +108,7 @@ function ComparisonCard({ overall, session, live, model, rows }: { overall: Comp
         <Bars c={c} />
         {!c && naive && model ? (
           <p className="lab-cmp__empty">
-            <b>Waiting for a microphone session.</b> Open <Link to="/pocket">Pocket</Link> on a phone or tap the mic on <Link to="/">Desk</Link> and talk: the radio only wakes while you speak. Streaming all the time would send{" "}
+            <b>Waiting for a microphone session.</b> Open <Link to="/capture">Pocket</Link> on a phone or tap the mic on <Link to="/app">Desk</Link> and talk: the radio only wakes while you speak. Streaming all the time would send{" "}
             {formatBytes(naive.bytesUp)} a minute with the radio on 100 % of the time (about {formatUnits(energyOf(naive, model))} model units).
           </p>
         ) : null}

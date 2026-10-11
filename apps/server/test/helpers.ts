@@ -1,5 +1,7 @@
+import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { FakeClock } from "../src/clock";
+import { REPO_ROOT } from "../src/config";
 import { Vault } from "../src/memory/crypto";
 import { Db } from "../src/memory/db";
 import { createEmbedder, HashEmbedder, type Embedder } from "../src/memory/embeddings";
@@ -9,7 +11,8 @@ let sharedModel: Promise<Embedder> | undefined;
 
 /** Real MiniLM model (cached on disk after first download) for tests that need semantics. */
 export function modelEmbedder(): Promise<Embedder> {
-  sharedModel ??= createEmbedder({ mode: "model", model: "Xenova/all-MiniLM-L6-v2", dataDir: process.env.TEST_DATA_DIR ?? "D:/goa-hack/data" });
+  // the repo's own model cache (data/models, git-ignored); TEST_DATA_DIR points elsewhere (a clean clone shares one cache)
+  sharedModel ??= createEmbedder({ mode: "model", model: "Xenova/all-MiniLM-L6-v2", dataDir: process.env.TEST_DATA_DIR ?? path.join(REPO_ROOT, "data") });
   return sharedModel;
 }
 

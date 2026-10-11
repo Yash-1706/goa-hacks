@@ -4,6 +4,7 @@ import type { Embedder } from "../memory/embeddings";
 import { chronoRange, startOfDay } from "../recall/time";
 import { fold, normalizeText, quickTitle, textFeatures } from "../text";
 import { localIso } from "./prompts";
+import { REMIND, parseReminder, reviseDue } from "./reminder";
 import type { Candidate, CortexBackend, CortexInput, CortexOutput, CortexFragment } from "./types";
 
 /** An explicit retraction ("scratch that"). Everything else that corrects a thought REVISES it. */
@@ -35,6 +36,11 @@ function reviseArtifact(old: Artifact | undefined, text: string, input: CortexIn
       change: { from: old.time_expression ?? "", to },
     };
   }
+  if (old.kind === "reminder") {
+    const r = reviseDue(old.due_iso, text, input.now, input.timezone);
+    if (!r) return { artifact: old, change: null };
+    return { artifact: { ...old, due_iso: r.due_iso, due_text: r.matched }, change: { from: old.due_text ?? "", to: r.matched } };
+  }
   if (old.kind === "ticket") {
     const p = text.match(/\b(low|medium|high|urgent)\b/i)?.[1]?.toLowerCase() as "low" | "medium" | "high" | "urgent" | undefined;
     if (p && p !== old.priority) return { artifact: { ...old, priority: p }, change: { from: old.priority, to: p } };
@@ -48,6 +54,9 @@ function reviseArtifact(old: Artifact | undefined, text: string, input: CortexIn
  * Heuristics on top of the local triage classifier. Output is always schema-valid and is
  * labelled "mock" in the UI so nobody mistakes it for the real model.
  * ========================================================================== */
+
+/** an instruction to write to someone: "email the team that…", "tell Dev…", "message Sarah about…" */
+const COMM_LEAD = /^(?:please\s+)?(?:e-?mail|mail|message|text|ping|tell|write to|reply to)\s+(?!me\b)\S/i;
 
 const LEAD_MARKERS = /^(?:uh+|um+|hmm+|er+|so|well|okay|ok|and|or|but|like|yeah|maybe|probably|actually|i think|i guess|then|also)[,.\s]+/i;
 
@@ -190,22 +199,27 @@ function resolveReferences(text: string, input: CortexInput, category: Category)
 
 function artifactFor(category: Category, ctx: {
   text: string; title: string; intent: string; input: CortexInput; repairs: CortexResult["repairs"]; entities: CortexResult["entities"]; hedged: boolean; refs: CortexResult["references"];
+  /** the cleaned speech without the "(re: …)" tail: what a draft meant for another person may quote */
+  summary: string;
+  /** "remind me …" for the speaker alone */
+  remind: boolean;
 }): Artifact {
-  const { text, title, intent, input, repairs, entities, hedged } = ctx;
+  const { text, title, intent, input, repairs, entities, hedged, summary } = ctx;
   const user = input.user.name;
   const person = entities.find((e) => e.type === "person");
+  if (ctx.remind) return { kind: "reminder", ...parseReminder(text, input.now, input.timezone) };
   switch (category) {
     case "bug": {
       const issue = text.match(ISSUE)?.[1] ?? "unexpected behaviour";
       const comp = entities.find((e) => e.type === "component")?.name;
       const hyp = [...text.matchAll(/\b(?:probably|maybe|might be|could be|i think it'?s?|looks like)\s+(?:the\s+)?([^.,…?]{3,60})/gi)].map((m) => cleanClause(m[1] ?? ""));
-      const ref = ctx.refs.find((r) => r.resolved_id);
+      // a draft for other people never carries internal ids (T-12) or the "(re: …)" tail of the intent
       return {
         kind: "github_issue",
         title: titleCase(`${issue}${comp ? ` in ${comp}` : ""}`.slice(0, 90)),
         body_markdown: [
-          "**Summary**", intent, "",
-          "**Observed**", `${titleCase(issue)}${comp ? ` in ${comp}` : ""}.${ref ? ` Related earlier note: ${ref.resolved_id}.` : ""}`, "",
+          "**Summary**", `${summary}.`, "",
+          "**Observed**", `${titleCase(issue)}${comp ? ` in ${comp}` : ""}.`, "",
           "**Suspected cause**", hyp.length ? `${titleCase(hyp[0] as string)} (speaker's hypothesis, unconfirmed).` : "Unknown yet.", "",
           "**Next steps**", "- Reproduce the failure", "- Add a guard or fix at the suspected location", "- Add a regression test",
         ].join("\n"),
@@ -222,13 +236,15 @@ function artifactFor(category: Category, ctx: {
     case "communication": {
       const to = person?.name ?? (/\bteam\b/i.test(text) ? "team" : "team");
       const quick = /\b(ping|dm|tell|text|message|slack)\b/i.test(text) && !/\b(e-?mail|team|everyone|board)\b/i.test(text);
-      const topic = cleanClause(text.match(/\babout\s+(.{3,60})/i)?.[1] ?? text.match(/\bthat\s+(.{3,60})/i)?.[1] ?? "");
-      if (quick && person) {
-        return { kind: "message_draft", to: person.name, channel: "slack", body: `Hey ${person.name}, ${topic ? topic : "quick update"} — [details].` };
-      }
+      const about = cleanClause(text.match(/\babout\s+(.{3,80})/i)?.[1] ?? "");
+      const that = cleanClause(text.match(/\bthat\s+(.{3,120})/i)?.[1] ?? "");
+      const topic = that || about;
+      // "email the team that the launch moves to Friday" → the message IS the clause; "about X" → an update about X
+      const said = that ? `${titleCase(that)}.` : about ? `A quick update about ${about}.` : "A quick update.";
+      if (quick && person) return { kind: "message_draft", to: person.name, channel: "slack", body: `Hey ${person.name}, ${that || (about ? `about ${about}` : "quick update")}.` };
       return {
-        kind: "email_draft", to: [to], subject: titleCase(topic ? `Update: ${topic}` : "Quick update").slice(0, 80),
-        body: `Hi ${to === "team" ? "team" : to},\n\n${topic ? `Quick note about ${topic}.` : "Quick update."} [add details]\n\nThanks,\n${user}`, tone: "neutral",
+        kind: "email_draft", to: [to], subject: titleCase(topic || "Quick update").slice(0, 80),
+        body: `Hi ${to === "team" ? "team" : to},\n\n${said}\n\nThanks,\n${user}`, tone: "neutral",
       };
     }
     case "scheduling": {
@@ -302,8 +318,9 @@ function titleFor(category: Category, text: string, input: CortexInput, repairs:
     case "communication": {
       const person = entities.find((e) => e.type === "person")?.name;
       const verb = /e-?mail/i.test(text) ? "Email" : "Message";
-      const topic = cleanClause(text.match(/\babout\s+(.{3,50})/i)?.[1] ?? "");
-      return `${verb} ${person ?? "the team"}${topic ? ` about ${topic}` : ""}`.slice(0, 70);
+      const about = cleanClause(text.match(/\babout\s+(.{3,50})/i)?.[1] ?? "");
+      const that = cleanClause(text.match(/\bthat\s+(.{3,60})/i)?.[1] ?? "");
+      return `${verb} ${person ?? "the team"}${that ? `: ${that}` : about ? ` about ${about}` : ""}`.slice(0, 80);
     }
     case "scheduling": {
       const wd = text.match(WEEKDAY)?.[1];
@@ -361,10 +378,19 @@ export class MockCortex implements CortexBackend {
       category = "aside"; // a correction we cannot interpret must never be destructive
     }
 
+    // "email the team that…", "tell Dev…": an explicit instruction to write to someone is a message, and not a guess
+    // (speech-to-text often joins it to the thought before with a comma, so it arrives without its "Oh, and" lead-in)
+    const commLead = COMM_LEAD.test(cleanClause(text)) && !REMIND.test(text);
+    if (commLead && !["privacy", "recall_query", "correction", "aside"].includes(category)) category = "communication";
+    // "remind me to …": a reminder for the speaker alone (not "remind me to email the team": that is an email)
+    const remind = REMIND.test(text) && !["communication", "bug", "aside", "privacy", "recall_query", "correction", "code", "decision"].includes(category);
+    // a reminder with a time is scheduling, without one an action (the prompts say the same)
+    if (remind) category = parseReminder(text, input.now, input.timezone).due_iso ? "scheduling" : "action";
     const repairs = category === "correction" ? [] : extractRepairs(input.fragments);
     const entities = findEntities(text, input);
     const references = resolveReferences(text, input, category);
-    const title = titleFor(category, text, input, repairs, entities);
+    const reminder = remind ? parseReminder(text, input.now, input.timezone) : null;
+    const title = reminder ? reminder.what : titleFor(category, text, input, repairs, entities);
     const hedged = feat.hedged || feat.hasRepairCue;
 
     const intentBase = cleanClause(text.replace(/\b(uh+|um+|hmm+)\b[,.]?/gi, ""));
@@ -382,8 +408,10 @@ export class MockCortex implements CortexBackend {
     let confidence = Math.max(0.35, Math.min(0.9, tri.confidence * 0.9 + (tri.topSim > 0.5 ? 0.1 : 0)));
     if (hedged) confidence = Math.min(confidence, 0.6);
     if (category === "aside") confidence = Math.max(confidence, 0.8);
+    if (remind) confidence = Math.max(confidence, 0.8); // "remind me" is an explicit instruction, never a guess
+    if (commLead) confidence = Math.max(confidence, 0.8);
 
-    const artifact = artifactFor(category, { text, title, intent, input, repairs, entities, hedged, refs: references });
+    const artifact = artifactFor(category, { text, title, intent, input, repairs, entities, hedged, refs: references, summary: titleCase(intentBase), remind });
     const cues: CortexResult["salience_cues"] = [];
     if (CUE_REMEMBER.test(text)) cues.push("explicit_remember");
     if (CUE_DEADLINE.test(text)) cues.push("deadline");

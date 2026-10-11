@@ -61,7 +61,7 @@ const tally = (ctx: { store: { thoughts: Map<string, { source: string; degraded?
 };
 
 const EXPECT_KIND: Partial<Record<Category, string[]>> = {
-  action: ["ticket"], bug: ["github_issue"], communication: ["email_draft", "message_draft"], scheduling: ["calendar_event"], code: ["code_snippet"],
+  action: ["ticket", "reminder"], bug: ["github_issue"], communication: ["email_draft", "message_draft"], scheduling: ["calendar_event", "reminder"], code: ["code_snippet"],
   decision: ["decision"], idea: ["note"], question: ["none"], journal: ["journal"], aside: ["none"], recall_query: ["recall"],
 };
 

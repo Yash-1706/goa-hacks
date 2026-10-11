@@ -25,6 +25,8 @@ export interface LocalSttRouteDeps {
   /** true while the on-device engine may take audio (WISPR_MODE=local, local-only mode, or STT_FALLBACK) */
   allowed: () => boolean;
   now: () => number;
+  /** the active public URL's origin (tunnel mode), allowed alongside the local and private-network origins */
+  publicOrigin?: () => string | null;
   /** one utterance transcribed (lengths only, never content) */
   onUtterance?: (info: { audioMs: number; ms: number; chars: number; via: "ws" | "rest" }) => void;
 }
@@ -107,7 +109,7 @@ export function registerLocalStt(app: FastifyInstance, deps: LocalSttRouteDeps):
   const bearer = (v: string | undefined): string | undefined => v?.replace(/^Bearer\s+/i, "");
 
   app.get("/local-stt/client_ws", { websocket: true }, (socket: WebSocket, req) => {
-    if (!isAllowedOrigin(req.headers.origin)) return void socket.close(1008, "origin not allowed");
+    if (!isAllowedOrigin(req.headers.origin, deps.publicOrigin?.() ?? null)) return void socket.close(1008, "origin not allowed");
     if (!deps.allowed()) return void socket.close(1008, "on-device speech is off");
     if (open >= MAX_SOCKETS) return void socket.close(1013, "busy");
     open++;
@@ -239,7 +241,7 @@ export function registerLocalStt(app: FastifyInstance, deps: LocalSttRouteDeps):
   });
 
   app.post("/local-stt/client_api", { bodyLimit: 8 * 1024 * 1024 }, async (req, reply) => {
-    if (!isAllowedOrigin(req.headers.origin)) return reply.code(403).send({ error: "origin not allowed" });
+    if (!isAllowedOrigin(req.headers.origin, deps.publicOrigin?.() ?? null)) return reply.code(403).send({ error: "origin not allowed" });
     if (!deps.allowed()) return reply.code(403).send({ error: "on-device speech is off" });
     if (!deps.auth.verify(bearer(req.headers.authorization), deps.now())) return reply.code(401).send({ error: "invalid token" });
     const body = RestBody.safeParse(req.body);

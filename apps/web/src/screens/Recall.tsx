@@ -22,7 +22,7 @@ import { truncate, type Activity, type RecallConstraints, type RecallSource } fr
 import { useTts } from "@/hooks/useTts";
 import { categoryMeta } from "@/lib/category";
 import { highlightId } from "@/lib/dom";
-import { formatDayTime, formatMs, placeLabel } from "@/lib/format";
+import { formatDayTime, placeLabel } from "@/lib/format";
 import { newId } from "@/lib/ids";
 import { citedCodes, parseAnswer, sourceDomId } from "@/lib/recall";
 import { socket } from "@/runtime";
@@ -112,7 +112,7 @@ const SourceCard = memo(function SourceCard({ s, index, cited, hot }: { s: Recal
       transition={{ ...spring, delay: Math.min(index, 8) * 0.045 }}
     >
       <div className="rc-src__top">
-        <span className="rc-src__code mono">{s.code}</span>
+        <span className="rc-src__code mono">{index + 1}</span>
         <span className="rc-src__cat" style={{ color: meta.color }}>
           <Cat size={12} aria-hidden /> {meta.label}
         </span>
@@ -143,9 +143,11 @@ const SourceCard = memo(function SourceCard({ s, index, cited, hot }: { s: Recal
   );
 });
 
-/** The streamed answer with clickable [T-12] citations. */
+/** The streamed answer with clickable numbered citations (the model writes [T-12]; people see [1]). */
 const Answer = memo(function Answer({ q, onCite }: { q: RecallQuery; onCite: (code: string) => void }) {
   const segs = useMemo(() => parseAnswer(q.answer), [q.answer]);
+  // V1: citations are numbered like the sources below (1, 2, 3), never internal ids
+  const num = useMemo(() => new Map(q.sources.map((s, i) => [s.code, i + 1])), [q.sources]);
   const streaming = !q.done;
   if (!q.answer && streaming) {
     return (
@@ -168,8 +170,8 @@ const Answer = memo(function Answer({ q, onCite }: { q: RecallQuery; onCite: (co
           ) : (
             <span key={i} className="rc-cites">
               {seg.codes.map((c) => (
-                <button key={c} type="button" className="rc-cite mono" onClick={() => onCite(c)} title={`Jump to source ${c}`}>
-                  {c}
+                <button key={c} type="button" className="rc-cite mono" onClick={() => onCite(c)} title={`Jump to source ${num.get(c) ?? ""}`}>
+                  {num.get(c) ?? "·"}
                 </button>
               ))}
             </span>
@@ -211,20 +213,8 @@ function QueryView({ q }: { q: RecallQuery }) {
         </div>
       ) : null}
 
-      <div className="rc-timing tnum" aria-label="Timing">
-        {q.sourcesMs !== undefined ? (
-          <span>
-            sources in <b>{formatMs(q.sourcesMs)}</b>
-          </span>
-        ) : (
-          <span>searching…</span>
-        )}
-        {q.totalMs !== undefined ? (
-          <span>
-            · answer in <b>{formatMs(q.totalMs)}</b>
-          </span>
-        ) : null}
-        {q.sources.length ? <span>· {q.sources.length} source{q.sources.length === 1 ? "" : "s"}</span> : null}
+      <div className="rc-timing tnum">
+        {q.sourcesMs === undefined ? <span>searching…</span> : <span>{q.sources.length} source{q.sources.length === 1 ? "" : "s"}</span>}
       </div>
 
       {q.error ? (
@@ -318,9 +308,9 @@ export default function Recall() {
         <header className="page__head">
           <div>
             <h1 className="page__title">
-              <span className="grad-text">Recall</span>
+              <span className="grad-text">Ask</span>
             </h1>
-            <p className="page__sub">Ask your memory the way you would ask yourself: vague, about a time, about where you were. Say it out loud on the Desk, or type it here.</p>
+            <p className="page__sub">Ask your memory the way you would ask yourself: vague, about a time, about where you were. Type it here, or ask it out loud from the Inbox mic.</p>
           </div>
           <button
             type="button"

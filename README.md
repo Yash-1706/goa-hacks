@@ -1,103 +1,268 @@
-# Synapse: your voice is a second brain
+# Synapse
 
-> WhisperFlow Hackathon 2026 · **Problem Statement 4: Ambient Cognitive Offloading** · built on the **Wispr Flow API**
+**Think out loud. Synapse files it.**
 
-Think out loud: mumble, backtrack, whisper. Synapse stitches the fragments into thoughts, works out what you *meant*, and quietly turns them into tickets, GitHub issues, email drafts, calendar holds, code snippets and decisions, with **no commands**. It remembers selectively (a knowledge graph you can query by vague voice questions), speaks up only at natural pauses, and forgets by default. Say *"pause memory"* and the microphone is released.
+A voice-first second brain: it turns a messy spoken ramble into a GitHub issue, an email draft and a reminder, ready to send with one tap.
 
-| | |
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.base.json)
+[![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](apps/web/package.json)
+[![Node](https://img.shields.io/badge/Node-22%2B-5FA04E?logo=nodedotjs&logoColor=white)](package.json)
+[![Fastify](https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white)](apps/server/package.json)
+[![SQLite](https://img.shields.io/badge/SQLite-node%3Asqlite-003B57?logo=sqlite&logoColor=white)](apps/server/src/memory/db.ts)
+<br>
+[![Sarvam](https://img.shields.io/badge/STT-Sarvam%20saaras%3Av4-ff6a3d)](apps/server/src/wispr/sarvam.ts)
+[![Groq](https://img.shields.io/badge/LLM-Groq-f55036)](apps/server/src/llm/groq-client.ts)
+[![Wispr Flow](https://img.shields.io/badge/Wispr%20Flow-dictation%20%2B%20API%20client-6b5bff)](#wispr-flow-what-is-and-isnt-verified)
+<br>
+[![Tests](https://img.shields.io/badge/tests-1174%20passing-2ea44f)](#measured-results)
+[![Lighthouse](https://img.shields.io/badge/Lighthouse-100%20%C2%B7%20100%20%C2%B7%20100%20%C2%B7%20100-2ea44f)](#measured-results)
+[![Cost](https://img.shields.io/badge/cost-%240-2ea44f)](#measured-results)
+[![Hackathon](https://img.shields.io/badge/WhisperFlow%20Hackathon%202026-PS4%20%C2%B7%20Ambient%20Cognitive%20Offloading-0c0c0d)](docs/hackathon-brief.pdf)
+
+<a href="https://sayedzahur786.github.io/synapse-site/demo/"><img src="docs/media/synapse-teaser.gif" alt="Synapse: a thought said on a treadmill becomes a GitHub issue card, a thought said while grabbing a coffee becomes a reminder" width="100%"></a>
+
+**[▶ Watch the demo](https://sayedzahur786.github.io/synapse-site/demo/)** · [Landing page](https://sayedzahur786.github.io/synapse-site/) · [How it works](#how-it-works) · [Run it locally](#run-it-locally) · [Architecture](docs/ARCHITECTURE.md)
+
+## TL;DR
+
+- **Problem:** your best thoughts arrive when you can't type (running, walking, commuting), several at once and half-formed, and they're gone before you reach a keyboard.
+- **What Synapse does:** you talk; it splits one ramble into separate items, drafts each one (an issue for the right repo, an email to the right person, a reminder at the right time), ignores the asides, and waits for one tap before anything is sent.
+- **Proof:** 1,174 passing tests; a live run of 10 spoken rambles through real speech-to-text and a real model (8 of 10 fully right on review, median 1.6 s from upload to cards); a real GitHub issue filed end to end. Details in [Measured results](#measured-results).
+
+## The problem
+
+The best ideas show up mid-run. You can't stop to type, so you try to remember, and by the time you're back at a desk the bug's cause, the message for Dev and the thing you promised Mom are gone.
+
+When those thoughts do come out, they come out messy: three intents in one breath, a correction halfway through, an aside about the incline. Existing tools each solve a slice:
+
+| Category | What goes wrong |
 |---|---|
-| Product spec | [docs/PRD.md](docs/PRD.md) · research: [docs/RESEARCH.md](docs/RESEARCH.md) |
-| Technical spec | [docs/TRD.md](docs/TRD.md) · as-built architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Deliverables | [Architecture diagram](docs/ARCHITECTURE.md) · [Latency benchmark](docs/LATENCY.md) · [Privacy whitepaper](docs/PRIVACY_WHITEPAPER.md) · [Failure modes](docs/FAILURE_MODES.md) · [Eval](docs/EVAL.md) · [Demo script](docs/DEMO_SCRIPT.md) · [Pitch](docs/PITCH.md) |
+| Task apps | Everything lands in one list you sort by hand later. |
+| Voice assistants | One command at a time, in the assistant's phrasing. |
+| Note apps | One blob of text you have to split and route yourself. |
+| Dictation | Works only if you are already in the right app, in the right field. |
 
-## Quickstart (no keys, no accounts)
+## The solution
 
-Needs Node 22.12 or newer and pnpm 10. Use Chrome or Edge for the microphone.
+**The loop: Talk → Sorted → Ship.** Tap the phone, say everything on your mind, tap again. Synapse sorts it into finished drafts. Each draft has one button that hands it to the tool you already use.
+
+**One worked example.** The ramble:
+
+> "That bug from yesterday… the null pointer in cart service, probably the discount code. Oh, and email the team that the launch moves to Friday. Remind me to call the landlord tomorrow at 6. Wait, was that my phone? Actually make it 7."
+
+| Part of the ramble | What it became | One tap |
+|---|---|---|
+| "the null pointer in cart service, probably the discount code" | **GitHub issue** with a summary, what was observed and the suspected cause, routed to the right repo | **Create issue** (GitHub API) |
+| "email the team that the launch moves to Friday" | **Email draft**; asks once "Who is the team?", then remembers | **Open draft** (Gmail or your mail app) |
+| "remind me to call the landlord tomorrow at 6 … actually make it 7" | **Reminder**, tomorrow at **7:00 pm**: the correction is applied in place | **Add to calendar** (Google Calendar or `.ics`) |
+| "Wait, was that my phone?" | Nothing: an aside, counted and dropped | — |
+
+Verified in [`routes-v1.test.ts`](apps/server/test/routes-v1.test.ts) (issue, email question, reminder, calendar link and `.ics` alarm) and in the [V1 report](docs/V1_REPORT.md) (the same ramble, spoken, through the phone app).
+
+**What makes it different**
+
+- **One ramble, many items, routed by meaning:** each intent becomes its own card in a single model call per capture ([`batch.test.ts`](apps/server/test/batch.test.ts), [`capture-segment.test.ts`](apps/server/test/capture-segment.test.ts)).
+- **It asks only when it must, and remembers the answer:** "Who is the team?" is asked once ([`routes-v1.test.ts`](apps/server/test/routes-v1.test.ts)).
+- **Draft-first:** nothing reaches another person without your tap ([`integrations.test.ts`](apps/server/test/integrations.test.ts)).
+- **Works offline on the phone:** recordings wait encrypted on the phone and sync once, even if the Mac was asleep ([`queue.test.ts`](apps/web/src/capture/queue.test.ts), [`mac-asleep.mjs`](scripts/e2e/mac-asleep.mjs)).
+- **Memory you can ask:** "that caching idea from my walk last Tuesday" finds it ([`recall.test.ts`](apps/server/test/recall.test.ts)).
+
+## Demo
+
+**[▶ Watch the full demo (24 s, sound on)](https://sayedzahur786.github.io/synapse-site/demo/)** · files in the repo: [landscape mp4](docs/media/synapse-launch-landscape.mp4) · [vertical mp4 for phones](docs/media/synapse-launch-vertical.mp4)
+
+Music: "Happy Beats / Business Moves Vol. 12" by [ende.app](https://ende.app/en) (royalty-free). The people in the video are illustrations; every Synapse screen and card in it is the real app on demo data.
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><img src="docs/ss/01-landing.png" width="420" alt="Landing page"><br><sub><b>1.</b> The landing page: the promise in one line, with the launch video below it.</sub></td>
+    <td width="50%" valign="top"><img src="docs/ss/02-setup-connect-github.jpg" width="240" alt="First-run setup: connect GitHub"><br><sub><b>2.</b> First-run setup on a real phone: Synapse finds your GitHub account; one tap to use it.</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/ss/03-setup-teammates.jpg" width="240" alt="Setup: who do you work with"><br><sub><b>3.</b> Setup, step 3: add the people you work with, so "email Dev" resolves to an address.</sub></td>
+    <td valign="top"><img src="docs/ss/04-setup-try-it.jpg" width="240" alt="Setup: try it"><br><sub><b>4.</b> Setup, step 5: say or type a first thought and watch its card appear.</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/ss/05-phone-recording.png" width="240" alt="Phone app recording"><br><sub><b>5.</b> The phone app: tap, talk, tap again. No commands to learn.</sub></td>
+    <td valign="top"><img src="docs/ss/06-phone-made-two-things.png" width="240" alt="Phone app result: two cards"><br><sub><b>6.</b> One recording became two cards: a GitHub issue for <code>acme/cart-service</code> and a reminder at 6 pm.</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/ss/07-laptop-inbox-ready.png" width="420" alt="Laptop Inbox with three cards"><br><sub><b>7.</b> At the laptop, three captures are already drafted under "Needs you", each one tap from done.</sub></td>
+    <td valign="top"><img src="docs/ss/08-laptop-issue-created.png" width="420" alt="Issue created"><br><sub><b>8.</b> One tap on <b>Create issue</b> files it through the GitHub API: "Created #1".</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/ss/09-phone-reminder-added.jpg" width="240" alt="Phone Inbox: reminder added to calendar"><br><sub><b>9.</b> On the phone: a reminder handed to the calendar moves to Done.</sub></td>
+    <td valign="top"><img src="docs/ss/10-settings-connections.jpg" width="240" alt="Settings: profile and connections"><br><sub><b>10.</b> Settings → Profile & connections: GitHub, people and routing in one place.</sub></td>
+  </tr>
+</table>
+
+<sub>Screens 2–4, 9 and 10 are from the author's phone on the live service (the private address bar is pixelated). Screens 5–8 are demo data (Rio, Sarah, Dev, <code>acme/cart-service</code>) against a protocol-faithful fake GitHub; one issue was also filed against real GitHub in a private sandbox repo ([V1 report](docs/V1_REPORT.md#v11)).</sub>
+
+**What you're seeing, in five steps**
+
+1. You tap the record button on your phone and say what's on your mind, mid-run or mid-lunch.
+2. The audio goes to your Mac, which transcribes it with Sarvam and keeps it only in memory.
+3. One model call splits the transcript into items and drafts each one; asides are dropped.
+4. The cards appear on the phone and the laptop at the same time, over a WebSocket.
+5. Back at your desk, everything is already written: one tap files the issue, opens the email draft or adds the reminder to your calendar.
+
+## How it scores against the judging criteria
+
+**General criteria**
+
+| Criterion | What we built | Evidence |
+|---|---|---|
+| Problem clarity | The thought that arrives when you can't type, lost before a keyboard | [PRD](docs/PRD.md), [research](docs/RESEARCH.md) |
+| Solution fit | One ramble → separate, routed, ready-to-send drafts; asides dropped; corrections applied | [`routes-v1.test.ts`](apps/server/test/routes-v1.test.ts), [`batch.test.ts`](apps/server/test/batch.test.ts) |
+| Feasibility | Runs today on one Mac, free tiers only, $0 | [V1.1 report](docs/V1_REPORT.md#v11), [setup guide](docs/SETUP.md) |
+| Viability | For developers and makers who think while moving; it uses the tools they already have; a hosted mode is the next step | [PRD](docs/PRD.md), [roadmap](#limitations-and-roadmap) |
+| Usefulness | Real outputs: a GitHub issue via the API, a prefilled Gmail draft, a Google Calendar event or `.ics` with an alarm | [`routes-v1.test.ts`](apps/server/test/routes-v1.test.ts), screens [6](docs/ss/06-phone-made-two-things.png)–[8](docs/ss/08-laptop-issue-created.png) |
+| Speed | Median **1.6 s** from upload to final cards, live, 10 rambles | [Measured results](#measured-results), [V1.1 report](docs/V1_REPORT.md#v11) |
+| Relatability | The mid-run story, told in the [demo](https://sayedzahur786.github.io/synapse-site/demo/) | [landscape mp4](docs/media/synapse-launch-landscape.mp4) |
+| Technical depth | One-call batch drafting with an offline fallback and a re-draft queue; encrypted memory with forgetting; a seekable launch film built from the real app | [Architecture](docs/ARCHITECTURE.md), [`redraft.test.ts`](apps/server/test/redraft.test.ts), [engineering notes](docs/ENGINEERING.md) |
+| Privacy and safety | Audio never written to disk; encryption at rest; redaction before every model call; draft-first; default-deny auth | [Privacy](#privacy-and-security), [whitepaper](docs/PRIVACY_WHITEPAPER.md) |
+| Polish | Lighthouse 100 · 100 · 100 · 100 on the live site; one design system across every screen | [Measured results](#measured-results), [screens](#demo) |
+
+**PS4 criteria (Ambient Cognitive Offloading)**
+
+| Criterion (weight) | What we built | Evidence |
+|---|---|---|
+| Fragment Intelligence (30 %) | Mumbled bug → one issue; self-repair applied ("actually make it 7"); half-formed code; asides ignored | [`pipeline.test.ts`](apps/server/test/pipeline.test.ts) (16 scenarios); held-out intent macro-F1 88.7 % on 63 phrasings ([EVAL](docs/EVAL.md), offline model); [`batch.test.ts`](apps/server/test/batch.test.ts) |
+| Proactivity (25 %) | Three schedule-clash mutters → one reschedule suggestion with concrete slots; speaks only at a pause | [`proactive.test.ts`](apps/server/test/proactive.test.ts), [`pipeline.test.ts`](apps/server/test/pipeline.test.ts) |
+| Memory Depth (20 %) | Vague, time- and place-anchored recall ("that caching idea from my walk"); a knowledge graph across sessions | [`recall.test.ts`](apps/server/test/recall.test.ts) (Recall@3 10/10 on a small set: 10 queries, 11 thoughts) |
+| Privacy Architecture (15 %) | "Pause memory" releases the mic; audio never on disk; crypto-shredded working memory; redaction; local-only mode; hash-chained audit | [`no-audio.test.ts`](apps/server/test/no-audio.test.ts), [`local-only.test.ts`](apps/server/test/local-only.test.ts), [`foundation.test.ts`](apps/server/test/foundation.test.ts), [`egress.test.ts`](apps/web/src/audio/egress.test.ts) |
+| Creep Factor (10 %) | Draft-first; "why I kept this"; forget by meaning; no emotion, health or relationship inference | [`integrations.test.ts`](apps/server/test/integrations.test.ts), [`modules.test.ts`](apps/server/test/modules.test.ts), [`no-sensitive-inference.test.ts`](apps/server/test/no-sensitive-inference.test.ts) |
+
+The full mapping, with every scenario, is in [docs/STATUS.md](docs/STATUS.md).
+
+## How it works
+
+```mermaid
+flowchart LR
+  P["Phone app /capture<br/>(offline queue)"] -->|"audio, HTTPS"| G["Passcode gate<br/>(default-deny)"]
+  L["Laptop /app"] -->|"typed or Wispr Flow dictation"| G
+  G --> S["Sarvam STT<br/>(in memory only)"]
+  S --> E["Engine: one batched Groq call<br/>offline fallback, re-draft queue"]
+  G --> E
+  E --> M[("Encrypted memory<br/>SQLite, AES-256-GCM")]
+  E -->|"cards over WebSocket"| P
+  E -->|"cards over WebSocket"| L
+  L --> X["Ship: GitHub API,<br/>Gmail / Calendar links, .ics"]
+```
+
+- **Capture.** The phone app records, seals the clip into an encrypted offline queue and uploads it once ([`queue.ts`](apps/web/src/capture/queue.ts)); retries are idempotent by client id.
+- **Speech.** Sarvam `saaras:v4` transcribes on the Mac's server; the audio buffer is zero-filled afterwards and never written to disk ([`sarvam.ts`](apps/server/src/wispr/sarvam.ts), [`no-audio.test.ts`](apps/server/test/no-audio.test.ts)).
+- **One call per capture.** The redacted transcript goes to Groq once; a validated answer becomes one card per intent. A rate-limit pause is waited out once and invalid JSON is re-asked once, so captures stay at two calls or fewer ([`batch.ts`](apps/server/src/llm/batch.ts), [`batch.test.ts`](apps/server/test/batch.test.ts)).
+- **Offline fallback and re-draft.** Without a model, a local segmenter and offline drafter make the cards; when the model is available again, those drafts are upgraded in place ([`redraft.ts`](apps/server/src/cortex/redraft.ts)).
+- **Routing.** A profile of repos and people decides where each card goes; a missing fact becomes one question, answered once ([`routes-v1.test.ts`](apps/server/test/routes-v1.test.ts)).
+- **Memory.** Every stored field is encrypted; working memory expires after 72 hours with its key destroyed; recall is by meaning ([`foundation.test.ts`](apps/server/test/foundation.test.ts), [`recall.test.ts`](apps/server/test/recall.test.ts)).
+- **Ship.** GitHub issues go through the API with a per-card lock (a double tap files one issue); email and calendar open prefilled in your own apps and wait as "Opened" until you tap Done ([`v11-review.test.ts`](apps/server/test/v11-review.test.ts)).
+- **Always on.** The Mac serves the app through Tailscale Funnel (TLS ends on the Mac), with ngrok and Cloudflare as fallbacks, and launchd restarts it within seconds ([`tunnels.test.ts`](apps/server/test/tunnels.test.ts), [`service.test.ts`](apps/server/test/service.test.ts)).
+
+Full design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/TRD.md](docs/TRD.md).
+
+### Wispr Flow: what is and isn't verified
+
+- **Wispr Flow dictation works in the capture box.** Hold your Wispr Flow key and talk; Wispr types into the box and the text goes through the same pipeline as a phone recording.
+- **The Wispr API streaming integration is built and tested** against a protocol-faithful fake of the API ([`wispr.test.ts`](apps/web/src/audio/wispr.test.ts), [`fake-wispr.integration.test.ts`](apps/web/src/audio/fake-wispr.integration.test.ts)). It needs Wispr API access to run live, which we did not have.
+- **Sarvam is the live speech engine** for every measured result below.
+
+## Measured results
+
+| What | Result | Source |
+|---|---|---|
+| Spoken rambles fully right | **9/10** by the automated check, **8/10** on human review (one reminder title wrongly named a person) | [V1.1 report](docs/V1_REPORT.md#v11) |
+| Model calls per capture | **≤ 2 on 9/10**; 4 on the one whose audio Sarvam mis-transcribed | [V1.1 report](docs/V1_REPORT.md#v11) |
+| Upload → final cards | **1.6 s** median | [V1.1 report](docs/V1_REPORT.md#v11) |
+| Phone offline while the Mac sleeps | Clip kept, synced on wake, uploaded **exactly once** (6/6 checks) | [`mac-asleep.mjs`](scripts/e2e/mac-asleep.mjs), [V1.1 report](docs/V1_REPORT.md#v11) |
+| Real GitHub issue | Filed end to end through the live server (private sandbox repo) | [V1.1 report](docs/V1_REPORT.md#v11) |
+| Tests | **1,174 passing** (web 735, server 439); typecheck clean | `pnpm test`, `pnpm typecheck` |
+| Lighthouse, live site and demo page | **100 · 100 · 100 · 100** (performance, accessibility, best practices, SEO) | measured 2026-10-12 with Lighthouse 12.8 |
+| Cost | **$0**: Groq and Sarvam free tiers, Tailscale Personal, GitHub Pages | [V1.1 report](docs/V1_REPORT.md#v11) |
+
+**Conditions, honestly:** the 10 rambles were synthetic speech (macOS voices, including Indian English and Hinglish), sent 45 s apart through the public URL to Sarvam `saaras:v4` and Groq `qwen/qwen3.8-27b` on free tiers, on 2026-10-11 (UTC). No real-phone accent study has been done yet.
+
+## Run it locally
+
+**Requirements:** macOS (Linux works without the launchd service), Node 22.12+, pnpm 10, and optionally a Sarvam key, a Groq key, Tailscale and the GitHub CLI.
 
 ```bash
+git clone https://github.com/Yash-1706/goa-hacks.git synapse && cd synapse
 pnpm install
-cp .env.example .env     # PowerShell: Copy-Item .env.example .env
-pnpm dev                 # API + WebSocket on :8787, web UI on http://localhost:5173
+cp .env.example .env          # add SARVAM_API_KEY, GROQ_API_KEY, LLM_MODE=live, SYNAPSE_PASSCODE (12+ characters)
+pnpm run doctor               # ✅ / ⚠️ / ❌ for every piece, with a one-line fix each
+pnpm test                     # 1,174 tests, no keys or network needed
 ```
 
-Open **http://localhost:5173**, tap the orb and think out loud. The shipped `.env.example` sets `WISPR_MODE=local`: your speech is transcribed by Whisper **on your own machine** (no key, no account, nothing leaves it). The first start downloads two small models (about 65 MB) into `data/models`; after that it works offline. Try: *"That bug from yesterday... the one with the null pointer... in the cart service... probably the discount code."* and watch the fragments become one GitHub-issue card. No microphone? Press **K** on the Desk and type, or run `pnpm replay scripts/replay/s1_bug.json`. With **no `.env` at all** the app starts in **mock mode** (typed input and a deterministic local cortex), so it always runs.
+Without keys, Synapse runs fully on its offline model and on-device fallbacks, so everything above works on a fresh clone.
 
-Add keys to go further (edit `.env`, never commit it):
+**Serve it to your phone** (permanent free HTTPS through Tailscale Funnel; run `tailscale funnel 8787` once and approve it):
 
-| Variable | Needed for |
+```bash
+pnpm run serve                # builds, starts on :8787, prints the public URL and a QR code
+pnpm run service:install      # optional: keep it running with launchd (status: pnpm run service:status)
+```
+
+**Phone:** open `<your URL>/capture`, sign in with your passcode once, then **Add to Home screen**. The laptop app is at `<your URL>/app` or `http://localhost:8787/app`. The full guide, including sleep settings and troubleshooting, is in [docs/SETUP.md](docs/SETUP.md).
+
+## Privacy and security
+
+- **Audio is never written to disk.** It is held in memory for transcription and zero-filled; on the phone, a clip waiting for network is encrypted with a non-extractable key and deleted once sent ([`no-audio.test.ts`](apps/server/test/no-audio.test.ts), [`queue.test.ts`](apps/web/src/capture/queue.test.ts)).
+- **Everything kept is encrypted** with AES-256-GCM per field; working memory is crypto-shredded after 72 hours ([`foundation.test.ts`](apps/server/test/foundation.test.ts)).
+- **The model sees redacted text:** emails, phone numbers and key-like strings are masked before every call and restored locally ([`groq-cortex.test.ts`](apps/server/test/groq-cortex.test.ts)).
+- **Draft-first:** Synapse never sends anything to another person on its own ([`integrations.test.ts`](apps/server/test/integrations.test.ts)).
+- **Default-deny remote access:** every API and WebSocket path needs a passcode session, checked on canonicalised paths; sessions are revocable ("Log out all devices") ([`v11-review.test.ts`](apps/server/test/v11-review.test.ts), [`auth.test.ts`](apps/server/test/auth.test.ts)).
+- **Honest transit:** through Tailscale Funnel, TLS ends on your Mac; the ngrok and Cloudflare fallbacks decrypt at their edge, and the Privacy Center says which one is in use ([`transit.test.ts`](apps/web/src/lib/transit.test.ts)).
+- **No sensitive inference:** no emotion, health or relationship fields exist in the schemas ([`no-sensitive-inference.test.ts`](apps/server/test/no-sensitive-inference.test.ts)).
+
+More: [docs/PRIVACY_WHITEPAPER.md](docs/PRIVACY_WHITEPAPER.md).
+
+## Tech stack
+
+| Layer | Choice |
 |---|---|
-| `WISPR_API_KEY` + `WISPR_MODE=client` | live microphone transcription (API access is by approval from Wispr: ask the organizers) |
-| `WISPR_MODE=local` (no key) | a real voice path with no key and no cloud: Whisper on this machine (see *On-device speech* below) |
-| `ANTHROPIC_API_KEY` + `LLM_MODE=live` | the real cortex (Haiku 4.5 hot path, Opus 5.5 recall/brief) |
-| `GROQ_API_KEY` + `LLM_MODE=live` | the same pipeline on Groq's free tier when there is no Anthropic key (gpt-oss hot path and recall/brief; see *Groq notes* below). `LLM_PROVIDER=auto` (default) prefers Anthropic when both keys exist; force one with `LLM_PROVIDER=anthropic` or `groq` |
-| `GITHUB_TOKEN` + `GITHUB_REPO` (`owner/repo`) | real GitHub issues (otherwise clearly-labelled simulation) |
-| `JIRA_*` | real Jira tickets (otherwise simulated) |
-| `SYNAPSE_PASSPHRASE` | portable encryption key (default: OS credential store, else a key file) |
+| Language | TypeScript (strict, ESM), pnpm workspaces |
+| Web | React 19, Vite, Zustand, an installable PWA for the phone |
+| Server | Node 22+, Fastify 5, WebSocket, `node:sqlite` |
+| Speech | Sarvam `saaras:v4` (live); Wispr Flow (dictation; API client built); on-device Whisper fallback |
+| Model | Groq `qwen/qwen3.8-27b` (one call per capture); offline drafter as fallback |
+| Hosting | Your Mac: Tailscale Funnel → ngrok → Cloudflare quick tunnel; launchd |
+| Tests | Vitest (1,174), Playwright end-to-end checks, Lighthouse |
+| Launch video | /brag + Hyperframes, rendered from the real app |
 
-Before a demo: `pnpm --filter @synapse/server warm-models` (caches the local embedding model so it works offline).
+## Limitations and roadmap
 
-### Groq (free tier) notes
+**Limitations**
 
-No Anthropic key yet? A Groq key (`GROQ_API_KEY`, plus `LLM_MODE=live`) runs the same pipeline: the top-bar chip reads `live groq qwen3.8-27b` and the Privacy Center names Groq as the cloud stop. `LLM_PROVIDER=auto` (the default) uses Claude when both keys exist; `LLM_PROVIDER=groq|anthropic` forces one. Text is redacted before every call exactly as for Claude, `/api/health` and the audit trail name the provider (`groq:<model>`), and `LOCAL_ONLY=1` still sends nothing.
+- The Mac is the server, so it must be awake; when it sleeps, the phone keeps recordings and syncs later.
+- Free-tier rate limits cap throughput at roughly two captures a minute; captures wait their turn rather than fail.
+- No real-phone accent study yet; the measured run used synthetic voices.
+- The Wispr Flow API integration has not been verified live (no API access); it is tested against a faithful fake.
 
-| | default | why (live comparison, 18 mixed inputs per model, same prompt) |
-|---|---|---|
-| hot path `GROQ_MODEL_FAST` | `qwen/qwen3.8-27b` | 17/18 categories right, 18/18 artifact kinds, p50 0.95 s per call; `gpt-oss-120b` 14/18 (1.27 s), `gpt-oss-20b` 13/18 (1.05 s); valid JSON 18/18 for all three |
-| recall answer, brief, consolidation `GROQ_MODEL_DEEP` | `openai/gpt-oss-120b` | a larger reasoning model (`reasoning_effort` medium) on its own per-model budget, so a capture burst that empties the hot path's minute cannot starve a recall answer; a recall answer takes ~1.2 s |
+**Roadmap**
 
-What the free tier means in practice (measured on a free key):
+- Mac quick-capture with a global hotkey that knows the repo open in your editor.
+- An iPhone Shortcut using the capture-only token.
+- Sending to Slack and WhatsApp, still behind one tap; webhook outputs for any tool.
+- A hosted mode, so the phone works without your Mac.
 
-- **8,000 tokens per minute and 1,000 requests per day, metered per model.** A call is admitted only while the model's remaining tokens cover its prompt *plus* `max_completion_tokens`; a prompt over 8,000 is rejected outright (HTTP 413). The 8.5k-token Claude prompt can never be sent, so Groq gets the ~2k-token contract in `cortex/prompts-lite.ts` (rules, category precedence, every artifact's fields, privacy prohibitions, two worked examples). A call costs about 2.6k tokens in all, so roughly **2.5 live calls per minute** per model after the first two or three. No prompt caching was reported on this tier.
-- **There is also a per-model DAILY token cap** (HTTP 429 `rate_limit_exceeded (TPD)`). Heavy testing on this key exhausted `qwen/qwen3.8-27b` for the day, while `openai/gpt-oss-120b` still had budget and produced a live card end to end (category bug, artifact github_issue, confidence 0.92). Groq meters per model, so the client pauses only the model that was refused (a daily limit for as long as the server says, up to 30 minutes; a minute limit for two at most), and the fast cortex **fails over to the other model** (`llm/failover.ts`): with the default pair, a day on which Qwen is capped is served by `gpt-oss-120b`, the server log says so once, the card is still `source: llm`, and the privacy ledger names every call. Only when both models are capped does a card fall back to the local cortex with `degraded: rate_limit`. The two daily caps are all there is, so keep demo-day experiments modest.
-- **The client paces itself** (`llm/groq-client.ts`): a token bucket per model (`GROQ_TPM`, default 7,000), a call waits at most `GROQ_MAX_WAIT_MS` (2 s) for the budget and otherwise falls back to the local cortex with a `degraded: paced` badge instead of earning a 429. A 429 is never retried (`retry-after` cool-down), an auth failure switches the path off for 60 s, a dead connection for 4 s, `GROQ_MAX_REQUESTS_PER_DAY` (900) caps the day, and the response headers correct the bucket if the key is shared.
-- **Expect degradation under a burst.** The engine makes one call per fragment when fragments arrive faster than a call finishes. Simulated with the real client against a fake that enforces Groq's admission rule (prompt 2.3k, answer 0.3k, 2 s patience): one single-fragment thought every 30 s stays 100% live; every 15 s 83%; every 10 s 67%; 2-fragment thoughts every 20 s 50%; 3-fragment thoughts every 20 s 33%; eight fragments in 12 s 25% (the first two). Never a 429. `GROQ_MAX_WAIT_MS=6000` trades latency for a few more live answers; `GROQ_TPM`/`GROQ_MAX_REQUESTS_PER_DAY` can be raised on a paid plan.
-- **Cards appear whole, not typing in.** In JSON modes Groq delivers the answer as one chunk (gpt-oss after its reasoning), so there is no partial card to stream. `GROQ_OUTPUT_MODE=text` streams token by token (the card fills in from ~0.5 s) but gives up Groq's JSON guarantee (zod and one repair retry still apply). Strict `json_schema` works but costs ~1.5k extra prompt tokens on gpt-oss.
-- **Watching it:** `/api/health` → `groq` (requests today, tokens left this minute, per-model buckets) and the Lab's System panel. `pnpm eval --live --limit 5 --budget 36` and `pnpm bench --live --limit 4 --runs 1 --budget 10` write `docs/EVAL.groq.md` / `docs/LATENCY.groq.md` and label the provider and model in the header (so far only a small, diluted eval run exists: `docs/EVAL.groq.md`; the Groq bench has not been run); the committed `docs/EVAL.md` and `docs/LATENCY.md` stay the offline numbers. A live run builds ONE client for all its apps (the budget belongs to the key), waits out cool-downs instead of racing through them, and on Groq seeds the recall section's memories with the local cortex (`--live-recall` for live seeding) to save ~14 requests.
-- **Switching back:** unset `GROQ_API_KEY` or set `LLM_PROVIDER=anthropic`; nothing else changes.
+## Project docs
 
-### On-device speech (no key, no cloud)
-
-Wispr Flow is the primary speech engine, but a real voice path also works with **no Wispr key and no internet**: Whisper (`Xenova/whisper-tiny.en`, ONNX, on the CPU through transformers.js) runs inside the server, on the machine you run it on.
-
-- **Turn it on:** `WISPR_MODE=local` in `.env` (nothing else; the model is about 40 MB, downloaded once into `data/models`, then loaded in under 2 s). Tap the orb and talk. Check it with `pnpm wispr:check` (the same first-run tool, now reporting the on-device engine: it speaks a sentence, streams it through the real browser streamer and prints what Whisper heard, the latency and the PASS/FAIL list).
-- **Local-only mode uses it too.** With Wispr configured, switching **Local-only** on in the Privacy Center moves speech to this machine at once on every device (the server broadcasts a `config.update`; a listening microphone drops its Wispr connection, aborts whatever it was streaming and reconnects to the on-device engine, without re-opening the mic). Not one more packet, token or warm-up goes to Wispr; switching it off moves back. Local-only used to cut off only the cloud model; now nothing leaves the machine.
-- **Optional automatic fallback** (`STT_FALLBACK=1`, off by default): when Wispr rejects the key or cannot be reached, the same token request is answered by the on-device engine and the app says why. It is off by default because it is the only case in which, with Wispr configured, audio reaches this server.
-- **How it is built:** the server exposes `/local-stt/client_ws` and `/local-stt/client_api`, which speak Wispr's own client protocol, so the browser's streamer (VAD, packetizer, standby sockets, REST fallback, kill switch) is used unchanged and only the token it is handed points at this machine. The endpoints refuse audio unless the on-device engine is in use; audio lives in memory for one utterance, is transcribed one at a time, and is zero-filled afterwards; nothing is written to disk (`no-audio.test.ts` audits that, and confines it to two modules).
-- **What it costs:** Whisper always reads a 30 s window, so a transcript takes about **0.6 to 1.2 s** after the pause whatever the length (Wispr is faster; the card then appears 0.2 to 0.3 s later). English only with the default model; `STT_MODEL=Xenova/whisper-base.en` is more accurate and about 40 % slower (measured on clean synthetic speech; real accents and rooms are untested).
-
-### Phone ("Pocket mode")
-Phones need HTTPS for the microphone. In PowerShell: `$env:HTTPS=1; pnpm dev:web`, open `https://<laptop-ip>:5173/pocket`, accept the self-signed certificate warning once, and enter the **6-digit pairing code** printed in the server console (a paired phone stays paired across restarts). Capture is foreground-only (iOS/Android suspend web audio in the background), so Pocket keeps the screen awake.
-
-*Phone can't connect?* Allow Node.js through the Windows firewall on **private** networks (ports 5173 and 8787), put the phone and laptop on the same Wi-Fi (venue Wi-Fi often isolates clients: use a phone hotspot), and use the laptop's LAN address, not `localhost`. Browsers on public websites cannot reach the API: only local/private-network origins are accepted.
-
-## Commands
-
-| | |
+| Doc | What it covers |
 |---|---|
-| `pnpm dev` | server + web together |
-| `pnpm test` / `pnpm typecheck` | all tests / all type checks |
-| `pnpm replay scripts/replay/s1_bug.json [--speed 4] [--local]` | play a scripted ramble into the running server (watch the UI), or in-process with the offline cortex |
-| `pnpm wispr:check [--rest] [--idle 60]` | the first thing to run once a Wispr key exists: speaks a synthetic sentence through the real token path and streamer and reports the Wispr wire assumptions as PASS / FAIL / UNKNOWN |
-| `apps/web/scripts/voice-smoke/` | the whole browser voice path with no key and no microphone: a synthetic voice is played into the page as the mic (real VAD, packetizer and streamer) against the strict fake Wispr; see its README |
-| `pnpm seed [--reset]` | write ~8 backdated sessions (development aid, always the offline cortex; **the live demo should use real dogfooded sessions**) |
-| `pnpm eval [--live] [--limit N] [--out file]` | score intent, control phrases, reference resolution, recall, nonsense robustness → `docs/EVAL.md`. `--live` uses the configured provider and says so in the report header (`cortex: live groq/<model>`); `--limit N` samples N items per section (a free tier's quota is small); a Groq run writes `docs/EVAL.groq.md` so the committed offline report is never overwritten |
-| `pnpm bench [--live] [--limit N] [--out file]` | per-stage latency benchmark → `docs/LATENCY.md`, `docs/latency.csv` (a Groq run writes `docs/LATENCY.groq.md`) |
+| [PRD](docs/PRD.md) · [TRD](docs/TRD.md) | Product and technical specs |
+| [Architecture](docs/ARCHITECTURE.md) | The system as built |
+| [Privacy whitepaper](docs/PRIVACY_WHITEPAPER.md) | What leaves the device, retention, threat model |
+| [Failure modes](docs/FAILURE_MODES.md) | What breaks, and what happens then |
+| [Eval](docs/EVAL.md) · [Latency](docs/LATENCY.md) | Accuracy and speed measurements |
+| [V1 report](docs/V1_REPORT.md) | The V1 and V1.1 builds and their live verification |
+| [Engineering notes](docs/ENGINEERING.md) · [Setup guide](docs/SETUP.md) | Internals; running it day to day |
+| [All docs](docs/README.md) | The full index |
 
-## What is verified, and what is not
+## Credits
 
-**Verified here** (900+ automated tests, `pnpm test`; the browser UI and the offline pipeline were also exercised end to end, see `docs/STATUS.md`): the cortex pipeline end to end on the problem statement's own examples (stitching, self-repair, asides, retraction, recurring-concern suggestion, cross-session reference, recall); AES-256-GCM encryption, per-day-key crypto-shredding, cascade deletion, TTL expiry; pause/forget/purge and the hash-chained audit; device pairing and the origin guard over real WebSockets; the Claude backend against a faithful Messages-API streaming fake (partial cards, cache usage, redaction round-trip, auth/rate-limit/refusal/timeout degradation, strict-schema fallback); the Groq backend against a faithful chat-completions fake that enforces Groq's real admission rule (one-chunk and token-by-token answers, repair retry, every degrade path, pacing per model, redaction round trip, local-only blocking every path, the key never leaving the server) and, measured on a free key, `docs/EVAL.groq.md`; the Wispr streamer against a fake WebSocket.
-
-**Not verifiable without credentials/devices, and therefore labelled unverified:** the real Claude API behaviour and latency (`pnpm eval --live`, `pnpm bench --live` with an Anthropic key; with only a Groq key they produce the clearly labelled `*.groq.md` reports instead), the real Wispr WebSocket (assumptions listed in `apps/web/src/audio/README.md`), microphone/VAD behaviour on real whispers, phone background behaviour, real battery deltas.
-
-**Designed but not built:** on-device keyword spotting for an instant local pause, owner-only speaker verification, Google Calendar/Gmail adapters, Wispr `proxy` mode.
-
-## Layout
-
-```
-apps/server     Fastify + WebSocket brain: gate · cortex · memory · recall · proactive · privacy · integrations
-apps/web        React 19 + Vite UI and the browser audio pipeline (VAD, Wispr streaming, sensors)
-packages/shared zod protocol + domain schemas (also the model's structured-output contract)
-eval/           golden corpora (held-out novel phrasings reported separately from the dev set)
-scripts/replay  scripted rambles from the problem statement
-docs/           PRD · TRD · architecture · privacy · failure modes · eval · latency · demo · pitch
-```
+- **Contributors:** Yash Gaikwad ([@Yash-1706](https://github.com/Yash-1706)): original build and UI. Sayed Zahur ([@SayedZahur786](https://github.com/SayedZahur786)): V1 and V1.1 (phone capture, outputs, hosting, launch). The 21 earliest commits were authored under an automated build identity ("Synapse Build").
+- Built for the **WhisperFlow Hackathon 2026**, Problem Statement 4: Ambient Cognitive Offloading ([brief](docs/hackathon-brief.pdf)).
+- Speech by [Sarvam](https://www.sarvam.ai), drafting by [Groq](https://groq.com), dictation by [Wispr Flow](https://wisprflow.ai).
+- Launch video made with [/brag](https://github.com/latent-spaces/brag) (latent-spaces) and Hyperframes.
+- Music: "Happy Beats / Business Moves Vol. 12" by [ende.app](https://ende.app/en), royalty-free.

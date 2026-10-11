@@ -1,6 +1,6 @@
 # Synapse: build guide for Claude Code
 
-WhisperFlow Hackathon 2026, **Problem Statement 4: Ambient Cognitive Offloading** (see `WHISPERFLOW HACKATHON 2026.pdf`, pages 8–10).
+WhisperFlow Hackathon 2026, **Problem Statement 4: Ambient Cognitive Offloading** (see `docs/hackathon-brief.pdf`, pages 8–10).
 Specs: product → `docs/PRD.md` · technical → `docs/TRD.md` · research → `docs/RESEARCH.md`. **Read the TRD before writing code.**
 
 ## How to build
@@ -19,11 +19,13 @@ Specs: product → `docs/PRD.md` · technical → `docs/TRD.md` · research → 
 6. No plaintext user content in logs. Log IDs, lengths and hashes only.
 
 ## Commands (create these in M0)
-`pnpm i` · `pnpm dev` (server + web) · `pnpm test` · `pnpm typecheck` · `pnpm replay scripts/replay/<file>.json` · `pnpm seed` · `pnpm eval` · `pnpm bench`
+`pnpm i` · `pnpm dev` (server + web) · `pnpm test` · `pnpm typecheck` · `pnpm replay scripts/replay/<file>.json` · `pnpm seed` · `pnpm eval` · `pnpm bench` · `pnpm run doctor`
 
 ## Environment
-- Windows 11, PowerShell 5.1 (chain commands with `;`, not `&&`), plus Git Bash. Node 25.2.1, pnpm 10.28, Bun 1.4, Python 3.14, Docker, `gh`. No Ollama.
-- Phones need HTTPS for microphone access (TRD §11.2).
+- MacBook Air (Apple Silicon, macOS 26), zsh. Node 26, pnpm 10.28, Homebrew, `gh` (logged in), `cloudflared`. No Ollama.
+- `pnpm doctor` is a pnpm built-in: run ours as `pnpm run doctor`.
+- Piped stdout is asynchronous on macOS: CLIs set `process.exitCode` instead of calling `process.exit()` after printing.
+- Phones need HTTPS for microphone access (TRD §11.2); V1 gets it from the cloudflared tunnel (`TUNNEL=1 pnpm start`).
 
 ## Conventions
 - TypeScript strict, ESM. The zod schemas in `packages/shared` are the single source of truth for the WS protocol and for LLM structured outputs.

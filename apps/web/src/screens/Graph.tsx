@@ -342,10 +342,10 @@ function EmptyState() {
         <Mic size={14} aria-hidden /> Try saying <q>Null pointer in cart-service, tell Sarah</q>
       </p>
       <div className="gx-empty__actions">
-        <Link to="/" className="btn btn-primary">
+        <Link to="/app" className="btn btn-primary">
           Open the Desk
         </Link>
-        <Link to="/pocket" className="btn">
+        <Link to="/capture" className="btn">
           Open Pocket
         </Link>
       </div>

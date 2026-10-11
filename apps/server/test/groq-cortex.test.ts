@@ -213,7 +213,7 @@ describe("GroqCortex against a faithful chat-completions fake", () => {
   });
 
   it("text mode (GROQ_OUTPUT_MODE=text) sends no response_format and streams token by token: cards type in, even behind a code fence", async () => {
-    reset({ kind: "ok", json: "```json\n" + JSON.stringify(canned) + "\n```", chunkChars: 64, chunkDelayMs: 5 });
+    reset({ kind: "ok", json: "```json\n" + JSON.stringify(canned) + "\n```", chunkChars: 64, chunkDelayMs: 25 }); // previews are throttled to one per 60 ms, so the stream must outlast several windows on a fast machine
     const { cortex, attempts } = rig({ cortex: { outputMode: "text" } });
     expect(cortex.outputMode).toBe("text");
     const partials: Array<Partial<CortexResult>> = [];

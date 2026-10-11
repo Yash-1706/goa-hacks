@@ -18,7 +18,14 @@ import { makeApp } from "./app-helper";
 
 const here = import.meta.dirname;
 /** the only modules that may see audio samples (memory only, one utterance at a time) */
-const ON_DEVICE = ["apps/server/src/wispr/local-stt.ts", "apps/server/src/wispr/local-ws.ts", "apps/server/src/wispr/sarvam.ts"]; // sarvam.ts: the opt-in cloud engine (one fetch, to /speech-to-text)
+const ON_DEVICE = [
+  "apps/server/src/wispr/local-stt.ts",
+  "apps/server/src/wispr/local-ws.ts",
+  "apps/server/src/wispr/sarvam.ts", // the opt-in cloud engine (one fetch, to /speech-to-text)
+  // V1 POST /api/capture: a phone's recorded clip is parsed and transcribed in memory, then zero-filled (no disk, no network of its own)
+  "apps/server/src/capture/wav.ts",
+  "apps/server/src/capture/service.ts",
+];
 const tmpDirs: string[] = [];
 afterAll(() => {
   for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true });
@@ -129,7 +136,7 @@ describe("audio never persists", () => {
       expect(src, `${rel} must not write files`).not.toMatch(/\b(writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|mkdtemp|mkdtempSync)\b/);
       if (!rel.endsWith("sarvam.ts")) expect(src, `${rel} must not open any other connection`).not.toMatch(/\bfetch\s*\(|new\s+WebSocket\b|from\s+["']node:(http|https|net|tls|dgram|child_process|worker_threads)["']/);
       // the socket module owns the buffers (the engine only borrows an utterance for one call), so it is the one that must wipe them
-      if (rel.endsWith("local-ws.ts")) expect(src, `${rel} must zero the audio it holds`).toMatch(/\.fill\(0\)/);
+      if (rel.endsWith("local-ws.ts") || rel.endsWith("capture/service.ts")) expect(src, `${rel} must zero the audio it holds`).toMatch(/\.fill\(0\)/);
     }
     // and no OTHER module may handle samples: the audit above forbids pcm/waveform everywhere else
     const others = walk(path.resolve(here, "../src")).filter((f) => f.endsWith(".ts") && !ON_DEVICE.includes(path.relative(root, f).replaceAll("\\", "/")));

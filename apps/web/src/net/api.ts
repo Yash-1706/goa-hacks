@@ -1,5 +1,6 @@
-import type { ArtifactView } from "@synapse/shared";
+import type { ArtifactView, CaptureResponse, GithubStatus, ImportSuggestions, Profile, ProfilePerson, ProfileRepo } from "@synapse/shared";
 import { getDeviceId, getToken } from "./device";
+import { tunnelHeaders } from "./tunnel";
 import type {
   AuditResponse,
   AuditVerify,
@@ -32,7 +33,7 @@ export class ApiError extends Error {
 }
 
 export function authHeaders(): Record<string, string> {
-  const h: Record<string, string> = { "x-synapse-device": getDeviceId() };
+  const h: Record<string, string> = { "x-synapse-device": getDeviceId(), ...tunnelHeaders() };
   const token = getToken();
   if (token) h["x-synapse-token"] = token;
   return h;
@@ -89,6 +90,21 @@ export const api = {
   latency: (signal?: AbortSignal) => json<LatencyResponse>("/api/metrics/latency", "GET", undefined, signal),
   battery: (signal?: AbortSignal) => json<BatteryResponse>("/api/metrics/battery", "GET", undefined, signal),
   calendar: (signal?: AbortSignal) => json<CalendarResponse>("/api/calendar", "GET", undefined, signal),
+  // ---- V1: capture, ask-cards, handoffs, profile, GitHub
+  capture: (text: string) => json<CaptureResponse>("/api/capture", "POST", { text, context: { source: "web" } }),
+  answer: (id: string, field: string, value: string) => json<ArtifactView>(`/api/artifacts/${encodeURIComponent(id)}/answer`, "POST", { field, value }),
+  done: (id: string) => json<ArtifactView>(`/api/artifacts/${encodeURIComponent(id)}/done`, "POST"),
+  revokeAll: () => json<{ ok: boolean }>("/api/auth/revoke-all", "POST"),
+  shipped: (id: string, via: string) => json<ArtifactView>(`/api/artifacts/${encodeURIComponent(id)}/shipped`, "POST", { via }),
+  profile: (signal?: AbortSignal) => json<Profile>("/api/profile", "GET", undefined, signal),
+  saveProfile: (p: Profile) => json<Profile>("/api/profile", "PUT", p),
+  mergeProfile: (m: { repos?: ProfileRepo[]; people?: ProfilePerson[] }) => json<Profile>("/api/profile/merge", "POST", m),
+  parseContacts: (text: string) => json<{ people: Array<{ name: string; email?: string; phone?: string }> }>("/api/profile/parse", "POST", { text }),
+  githubStatus: (signal?: AbortSignal) => json<GithubStatus>("/api/github/status", "GET", undefined, signal),
+  githubUseGh: () => json<{ login: string }>("/api/github/use-gh", "POST"),
+  githubToken: (token: string) => json<{ login: string }>("/api/github/token", "POST", { token }),
+  githubForget: () => json<{ ok: boolean }>("/api/github/token", "DELETE"),
+  githubImport: () => json<ImportSuggestions>("/api/github/import"),
 };
 
 export type Api = typeof api;

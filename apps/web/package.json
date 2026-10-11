@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "site:build": "VITE_SITE_URL=${SITE_URL:-https://sayedzahur786.github.io/synapse-site/} VITE_SITE_APP_URL=${SITE_APP_URL:-} VITE_DEMO_URL=./demo/ vite build -c vite.site.config.ts && node scripts/site-check.mjs",
+    "og": "node scripts/og-image.mjs"
   },
   "dependencies": {
     "@ricky0123/vad-web": "^0.0.31",
@@ -16,6 +18,7 @@
     "lucide-react": "^1.52.0",
     "motion": "^14.0.0",
     "onnxruntime-web": "1.30.0",
+    "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-force-graph-2d": "^1.29.2",
@@ -24,6 +27,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-basic-ssl": "^2.3.0",

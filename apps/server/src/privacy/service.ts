@@ -191,8 +191,17 @@ export class PrivacyService implements Controls {
   }
 
   /** Wipe everything (Privacy Center "delete all my memory"). Day keys are destroyed too. */
+  /** V1: the profile and the GitHub account (attached by the app; created after this service) */
+  private v1: { profile: () => unknown; resetProfile: () => void; forgetGithub: () => void } | null = null;
+  attachProfile(v1: { profile: () => unknown; resetProfile: () => void; forgetGithub: () => void }): void {
+    this.v1 = v1;
+  }
+
   wipeAll(): number {
     const { store, clock } = this.d;
+    // everything learned from speech lives in the profile too ("cart service" → acme/shop), and the GitHub token with it
+    this.v1?.resetProfile();
+    this.v1?.forgetGithub();
     const ids = [...store.thoughts.keys()];
     for (const id of ids) store.deleteThought(id);
     this.engine?.closeAllWithoutAnalysis();
@@ -231,6 +240,8 @@ export class PrivacyService implements Controls {
       entities: [...store.entities.values()].map((e) => ({ code: e.code, name: e.name, type: e.type, aliases: e.aliases, mentions: e.mentionCount, longTerm: e.longTerm })),
       openLoops: [...store.openLoops.values()].map((o) => ({ question: o.question, status: o.status, createdAt: o.createdAt })),
       dictionary: [...store.dict.values()].map((d) => ({ term: d.term, kind: d.kind, source: d.source })),
+      // the context profile (people, repos, what was learned from answers); the GitHub token is never exported
+      profile: this.v1?.profile() ?? null,
       audit: this.d.audit.list(1000),
       retention: { workingMemoryHours: this.d.cfg.memory.ttlHours, quietMs: LIMITS.quietMs },
     };

@@ -1,49 +1,39 @@
-import { memo } from "react";
-import { Square } from "lucide-react";
-import { Orb, useOrbView } from "@/components/Orb";
-import { AsideChip, ConnectionChip, DeviceChips, LatencyChip, PrivacyShield } from "@/components/chips";
-import { plural } from "@/lib/format";
-import { controller } from "@/runtime";
+import { memo, useEffect, useState } from "react";
+import { statusPill } from "@/lib/inbox";
 import { useAudioUi } from "@/state/audio";
-import { useThoughts } from "@/state/thoughts";
+import { useConnection } from "@/state/connection";
+import { usePrivacy } from "@/state/privacy";
 
 /**
- * Top bar (every screen but Pocket): the orb, what it is doing right now, and the live status chips:
- * connection, devices, privacy shield, latency, asides filtered.
+ * Top bar (V1): the name and ONE status pill (Listening / Paused / Offline / Not connected / Ready). Engine, model and
+ * latency details live in Settings.
  */
 export const TopBar = memo(function TopBar({ title = "Synapse" }: { title?: string }) {
-  const view = useOrbView();
-  const thoughts = useThoughts((s) => s.order.length);
-  const running = useAudioUi((s) => s.state === "listening" || s.state === "hearing");
-
+  const paused = usePrivacy((s) => s.paused);
+  const conn = useConnection((s) => s.status);
+  const listening = useAudioUi((s) => s.state === "listening" || s.state === "hearing");
+  const [online, setOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+  const pill = statusPill({ paused, conn, listening, online });
+  const tone = pill === "Listening" ? "live" : pill === "Ready" ? "ok" : pill === "Paused" ? "warn" : "bad";
   return (
-    <header className="topbar">
+    <header className="topbar topbar--v1">
       <div className="topbar__brand">
-        <div className="topbar__orbwrap">
-          <Orb size={44} />
-        </div>
-        <div className="topbar__titles">
-          <div className="topbar__title">
-            <span className="grad-text">{title}</span>
-          </div>
-          <div className="topbar__status" aria-live="polite">
-            <b>{view.label}</b>
-            {thoughts > 0 ? <span> · {plural(thoughts, "thought")}</span> : null}
-          </div>
-        </div>
-        {running ? (
-          <button type="button" className="btn btn-sm hide-sm" onClick={() => void controller.stop()} title="End the session: Synapse writes a brief of what you said, and the mic is released">
-            <Square size={11} fill="currentColor" /> End session
-          </button>
-        ) : null}
+        <span className="topbar__name">{title}</span>
       </div>
-      <div className="topbar__chips">
-        <AsideChip />
-        <LatencyChip />
-        <DeviceChips />
-        <PrivacyShield />
-        <ConnectionChip />
-      </div>
+      <span className={`status-pill status-pill--${tone}`} role="status" aria-live="polite">
+        <span className="status-pill__dot" aria-hidden />
+        {pill}
+      </span>
     </header>
   );
 });

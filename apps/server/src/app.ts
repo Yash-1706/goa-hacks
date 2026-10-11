@@ -1,19 +1,24 @@
 import "./silence";
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { ClientConfig, ServerMessage } from "@synapse/shared";
 import { Bus } from "./bus";
+import { CaptureService } from "./capture/service";
 import { systemClock, type Clock } from "./clock";
 import type { Config } from "./config";
 import type { Hub } from "./ctx";
 import { CortexEngine } from "./cortex/engine";
 import { MockCortex } from "./cortex/mock";
 import type { CortexBackend, CortexInput, CortexOutput, PartialCallback } from "./cortex/types";
+import { Auth } from "./gateway/auth";
 import { WsHub, type HubServices } from "./gateway/hub";
-import { registerRoutes } from "./gateway/routes";
+import { MAX_CAPTURE_BYTES, registerRoutes } from "./gateway/routes";
+import { registerWeb, webDistReady } from "./gateway/static";
 import { Trust, isAllowedOrigin } from "./gateway/trust";
 import { ControlIntents } from "./gate/intent";
 import { Triager } from "./gate/triage";
@@ -22,6 +27,8 @@ import { Outbox } from "./integrations/outbox";
 import { ClaudeCortex } from "./llm/anthropic";
 import { DeepLlm } from "./llm/deep";
 import { FailoverBackend } from "./llm/failover";
+import { BatchDrafter } from "./llm/batch";
+import { RedraftQueue } from "./cortex/redraft";
 import { GroqCortex } from "./llm/groq";
 import { GroqClient } from "./llm/groq-client";
 import { log } from "./log";
@@ -39,6 +46,16 @@ import { RecallEngine } from "./recall/engine";
 import { LocalStt, LocalSttAuth, type SttBackend } from "./wispr/local-stt";
 import { registerLocalStt } from "./wispr/local-ws";
 import { SarvamStt } from "./wispr/sarvam";
+import { GithubAccount } from "./profile/github";
+import { ProfileService } from "./profile/service";
+import { RoutingService } from "./routing/service";
+
+/** `gh auth token`: the GitHub CLI's token on this Mac, or null (not installed, not logged in). Never logged. */
+function ghCliToken(): Promise<string | null> {
+  return new Promise((resolve) =>
+    execFile("gh", ["auth", "token"], { timeout: 5000 }, (err, stdout) => resolve(err ? null : String(stdout).trim() || null)),
+  );
+}
 import { WisprService } from "./wispr/service";
 
 export interface AppOptions {
@@ -48,6 +65,8 @@ export interface AppOptions {
   embedder?: Embedder;
   /** replace the cortex backend (tests / benchmarks) */
   backend?: CortexBackend;
+  /** `gh auth token` (tests replace it: the real CLI must never be read by a test) */
+  ghToken?: () => Promise<string | null>;
   /** do not start timers (tests) */
   quiet?: boolean;
   /** supply the master key directly (tests); skips passphrase / OS keyring / keyfile */
@@ -60,6 +79,8 @@ export interface AppOptions {
   groq?: GroqClient;
   /** replace the on-device speech model (tests) */
   sttBackend?: SttBackend;
+  /** whether the model has budget for a re-draft right now (tests) */
+  redraftBudget?: () => boolean;
 }
 
 /** Everything wired together. Services are created in dependency order; the hub is late-bound. */
@@ -77,6 +98,8 @@ export interface AppCtx {
   battery: BatteryLog;
   audit: AuditChain;
   trust: Trust;
+  /** passcode sessions, the capture token, and the public URL (tunnel) */
+  auth: Auth;
   privacy: PrivacyService;
   outbox: Outbox;
   autonomy: AutonomyPolicy;
@@ -97,10 +120,46 @@ export interface AppCtx {
   /** the engine that would take the NEXT utterance on the on-server speech endpoints: Sarvam's cloud API, or Whisper (always Whisper in local-only mode) */
   speechStt: () => LocalStt | null;
   asides: { count: number };
+  /** POST /api/capture: text or audio from any client, through the same engine */
+  capture: CaptureService;
+  /** V1 context profile: repos, people, learned answers (encrypted) */
+  profile: ProfileService;
+  /** the connected GitHub account (token server-side only) */
+  github: GithubAccount;
+  /** where each artifact goes, what it still needs, its handoff links */
+  routing: RoutingService;
+  /** offline drafts re-drafted by the model when the free tier has budget again */
+  redraft: RedraftQueue;
+  /** this server also serves the built web app (one origin, one port) */
+  webServed: boolean;
   fastify: FastifyInstance;
   clientConfig: () => ClientConfig;
   /** resolves when every recall answer started by a spoken question has finished (benchmarks and evals wait before they stop the app) */
   idleRecall: () => Promise<void>;
+}
+
+/**
+ * Results already drafted for a fragment (V1.1: one call per capture drafts every item up front). A one-fragment thread
+ * whose fragment has a preset gets it without another model call; everything else goes to the real backend.
+ */
+class PresetBackend implements CortexBackend {
+  readonly name = "preset";
+  constructor(
+    private presets: Map<string, CortexOutput>,
+    private next: CortexBackend,
+  ) {}
+  analyze(input: CortexInput, onPartial?: PartialCallback): Promise<CortexOutput> {
+    const only = input.fragments.length === 1 ? input.fragments[0]?.id : undefined;
+    const preset = only ? this.presets.get(only) : undefined;
+    if (only && preset) {
+      this.presets.delete(only);
+      return Promise.resolve(preset);
+    }
+    return this.next.analyze(input, onPartial);
+  }
+  async warm(): Promise<void> {
+    await this.next.warm?.();
+  }
 }
 
 class RoutingBackend implements CortexBackend {
@@ -139,17 +198,24 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
   const intents = new ControlIntents(embedder);
   await Promise.all([triager.init(), intents.init()]);
 
-  // ---- seeds: teammates are pinned entities + dictionary terms; a realistic calendar
-  for (const m of cfg.user.team) {
-    const e = await store.upsertEntity(m.name, "person");
-    if (e && e.longTerm !== 2) store.pinEntity(e);
-    store.upsertDict(m.name, "person", "team", 0.9);
-  }
+  // ---- the context profile (seeded from USER_TEAM the first time); its people are pinned entities + dictionary terms
+  const profile = new ProfileService({ db, vault, cfg });
+  const pinPeople = async (): Promise<void> => {
+    for (const p of profile.get().people) {
+      const e = await store.upsertEntity(p.name, "person");
+      if (e && e.longTerm !== 2) store.pinEntity(e);
+      store.upsertDict(p.name, "person", "team", 0.9);
+    }
+  };
+  await pinPeople();
+  profile.onChange = () => void pinPeople().catch((err) => log.warn("profile", `could not pin people: ${(err as Error).message}`));
   store.upsertDict(cfg.user.firstName, "person", "seed", 0.9);
   seedCalendar(store, cfg, clock.now());
+  const github = new GithubAccount({ db, vault, envToken: cfg.integrations.github.token, apiBase: cfg.integrations.github.apiBase, ghToken: opts.ghToken ?? ghCliToken });
 
   // ---- services (hub is created first and late-bound so services can depend on it)
   const trust = new Trust(db, cfg);
+  const auth = new Auth(db, { passcode: cfg.remote.passcode, publicUrl: cfg.remote.publicUrl }, clock);
   const services = {} as HubServices;
   const hub = new WsHub(services);
   const hubIface: Hub = hub;
@@ -184,7 +250,10 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
       ? new GroqCortex({ client: groq, model: cfg.llm.deep, fallback: mock, outputMode: cfg.llm.groq.outputMode, pseudonymNames, onCloudCall })
       : null;
   const liveBackend: CortexBackend | null = live instanceof GroqCortex && spare ? new FailoverBackend(live, spare) : live;
-  const backend = opts.backend ?? new RoutingBackend(() => (privacy.localOnly || !liveBackend ? mock : liveBackend));
+  const presets = new Map<string, CortexOutput>();
+  const backend = new PresetBackend(presets, opts.backend ?? new RoutingBackend(() => (privacy.localOnly || !liveBackend ? mock : liveBackend)));
+  // V1.1: one call per capture on Groq (the free tier allows ~2-3 calls a minute; a 3-item ramble used to need 3)
+  const batchDrafter = groq ? new BatchDrafter({ client: groq, model: cfg.llm.fast, maxWaitMs: cfg.llm.groq.captureMaxWaitMs, pseudonymNames, onCloudCall }) : null;
   const deep = new DeepLlm(cfg, { isLocalOnly: () => privacy.localOnly, pseudonymNames, onCloudCall, groq: groq ?? undefined });
 
   // on-device speech: nothing is loaded until it is used (or STT_PRELOAD), and its endpoints refuse audio unless it is in use
@@ -212,6 +281,32 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
             }),
         })
       : null;
+  // Speech for POST /api/capture (a phone upload, a shared voice note): Sarvam when a key exists, otherwise Whisper on this machine.
+  // Local-only mode always uses Whisper. These engines exist whatever WISPR_MODE says: the live microphone path is separate.
+  let captureSarvam: LocalStt | null = sarvamStt;
+  let captureWhisper: LocalStt | null = localStt;
+  const captureStt = (): { stt: LocalStt; provider: "sarvam" | "whisper" } => {
+    if (!privacy.localOnly && cfg.stt.sarvam.apiKey) {
+      captureSarvam ??= new LocalStt({
+        model: `sarvam:${cfg.stt.sarvam.model}`,
+        dtype: "api",
+        cacheDir: cfg.stt.cacheDir,
+        languages: cfg.wispr.languages,
+        loader: async () =>
+          new SarvamStt({
+            apiKey: cfg.stt.sarvam.apiKey,
+            baseUrl: cfg.stt.sarvam.baseUrl,
+            model: cfg.stt.sarvam.model,
+            languageCode: cfg.stt.sarvam.languageCode,
+            keyterms: () => [cfg.user.firstName, ...cfg.user.team.map((m) => m.name), ...store.topDictionary(40)],
+            onSend: (i) => audit.append("sent_to_stt", `sarvam:${i.model}`, i.audioMs),
+          }),
+      });
+      return { stt: captureSarvam, provider: "sarvam" };
+    }
+    captureWhisper ??= new LocalStt({ model: cfg.stt.model, dtype: cfg.stt.dtype, cacheDir: cfg.stt.cacheDir, languages: cfg.wispr.languages, ...(opts.sttBackend ? { loader: async () => opts.sttBackend as SttBackend } : {}) });
+    return { stt: captureWhisper, provider: "whisper" };
+  };
   const sttAuth = new LocalSttAuth();
   const wispr = new WisprService({
     cfg, store, clock, anyListening: () => hub.anyListening(),
@@ -230,9 +325,45 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
     cfg, clock, bus, store, embedder, triager, intents, backend, emit, hub: hubIface, metrics, autonomy, controls: privacy, asides,
     onRecallQuery: (t, dev) => trackRecall(recall.answerForThought(t, dev).catch((e) => log.warn("recall", `failed: ${(e as Error).message}`))),
     vocabulary: () => store.topDictionary(40),
+    team: () => profile.team(),
   });
   privacy.attachEngine(engine);
   const proactive = new ProactiveEngine({ cfg, clock, bus, store, embedder, hub: hubIface, emit, recall, deep, outbox, privacy, audit, asides });
+
+  const capture = new CaptureService({
+    db, clock, store, engine, isPaused: () => privacy.isPaused(), stt: captureStt, emit, ttlHours: cfg.memory.ttlHours,
+    batch: () => (privacy.localOnly || !batchDrafter ? null : batchDrafter),
+    presets,
+    user: () => ({ name: cfg.user.firstName, team: profile.team().map((m) => m.name), timezone: profile.get().timezone }),
+  });
+  const routing = new RoutingService({ store, profile, capture, github, clock, emit });
+  store.decorateArtifact = (a) => routing.view(a);
+  outbox.connect({ github: () => github.api(), repoFor: (a) => routing.repoFor(a) });
+  profile.attachLlm(deep);
+
+  // V1.1: offline drafts (Groq out of budget) are re-drafted in place once budget returns; hand edits are never overwritten
+  const edited = new Set<string>();
+  bus.on("artifact.edited", ({ artifactId }) => void edited.add(artifactId));
+  const redraft = new RedraftQueue({
+    state: (id) => {
+      const t = store.getThought(id);
+      if (!t || t.category === "correction" || t.retracted) return undefined;
+      const a = t.artifactId ? store.artifacts.get(t.artifactId) : undefined;
+      return { source: t.source, ...(t.degraded ? { degraded: t.degraded } : {}), ...(a ? { artifactStatus: a.status, edited: edited.has(a.id) } : {}) };
+    },
+    reanalyze: (id) => engine.reanalyze(id),
+    setImproving: (id, on) => engine.setImproving(id, on),
+    budget:
+      opts.redraftBudget ??
+      (() => {
+        if (privacy.localOnly || !liveBackend) return false;
+        if (!groq) return true;
+        if (groq.disabledReasonFor(cfg.llm.fast)) return false;
+        return (groq.stats().models[cfg.llm.fast]?.bucketTokens ?? 0) >= 3500; // one more per-thought call fits the free tier's minute
+      }),
+  });
+  bus.on("thought.updated", ({ thoughtId }) => redraft.consider(thoughtId));
+  privacy.attachProfile({ profile: () => profile.get(), resetProfile: () => profile.reset(), forgetGithub: () => github.forget() });
 
   const consolidator = new Consolidator({ cfg, clock, store, embedder, deep, emit, audit, isPaused: () => privacy.isPaused() });
 
@@ -253,10 +384,12 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
     threadCloseMs: cfg.memory.threadCloseMs,
     dev: cfg.dev,
     integrations: { github: outbox.githubReady(), jira: outbox.jiraReady() },
+    ...(auth.publicOrigin ? { publicUrl: auth.publicOrigin } : {}),
+    passcodeSet: auth.enabled,
   });
 
   Object.assign(services, {
-    cfg, clock, bus, store, engine, privacy, metrics, battery, wispr, outbox, audit, trust, asides,
+    cfg, clock, bus, store, engine, privacy, metrics, battery, wispr, outbox, audit, trust, auth, asides,
     recall: () => recall,
     proactive: () => proactive,
     clientConfig,
@@ -264,17 +397,22 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
 
   // ---- http
   const fastify = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024 });
-  await fastify.register(cors, { origin: (origin, cb) => cb(null, isAllowedOrigin(origin ?? undefined)) });
+  await fastify.register(cors, { origin: (origin, cb) => cb(null, isAllowedOrigin(origin ?? undefined, auth.publicOrigin)), credentials: true });
+  await fastify.register(multipart, { limits: { fileSize: MAX_CAPTURE_BYTES, files: 1, fields: 8, fieldSize: 64 * 1024 } });
   await hub.register(fastify);
   const speechStt = (): LocalStt | null => (sarvamStt && wispr.sttProvider() === "sarvam" ? sarvamStt : localStt);
-  if (localStt) registerLocalStt(fastify, { stt: () => speechStt() as LocalStt, auth: sttAuth, allowed: () => wispr.localAllowed(), now: () => clock.now() });
+  if (localStt) registerLocalStt(fastify, { stt: () => speechStt() as LocalStt, auth: sttAuth, allowed: () => wispr.localAllowed(), now: () => clock.now(), publicOrigin: () => auth.publicOrigin });
 
   const ctx: AppCtx = {
-    cfg, clock, bus, db, vault, store, embedder, triager, intents, metrics, battery, audit, trust, privacy, outbox, autonomy, engine,
-    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, localStt, speechStt, asides, fastify, clientConfig,
+    cfg, clock, bus, db, vault, store, embedder, triager, intents, metrics, battery, audit, trust, auth, privacy, outbox, autonomy, engine,
+    recall, proactive, consolidator, wispr, deep, hub, mock, live, groq, localStt, speechStt, asides, capture, profile, github, routing, redraft, webServed: false, fastify, clientConfig,
     idleRecall: async () => void (await Promise.allSettled([...pendingRecall])),
   };
   registerRoutes(fastify, ctx);
+  // one origin for pages, API and WebSocket (pnpm start): needed behind a tunnel for the cookie, the service worker and the socket
+  const serveWeb = cfg.remote.serveWeb === "on" || (cfg.remote.serveWeb === "auto" && webDistReady(cfg.remote.webDist));
+  if (serveWeb) await registerWeb(fastify, cfg.remote.webDist);
+  ctx.webServed = serveWeb;
 
   const timers: Array<ReturnType<typeof setInterval>> = [];
 
@@ -284,6 +422,8 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
       proactive.start();
       consolidator.start();
       timers.push(
+        setInterval(() => void redraft.tick(), 5_000),
+        setInterval(() => hub.recheckSessions(), 30_000), // a `pnpm run sessions:revoke` from another process
         setInterval(() => store.sweep(), 60_000),
         setInterval(() => metrics.flush(), 5_000),
       );
@@ -295,7 +435,7 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
       }
     }
     timers.forEach((t) => t.unref?.());
-    banner(cfg, trust.pairingCode, embedder, vault.kekSource, wispr.mode === "local" ? (wispr.sttProvider() === "sarvam" ? `Sarvam cloud speech (${cfg.stt.sarvam.model}, ${cfg.stt.sarvam.languageCode})` : `local (on-device ${cfg.stt.model})`) : wispr.mode, live ? (cfg.llm.provider === "groq" ? `groq ${cfg.llm.fast}` : cfg.llm.fast) : "mock cortex (no LLM)", clientConfig().integrations);
+    banner(cfg, ctx.webServed, trust.pairingCode, embedder, vault.kekSource, wispr.mode === "local" ? (wispr.sttProvider() === "sarvam" ? `Sarvam cloud speech (${cfg.stt.sarvam.model}, ${cfg.stt.sarvam.languageCode})` : `local (on-device ${cfg.stt.model})`) : wispr.mode, live ? (cfg.llm.provider === "groq" ? `groq ${cfg.llm.fast}` : cfg.llm.fast) : "mock cortex (no LLM)", clientConfig().integrations);
   }
 
   async function backendWarm(): Promise<void> {
@@ -329,13 +469,15 @@ function lanAddresses(): string[] {
   return out;
 }
 
-function banner(cfg: Config, code: string, embedder: Embedder, kek: string, wisprMode: string, llm: string, integ: { github: boolean; jira: boolean }): void {
+function banner(cfg: Config, webServed: boolean, code: string, embedder: Embedder, kek: string, wisprMode: string, llm: string, integ: { github: boolean; jira: boolean }): void {
   const lan = lanAddresses()[0];
   const lines = [
     "",
     "  ┌─ Synapse ─────────────────────────────────────────────",
     `  │ server        http://localhost:${cfg.port}   (api + ws)`,
-    `  │ web           http://localhost:${cfg.webPort}${lan ? `   ·  phone: https://${lan}:${cfg.webPort}  (HTTPS=1 pnpm dev:web)` : ""}`,
+    webServed
+      ? `  │ web           http://localhost:${cfg.port}   (built app, same port)`
+      : `  │ web           http://localhost:${cfg.webPort}${lan ? `   ·  phone: https://${lan}:${cfg.webPort}  (HTTPS=1 pnpm dev:web)` : ""}`,
     `  │ pairing code  ${code}   (only needed for non-local devices)`,
     `  │ wispr         ${wisprMode}${wisprMode === "mock" ? "  (typed input only; WISPR_MODE=client + WISPR_API_KEY for Wispr, or WISPR_MODE=local for on-device speech)" : ""}`,
     `  │ cortex        ${llm}`,

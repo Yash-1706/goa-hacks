@@ -12,6 +12,7 @@ const TRANSPORT: Record<FragmentTransport, string> = {
   local_stt: "local STT",
   cloud_stt: "Sarvam (cloud STT)",
   mock: "typed / mock",
+  typed: "typed",
   replay: "replay",
 };
 

@@ -3,6 +3,7 @@ import { setDisplayTimezone } from "@/lib/format";
 import { LatencyTracker, afterPaint as realAfterPaint } from "@/lib/latency";
 import { useAudioUi } from "@/state/audio";
 import { useConnection } from "@/state/connection";
+import { useCaptures } from "@/state/captures";
 import { useCalendar, useDevices } from "@/state/devices";
 import { useGraph } from "@/state/graph";
 import { useMetrics } from "@/state/metrics";
@@ -181,6 +182,10 @@ export function createHandlers(deps: HandlerDeps): Handlers {
 
       case "calendar.update":
         useCalendar.getState().set(msg.events);
+        return;
+
+      case "capture.done":
+        useCaptures.getState().upsert(msg.capture);
         return;
 
       case "error": {

@@ -2,6 +2,7 @@ import { memo, useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   BookOpen,
+  BellRing,
   CalendarClock,
   Check,
   CheckCheck,
@@ -46,6 +47,7 @@ export const KIND_ICON: Record<ArtifactKind, LucideIcon> = {
   email_draft: Mail,
   message_draft: MessageSquare,
   calendar_event: CalendarClock,
+  reminder: BellRing,
   code_snippet: Code2,
   code_comment: FileCode2,
   decision: GitBranch,
@@ -59,6 +61,7 @@ export const STATUS_ICON: Record<ArtifactStatus, LucideIcon> = {
   draft: PenLine,
   staged: PackageCheck,
   accepted: CheckCheck,
+  opened: ExternalLink,
   executed: Rocket,
   dismissed: CircleSlash,
   undone: Undo2,

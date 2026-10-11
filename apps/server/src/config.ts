@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { parseTunnelSetting, type TunnelSetting } from "./tunnel";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(here, "../../..");
@@ -83,6 +84,8 @@ const EnvSchema = z.object({
   GROQ_OUTPUT_MODE: str("auto"),
   GROQ_TPM: num(7000),
   GROQ_MAX_WAIT_MS: num(2000),
+  // V1.1: a whole capture (phone upload, capture box) may wait this long for the free tier's budget; the live mic keeps GROQ_MAX_WAIT_MS
+  GROQ_CAPTURE_MAX_WAIT_MS: num(25000),
   GROQ_MAX_REQUESTS_PER_DAY: num(900),
 
   EMBEDDINGS: str("model"),
@@ -104,8 +107,23 @@ const EnvSchema = z.object({
   RECURRING_WINDOW_MIN: num(10),
   SUGGESTION_MIN_GAP_S: num(120),
 
+  // --- V1 remote access: the passcode for phones and other clients, and the public URL they reach this server on
+  SYNAPSE_PASSCODE: str(""),
+  // set by `TUNNEL=1` automatically; set it yourself for a named tunnel or a reverse proxy (https://synapse.example.com)
+  PUBLIC_URL: str(""),
+  // V1.1: auto (or 1) = Tailscale Funnel, else ngrok's static domain, else a cloudflared quick tunnel; or name one; 0 = none
+  TUNNEL: str("0"),
+  // ngrok's free static domain (e.g. calm-otter-1234.ngrok-free.app), used when TUNNEL=ngrok or auto finds no Tailscale
+  NGROK_DOMAIN: str(""),
+  // serve the built web app (apps/web/dist) from this server: one origin for pages, API and WebSocket. auto = when the build exists
+  SERVE_WEB: str("auto"),
+
   GITHUB_TOKEN: str(""),
   GITHUB_REPO: str(""),
+  // V1: a throwaway repo for real issue tests; seeds the profile's default repo the first time
+  GITHUB_SANDBOX_REPO: str(""),
+  // the GitHub REST API (tests point it at a recording fake)
+  GITHUB_API_URL: str("https://api.github.com"),
   JIRA_BASE_URL: str(""),
   JIRA_EMAIL: str(""),
   JIRA_API_TOKEN: str(""),
@@ -174,6 +192,8 @@ export interface Config {
       tpm: number;
       /** longest a call may queue for the budget before it degrades to the local cortex */
       maxWaitMs: number;
+      /** the capture path (one call per capture) waits longer: a phone upload has no live listener to keep up with */
+      captureMaxWaitMs: number;
       /** local safety cap on requests per UTC day (the free tier allows 1,000); 0 = no cap */
       maxRequestsPerDay: number;
     };
@@ -188,9 +208,11 @@ export interface Config {
     threadCloseMs: number;
   };
   privacy: { localOnly: boolean; requirePairing: boolean; pseudonymize: boolean };
+  /** V1 remote access */
+  remote: { passcode: string; publicUrl: string; tunnel: TunnelSetting; ngrokDomain: string; serveWeb: "auto" | "on" | "off"; webDist: string };
   proactive: { autonomyLevel: number; recurringN: number; recurringWindowMin: number; minGapMs: number };
   integrations: {
-    github: { token: string; repo: string };
+    github: { token: string; repo: string; sandboxRepo: string; apiBase: string };
     jira: { baseUrl: string; email: string; token: string; projectKey: string };
   };
 }
@@ -289,6 +311,7 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
         outputMode: groqMode,
         tpm: Math.max(500, raw.GROQ_TPM),
         maxWaitMs: Math.max(0, raw.GROQ_MAX_WAIT_MS),
+        captureMaxWaitMs: Math.max(0, raw.GROQ_CAPTURE_MAX_WAIT_MS),
         maxRequestsPerDay: Math.max(0, Math.round(raw.GROQ_MAX_REQUESTS_PER_DAY)),
       },
     },
@@ -311,6 +334,14 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
       requirePairing: raw.REQUIRE_PAIRING,
       pseudonymize: raw.PSEUDONYMIZE_PERSONS,
     },
+    remote: {
+      passcode: raw.SYNAPSE_PASSCODE,
+      publicUrl: raw.PUBLIC_URL,
+      tunnel: parseTunnelSetting(raw.TUNNEL),
+      ngrokDomain: raw.NGROK_DOMAIN.trim(),
+      serveWeb: ["1", "true", "on", "yes"].includes(raw.SERVE_WEB.toLowerCase()) ? "on" : ["0", "false", "off", "no"].includes(raw.SERVE_WEB.toLowerCase()) ? "off" : "auto",
+      webDist: path.resolve(REPO_ROOT, "apps/web/dist"),
+    },
     proactive: {
       autonomyLevel: Math.max(0, Math.min(3, Math.round(raw.AUTONOMY_LEVEL))),
       recurringN: Math.max(2, Math.round(raw.RECURRING_N)),
@@ -318,7 +349,7 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
       minGapMs: Math.max(0, raw.SUGGESTION_MIN_GAP_S) * 1000,
     },
     integrations: {
-      github: { token: raw.GITHUB_TOKEN, repo: raw.GITHUB_REPO },
+      github: { token: raw.GITHUB_TOKEN, repo: raw.GITHUB_REPO, sandboxRepo: raw.GITHUB_SANDBOX_REPO, apiBase: raw.GITHUB_API_URL.replace(/\/$/, "") },
       jira: {
         baseUrl: raw.JIRA_BASE_URL.replace(/\/$/, ""),
         email: raw.JIRA_EMAIL,

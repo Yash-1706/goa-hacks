@@ -108,6 +108,7 @@ export const KIND_TINT: Record<ArtifactKind, string> = {
   email_draft: "#38bdf8",
   message_draft: "#38bdf8",
   calendar_event: "#fbbf24",
+  reminder: "#fbbf24",
   code_snippet: "#34d399",
   code_comment: "#34d399",
   decision: "#e879f9",

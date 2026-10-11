@@ -7,6 +7,8 @@ import { log } from "../log";
 import type { MemoryStore } from "../memory/store";
 import type { ArtifactRec, ThoughtRec } from "../memory/types";
 import type { AuditChain } from "../privacy/audit";
+import { GithubApi } from "../profile/github";
+import { issueBody } from "../routing/router";
 import { fmtSlot, toIcs } from "./calendar";
 
 /* ============================================================================
@@ -30,6 +32,10 @@ export interface PushResult {
 
 export class Outbox {
   private simCounter = 0;
+  /** one push per card at a time: a double tap or a retried request shares the first push (never two issues) */
+  private pushing = new Map<string, Promise<PushResult>>();
+  /** V1: the connected GitHub account and the per-artifact repo (late-bound: routing needs the profile and captures) */
+  private links: { github: () => GithubApi | null; repoFor: (a: ArtifactRec) => string | null } | null = null;
 
   constructor(
     private d: { cfg: Config; store: MemoryStore; clock: Clock; audit: AuditChain; emit: EmitFn; bus: Bus },
@@ -37,9 +43,21 @@ export class Outbox {
     this.simCounter = Number(d.store.db.getSetting("sim_counter") ?? 0);
   }
 
-  githubReady(): boolean {
+  connect(links: { github: () => GithubApi | null; repoFor: (a: ArtifactRec) => string | null }): void {
+    this.links = links;
+  }
+
+  private githubApi(): GithubApi | null {
     const g = this.d.cfg.integrations.github;
-    return Boolean(g.token && /^[^/\s]+\/[^/\s]+$/.test(g.repo));
+    return this.links?.github() ?? (g.token ? new GithubApi(g.token, g.apiBase) : null);
+  }
+
+  private repoFor(a: ArtifactRec): string | null {
+    return this.links?.repoFor(a) ?? (/^[^/\s]+\/[^/\s]+$/.test(this.d.cfg.integrations.github.repo) ? this.d.cfg.integrations.github.repo : null);
+  }
+
+  githubReady(): boolean {
+    return Boolean(this.githubApi());
   }
   jiraReady(): boolean {
     const j = this.d.cfg.integrations.jira;
@@ -56,7 +74,8 @@ export class Outbox {
    * own calendar qualify. Jira (assignees/watchers get notified) and anything with attendees do not.
    */
   isSelfOnly(a: ArtifactRec): boolean {
-    if (a.kind === "github_issue") return true;
+    // a real issue in a team repo notifies its watchers: only the sandbox repo (or a simulation) is self-only
+    if (a.kind === "github_issue") return !this.githubReady() || (Boolean(this.d.cfg.integrations.github.sandboxRepo) && this.repoFor(a) === this.d.cfg.integrations.github.sandboxRepo);
     if (a.kind === "calendar_event") {
       const p = a.payload as ArtifactOf<"calendar_event">;
       return p.attendees.length === 0 && Boolean(p.start_iso);
@@ -70,10 +89,19 @@ export class Outbox {
     if (!this.isExternal(a.kind)) return { ok: false, reason: "nothing to push: copy or open the draft" };
     if (a.status === "executed") return { ok: false, reason: "already pushed" };
     if (a.kind === "calendar_event" && !(a.payload as ArtifactOf<"calendar_event">).start_iso) return { ok: false, reason: "needs a time: say when" };
+    if (a.kind === "github_issue" && this.links && !this.repoFor(a)) return { ok: false, reason: "needs a repo: answer “Which repo?”" };
     return { ok: true };
   }
 
-  async push(a: ArtifactRec): Promise<PushResult> {
+  push(a: ArtifactRec): Promise<PushResult> {
+    const running = this.pushing.get(a.id);
+    if (running) return running;
+    const p = this.pushOnce(a).finally(() => this.pushing.delete(a.id));
+    this.pushing.set(a.id, p);
+    return p;
+  }
+
+  private async pushOnce(a: ArtifactRec): Promise<PushResult> {
     const gate = this.pushability(a);
     if (!gate.ok) throw new Error(gate.reason);
     const t = this.d.store.getThought(a.thoughtId);
@@ -157,6 +185,7 @@ export class Outbox {
     const next = { ...a.payload, ...patch, kind: a.kind } as Artifact;
     a.payload = next;
     this.d.store.saveArtifact(a);
+    this.d.bus.emit("artifact.edited", { artifactId: a.id, thoughtId: a.thoughtId });
     this.d.emit({ type: "artifact.upsert", thoughtId: a.thoughtId, artifact: this.d.store.artifactView(a) });
   }
 
@@ -171,7 +200,42 @@ export class Outbox {
     return null;
   }
 
+  /**
+   * A link handoff (Gmail draft opened, calendar event added): the card is "Opened" until the user taps Done (opening an app is
+   * not the same as sending). Nothing is sent by Synapse. Idempotent; never overwrites a card that was really shipped.
+   */
+  markShipped(a: ArtifactRec, via: string): void {
+    if (a.status === "opened") return;
+    if (a.status === "executed" || a.status === "dismissed" || a.status === "undone") throw new Error(`this card is already ${a.status === "executed" ? "done" : a.status}`);
+    a.status = "opened";
+    a.externalRef = `opened:${via.replace(/[^\w-]/g, "").slice(0, 24)}`;
+    a.simulated = false;
+    this.d.store.saveArtifact(a);
+    this.d.audit.append("artifact_handed_off", `${a.kind}:${via.slice(0, 24)}`, 1);
+    this.d.bus.emit("artifact.status", { artifactId: a.id, thoughtId: a.thoughtId, status: "opened" });
+    this.d.emit({ type: "artifact.upsert", thoughtId: a.thoughtId, artifact: this.d.store.artifactView(a) });
+  }
+
+  /** The one tap after a handoff: the card moves to Done. Idempotent. */
+  markDone(a: ArtifactRec): void {
+    if (a.status === "executed") return;
+    if (a.status === "dismissed" || a.status === "undone") throw new Error(`this card is ${a.status}`);
+    a.status = "executed";
+    this.d.store.saveArtifact(a);
+    const t = this.d.store.getThought(a.thoughtId);
+    if (t && !t.promoted) this.d.store.promote(t, [...t.salienceReasons, "you shipped it"]);
+    this.d.bus.emit("artifact.status", { artifactId: a.id, thoughtId: a.thoughtId, status: "executed" });
+    this.d.emit({ type: "artifact.upsert", thoughtId: a.thoughtId, artifact: this.d.store.artifactView(a) });
+  }
+
   ics(a: ArtifactRec): string | null {
+    if (a.kind === "reminder") {
+      const p = a.payload as ArtifactOf<"reminder">;
+      const due = a.route?.dueAt ?? p.due_iso;
+      const start = due ? Date.parse(due) : NaN;
+      if (!Number.isFinite(start)) return null;
+      return toIcs({ id: a.id, title: p.what, start, end: start + 15 * 60_000, description: "Reminder from Synapse", alarmMinutes: 0 });
+    }
     if (a.kind !== "calendar_event") return null;
     const p = a.payload as ArtifactOf<"calendar_event">;
     const start = p.start_iso ? Date.parse(p.start_iso) : NaN;
@@ -188,32 +252,21 @@ export class Outbox {
     return `${prefix}-${100 + this.simCounter}`;
   }
 
-  private async pushGithub(a: ArtifactRec, t: ThoughtRec | undefined): Promise<PushResult> {
+  private async pushGithub(a: ArtifactRec, _t: ThoughtRec | undefined): Promise<PushResult> {
     const p = a.payload as ArtifactOf<"github_issue">;
-    if (!this.githubReady()) return { externalRef: this.nextSim("GH"), simulated: true, system: "github" };
-    const { token, repo } = this.d.cfg.integrations.github;
-    const body = `${p.body_markdown}\n\n---\n_Drafted by Synapse from a voice thought${t ? ` (${t.code})` : ""}._`;
-    const res = await fetch(`https://api.github.com/repos/${repo}/issues`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "synapse-hackathon", "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
-      body: JSON.stringify({ title: p.title, body, labels: p.labels }),
-    });
-    if (!res.ok) throw new Error(`GitHub ${res.status}: ${(await res.text()).slice(0, 160)}`);
-    const j = (await res.json()) as { number: number; html_url: string };
+    const api = this.githubApi();
+    const repo = this.repoFor(a);
+    if (!api || !repo) return { externalRef: this.nextSim("GH"), simulated: true, system: "github" };
+    // the draft plus "Captured by voice with Synapse"; never an internal id (T-12) in something other people read
+    const j = await api.createIssue(repo, { title: p.title, body: issueBody(p), labels: p.labels });
     return { externalRef: `${repo}#${j.number}`, url: j.html_url, simulated: false, system: "github" };
   }
 
   private async githubClose(a: ArtifactRec): Promise<void> {
-    const { token, repo } = this.d.cfg.integrations.github;
-    const m = a.externalRef?.match(/#(\d+)$/);
-    if (!m) return;
-    await fetch(`https://api.github.com/repos/${repo}/issues/${m[1]}`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "synapse-hackathon", "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
-      body: JSON.stringify({ state: "closed", state_reason: "not_planned" }),
-    });
+    const m = a.externalRef?.match(/^([^#\s]+\/[^#\s]+)#(\d+)$/);
+    const api = this.githubApi();
+    if (!m || !api) return;
+    await api.closeIssue(m[1] as string, Number(m[2]));
   }
 
   private async pushJira(a: ArtifactRec, t: ThoughtRec | undefined): Promise<PushResult> {

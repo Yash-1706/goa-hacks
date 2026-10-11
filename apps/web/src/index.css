@@ -10,4 +10,8 @@
 @import "./styles/graph.css";
 @import "./styles/lab.css";
 @import "./styles/outbox.css";
+@import "./styles/capture.css";
+@import "./styles/ship.css";
+@import "./styles/inbox.css";
+@import "./styles/settings.css";
 @import "./styles/unify.css";

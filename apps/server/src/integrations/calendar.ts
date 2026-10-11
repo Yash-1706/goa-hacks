@@ -77,7 +77,7 @@ export function fmtSlot(ms: number, tz: string, now: number): string {
 const icsDate = (ms: number): string => new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 const esc = (s: string): string => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
 
-export function toIcs(e: { id: string; title: string; start: number; end: number; description?: string }): string {
+export function toIcs(e: { id: string; title: string; start: number; end: number; description?: string; /** a display alarm this many minutes before the start */ alarmMinutes?: number }): string {
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -91,6 +91,7 @@ export function toIcs(e: { id: string; title: string; start: number; end: number
     `DTEND:${icsDate(e.end)}`,
     `SUMMARY:${esc(e.title)}`,
     e.description ? `DESCRIPTION:${esc(e.description)}` : "",
+    ...(e.alarmMinutes !== undefined ? ["BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${esc(e.title)}`, `TRIGGER:-PT${Math.max(0, Math.round(e.alarmMinutes))}M`, "END:VALARM"] : []),
     "END:VEVENT",
     "END:VCALENDAR",
   ]

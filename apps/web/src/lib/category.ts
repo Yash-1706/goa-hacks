@@ -50,6 +50,7 @@ export const ARTIFACT_LABEL: Record<ArtifactKind, string> = {
   email_draft: "Email draft",
   message_draft: "Message draft",
   calendar_event: "Calendar event",
+  reminder: "Reminder",
   code_snippet: "Code snippet",
   code_comment: "Code comment",
   decision: "Decision",

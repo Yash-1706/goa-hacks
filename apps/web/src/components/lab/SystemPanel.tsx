@@ -172,7 +172,7 @@ export const SystemPanel = memo(function SystemPanel({ health, settings }: { hea
               badge={localOnly === undefined ? <B kind="off">–</B> : localOnly ? <B kind="warn">on</B> : <B kind="off">off</B>}
             >
               {localOnly ? "No cloud model calls. " : "Cloud model calls are allowed, with redaction first. "}
-              <Link to="/privacy">Privacy Center</Link>
+              <Link to="/app/settings/privacy">Privacy Center</Link>
             </Mode>
             <Mode
               icon={<GitBranch size={16} />}

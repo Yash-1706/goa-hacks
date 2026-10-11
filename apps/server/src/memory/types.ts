@@ -136,6 +136,8 @@ export interface ArtifactRec {
   updatedAt: number;
   expiresAt: number | null;
   keyId: string;
+  /** V1 routing answers: repo, recipients by name, due time */
+  route?: { repo?: string; to?: Record<string, string[]>; dueAt?: string };
 }
 
 export interface OpenLoopRec {
