@@ -54,7 +54,7 @@ function checkEnvFile(d: DoctorDeps): Check {
 
 async function checkSarvam(d: DoctorDeps): Promise<Check> {
   const key = d.env.SARVAM_API_KEY;
-  if (!key) return warn("Sarvam", "no SARVAM_API_KEY: phone audio cannot be transcribed", "add SARVAM_API_KEY to .env (dashboard.sarvam.ai)");
+  if (!key) return warn("Sarvam", "no SARVAM_API_KEY: phone recordings use on-device Whisper (English only)", "add SARVAM_API_KEY to .env (dashboard.sarvam.ai)");
   const stt = new SarvamStt({
     apiKey: key,
     baseUrl: d.env.SARVAM_BASE_URL || "https://api.sarvam.ai",
@@ -72,7 +72,7 @@ async function checkSarvam(d: DoctorDeps): Promise<Check> {
       if (err.status === 401 || err.status === 403) return fail("Sarvam", `key rejected (HTTP ${err.status})`, "check SARVAM_API_KEY in .env");
       return warn("Sarvam", `HTTP ${err.status}${err.code ? ` ${err.code}` : ""}`, "check your Sarvam quota and plan");
     }
-    return warn("Sarvam", "could not reach api.sarvam.ai", "check the network, then run pnpm doctor again");
+    return warn("Sarvam", "could not reach api.sarvam.ai", "check the network, then run pnpm run doctor again");
   } finally {
     silence.fill(0);
   }
@@ -88,7 +88,7 @@ async function checkGroq(d: DoctorDeps): Promise<Check> {
     if (res.status === 401 || res.status === 403) return fail("Groq", `key rejected (HTTP ${res.status})`, "check GROQ_API_KEY in .env");
     return warn("Groq", `HTTP ${res.status}`, "try again in a minute");
   } catch {
-    return warn("Groq", "could not reach api.groq.com", "check the network, then run pnpm doctor again");
+    return warn("Groq", "could not reach api.groq.com", "check the network, then run pnpm run doctor again");
   }
 }
 
@@ -127,7 +127,7 @@ async function checkGithub(d: DoctorDeps): Promise<Check> {
     }
     return fail("GitHub", `token from ${via} rejected (HTTP ${res.status})`, via === "gh auth token" ? "gh auth refresh" : "replace GITHUB_TOKEN in .env");
   } catch {
-    return warn("GitHub", "could not reach api.github.com", "check the network, then run pnpm doctor again");
+    return warn("GitHub", "could not reach api.github.com", "check the network, then run pnpm run doctor again");
   }
 }
 

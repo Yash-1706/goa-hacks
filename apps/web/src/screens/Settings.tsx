@@ -56,6 +56,38 @@ function LocalOnlyToggle() {
   );
 }
 
+/** The capture-only token (for an iPhone Shortcut or the Mac app later): POST /api/capture and nothing else. */
+function CaptureToken() {
+  const [token, setToken] = useState<string | null>(null);
+  const call = async (rotate: boolean): Promise<void> => {
+    try {
+      const r = await fetch(rotate ? "/api/auth/capture-token/rotate" : "/api/auth/capture-token", { method: rotate ? "POST" : "GET", credentials: "same-origin" });
+      const j = (await r.json()) as { token?: string; error?: string };
+      if (!r.ok || !j.token) throw new Error(j.error ?? `HTTP ${r.status}`);
+      setToken(j.token);
+    } catch (e) {
+      toast.warn((e as Error).message);
+    }
+  };
+  return token ? (
+    <div className="set-stack">
+      <input className="input" readOnly value={token} aria-label="Capture token" onFocus={(e) => e.target.select()} />
+      <div className="set-row">
+        <button type="button" className="btn btn-sm" onClick={() => void navigator.clipboard?.writeText(token).then(() => toast.success("Copied"))}>
+          Copy
+        </button>
+        <button type="button" className="btn btn-sm" onClick={() => void call(true)}>
+          Replace it (the old one stops working)
+        </button>
+      </div>
+    </div>
+  ) : (
+    <button type="button" className="btn btn-sm" onClick={() => void call(false)}>
+      Show the capture token
+    </button>
+  );
+}
+
 function ProfileTab() {
   const [, bump] = useState(0);
   const logout = useAuth((s) => s.logout);
@@ -73,11 +105,16 @@ function ProfileTab() {
         <ProfileEditor />
       </Card>
       {passcodeSet ? (
-        <Card title="This device">
-          <button type="button" className="btn" onClick={() => void logout()}>
-            Sign out
-          </button>
-        </Card>
+        <>
+          <Card title="Shortcuts and other apps" hint="A token that can only send captures (POST /api/capture with Authorization: Bearer …). For an iPhone Shortcut or a script.">
+            <CaptureToken />
+          </Card>
+          <Card title="This device">
+            <button type="button" className="btn" onClick={() => void logout()}>
+              Sign out
+            </button>
+          </Card>
+        </>
       ) : null}
     </div>
   );

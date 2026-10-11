@@ -1,103 +1,76 @@
-# Synapse: your voice is a second brain
+# Synapse
 
-> WhisperFlow Hackathon 2026 · **Problem Statement 4: Ambient Cognitive Offloading** · built on the **Wispr Flow API**
+Ramble out loud on your phone or laptop, and Synapse turns it into finished things you can ship: a GitHub issue, an email draft, a reminder, a note. It skips the asides, asks one question when it needs a fact, remembers everything, and answers questions about what you said.
 
-Think out loud: mumble, backtrack, whisper. Synapse stitches the fragments into thoughts, works out what you *meant*, and quietly turns them into tickets, GitHub issues, email drafts, calendar holds, code snippets and decisions, with **no commands**. It remembers selectively (a knowledge graph you can query by vague voice questions), speaks up only at natural pauses, and forgets by default. Say *"pause memory"* and the microphone is released.
+<!-- 30-second demo GIF goes here (record with docs/DEMO_V1.md). Until then: -->
+<p>
+  <img src="docs/screenshots/v1/capture-cards-390.png" alt="The phone app: one ramble made a GitHub issue, an email draft and a reminder" width="260">
+  &nbsp;
+  <img src="docs/screenshots/v1/inbox-cards-1440.png" alt="The laptop Inbox with the same cards, each one tap from done" width="560">
+</p>
 
-| | |
-|---|---|
-| Product spec | [docs/PRD.md](docs/PRD.md) · research: [docs/RESEARCH.md](docs/RESEARCH.md) |
-| Technical spec | [docs/TRD.md](docs/TRD.md) · as-built architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Deliverables | [Architecture diagram](docs/ARCHITECTURE.md) · [Latency benchmark](docs/LATENCY.md) · [Privacy whitepaper](docs/PRIVACY_WHITEPAPER.md) · [Failure modes](docs/FAILURE_MODES.md) · [Eval](docs/EVAL.md) · [Demo script](docs/DEMO_SCRIPT.md) · [Pitch](docs/PITCH.md) |
+## What you can say, and what you get
 
-## Quickstart (no keys, no accounts)
+One breath can hold several things. Synapse splits them, drops the asides, and gives each one a single primary button.
 
-Needs Node 22.12 or newer and pnpm 10. Use Chrome or Edge for the microphone.
+> “That bug from yesterday… the null pointer in cart service, probably the discount code. Oh, and email the team that the launch moves to Friday. Remind me to call the landlord tomorrow at 6. Wait, was that my phone?”
 
-```bash
-pnpm install
-cp .env.example .env     # PowerShell: Copy-Item .env.example .env
-pnpm dev                 # API + WebSocket on :8787, web UI on http://localhost:5173
-```
-
-Open **http://localhost:5173**, tap the orb and think out loud. The shipped `.env.example` sets `WISPR_MODE=local`: your speech is transcribed by Whisper **on your own machine** (no key, no account, nothing leaves it). The first start downloads two small models (about 65 MB) into `data/models`; after that it works offline. Try: *"That bug from yesterday... the one with the null pointer... in the cart service... probably the discount code."* and watch the fragments become one GitHub-issue card. No microphone? Press **K** on the Desk and type, or run `pnpm replay scripts/replay/s1_bug.json`. With **no `.env` at all** the app starts in **mock mode** (typed input and a deterministic local cortex), so it always runs.
-
-Add keys to go further (edit `.env`, never commit it):
-
-| Variable | Needed for |
-|---|---|
-| `WISPR_API_KEY` + `WISPR_MODE=client` | live microphone transcription (API access is by approval from Wispr: ask the organizers) |
-| `WISPR_MODE=local` (no key) | a real voice path with no key and no cloud: Whisper on this machine (see *On-device speech* below) |
-| `ANTHROPIC_API_KEY` + `LLM_MODE=live` | the real cortex (Haiku 4.5 hot path, Opus 5.5 recall/brief) |
-| `GROQ_API_KEY` + `LLM_MODE=live` | the same pipeline on Groq's free tier when there is no Anthropic key (gpt-oss hot path and recall/brief; see *Groq notes* below). `LLM_PROVIDER=auto` (default) prefers Anthropic when both keys exist; force one with `LLM_PROVIDER=anthropic` or `groq` |
-| `GITHUB_TOKEN` + `GITHUB_REPO` (`owner/repo`) | real GitHub issues (otherwise clearly-labelled simulation) |
-| `JIRA_*` | real Jira tickets (otherwise simulated) |
-| `SYNAPSE_PASSPHRASE` | portable encryption key (default: OS credential store, else a key file) |
-
-Before a demo: `pnpm --filter @synapse/server warm-models` (caches the local embedding model so it works offline).
-
-### Groq (free tier) notes
-
-No Anthropic key yet? A Groq key (`GROQ_API_KEY`, plus `LLM_MODE=live`) runs the same pipeline: the top-bar chip reads `live groq qwen3.8-27b` and the Privacy Center names Groq as the cloud stop. `LLM_PROVIDER=auto` (the default) uses Claude when both keys exist; `LLM_PROVIDER=groq|anthropic` forces one. Text is redacted before every call exactly as for Claude, `/api/health` and the audit trail name the provider (`groq:<model>`), and `LOCAL_ONLY=1` still sends nothing.
-
-| | default | why (live comparison, 18 mixed inputs per model, same prompt) |
+| You said | You get | One tap |
 |---|---|---|
-| hot path `GROQ_MODEL_FAST` | `qwen/qwen3.8-27b` | 17/18 categories right, 18/18 artifact kinds, p50 0.95 s per call; `gpt-oss-120b` 14/18 (1.27 s), `gpt-oss-20b` 13/18 (1.05 s); valid JSON 18/18 for all three |
-| recall answer, brief, consolidation `GROQ_MODEL_DEEP` | `openai/gpt-oss-120b` | a larger reasoning model (`reasoning_effort` medium) on its own per-model budget, so a capture burst that empties the hot path's minute cannot starve a recall answer; a recall answer takes ~1.2 s |
+| a bug, a crash, something broken | **GitHub issue** with a summary, what you saw and your suspected cause, filed to the right repo | **Create issue** (for real when GitHub is connected, otherwise a prefilled GitHub page) |
+| “email…”, “tell the team…” | **Email draft** in your voice, addressed from your contacts | **Open draft** (Gmail on the laptop, your mail app on the phone) |
+| “remind me…” | **Reminder** at the time you said (“tomorrow at 6” is 18:00 your time) | **Add to calendar** (Google Calendar, or an `.ics` with an alarm) |
+| an idea, a decision, a note to self | **Note**, saved and searchable | nothing to ship: ask about it later |
 
-What the free tier means in practice (measured on a free key):
+If Synapse needs a fact it doesn't have (which repo, Dev's email, what time), the card asks once with tap-able answers, and remembers. Say “actually make it 7” and the reminder moves. Nothing reaches another person without your tap.
 
-- **8,000 tokens per minute and 1,000 requests per day, metered per model.** A call is admitted only while the model's remaining tokens cover its prompt *plus* `max_completion_tokens`; a prompt over 8,000 is rejected outright (HTTP 413). The 8.5k-token Claude prompt can never be sent, so Groq gets the ~2k-token contract in `cortex/prompts-lite.ts` (rules, category precedence, every artifact's fields, privacy prohibitions, two worked examples). A call costs about 2.6k tokens in all, so roughly **2.5 live calls per minute** per model after the first two or three. No prompt caching was reported on this tier.
-- **There is also a per-model DAILY token cap** (HTTP 429 `rate_limit_exceeded (TPD)`). Heavy testing on this key exhausted `qwen/qwen3.8-27b` for the day, while `openai/gpt-oss-120b` still had budget and produced a live card end to end (category bug, artifact github_issue, confidence 0.92). Groq meters per model, so the client pauses only the model that was refused (a daily limit for as long as the server says, up to 30 minutes; a minute limit for two at most), and the fast cortex **fails over to the other model** (`llm/failover.ts`): with the default pair, a day on which Qwen is capped is served by `gpt-oss-120b`, the server log says so once, the card is still `source: llm`, and the privacy ledger names every call. Only when both models are capped does a card fall back to the local cortex with `degraded: rate_limit`. The two daily caps are all there is, so keep demo-day experiments modest.
-- **The client paces itself** (`llm/groq-client.ts`): a token bucket per model (`GROQ_TPM`, default 7,000), a call waits at most `GROQ_MAX_WAIT_MS` (2 s) for the budget and otherwise falls back to the local cortex with a `degraded: paced` badge instead of earning a 429. A 429 is never retried (`retry-after` cool-down), an auth failure switches the path off for 60 s, a dead connection for 4 s, `GROQ_MAX_REQUESTS_PER_DAY` (900) caps the day, and the response headers correct the bucket if the key is shared.
-- **Expect degradation under a burst.** The engine makes one call per fragment when fragments arrive faster than a call finishes. Simulated with the real client against a fake that enforces Groq's admission rule (prompt 2.3k, answer 0.3k, 2 s patience): one single-fragment thought every 30 s stays 100% live; every 15 s 83%; every 10 s 67%; 2-fragment thoughts every 20 s 50%; 3-fragment thoughts every 20 s 33%; eight fragments in 12 s 25% (the first two). Never a 429. `GROQ_MAX_WAIT_MS=6000` trades latency for a few more live answers; `GROQ_TPM`/`GROQ_MAX_REQUESTS_PER_DAY` can be raised on a paid plan.
-- **Cards appear whole, not typing in.** In JSON modes Groq delivers the answer as one chunk (gpt-oss after its reasoning), so there is no partial card to stream. `GROQ_OUTPUT_MODE=text` streams token by token (the card fills in from ~0.5 s) but gives up Groq's JSON guarantee (zod and one repair retry still apply). Strict `json_schema` works but costs ~1.5k extra prompt tokens on gpt-oss.
-- **Watching it:** `/api/health` → `groq` (requests today, tokens left this minute, per-model buckets) and the Lab's System panel. `pnpm eval --live --limit 5 --budget 36` and `pnpm bench --live --limit 4 --runs 1 --budget 10` write `docs/EVAL.groq.md` / `docs/LATENCY.groq.md` and label the provider and model in the header (so far only a small, diluted eval run exists: `docs/EVAL.groq.md`; the Groq bench has not been run); the committed `docs/EVAL.md` and `docs/LATENCY.md` stay the offline numbers. A live run builds ONE client for all its apps (the budget belongs to the key), waits out cool-downs instead of racing through them, and on Groq seeds the recall section's memories with the local cortex (`--live-recall` for live seeding) to save ~14 requests.
-- **Switching back:** unset `GROQ_API_KEY` or set `LLM_PROVIDER=anthropic`; nothing else changes.
+## Set up in 5 steps (macOS)
 
-### On-device speech (no key, no cloud)
+1. **Install.** Node 22.12+ and pnpm 10, then:
+   ```bash
+   pnpm install
+   brew install cloudflared      # lets your phone reach this Mac from anywhere
+   ```
+2. **Add your keys.** `cp .env.example .env`, then set:
+   ```bash
+   SARVAM_API_KEY=...        # speech to text for phone recordings (dashboard.sarvam.ai)
+   GROQ_API_KEY=...          # the model that writes the cards (free at console.groq.com/keys)
+   LLM_MODE=live
+   SYNAPSE_PASSCODE=...      # a passphrase you'll type once on your phone
+   ```
+   Every key is optional: without them Synapse runs on-device speech and an offline model.
+3. **Check it.** `pnpm run doctor` prints ✅ / ⚠️ / ❌ for every piece with a one-line fix.
+4. **Start it with a tunnel.** `TUNNEL=1 pnpm start` builds the app, serves it on port 8787 and prints a public `https://…trycloudflare.com` URL with a QR code. (For a URL that never changes, run a [named Cloudflare tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-local-tunnel/) and set `PUBLIC_URL`.)
+5. **On your Android phone,** scan the QR code, sign in with your passcode, and choose **Add to Home screen** in Chrome's menu. Tap the icon, tap the big button, talk, tap again. No signal? The recording waits on the phone and goes up when you're back online.
 
-Wispr Flow is the primary speech engine, but a real voice path also works with **no Wispr key and no internet**: Whisper (`Xenova/whisper-tiny.en`, ONNX, on the CPU through transformers.js) runs inside the server, on the machine you run it on.
+On the laptop, open the same URL (or `http://localhost:8787`). The first run walks you through connecting GitHub, adding people and putting the app on your phone. Every step can be skipped.
 
-- **Turn it on:** `WISPR_MODE=local` in `.env` (nothing else; the model is about 40 MB, downloaded once into `data/models`, then loaded in under 2 s). Tap the orb and talk. Check it with `pnpm wispr:check` (the same first-run tool, now reporting the on-device engine: it speaks a sentence, streams it through the real browser streamer and prints what Whisper heard, the latency and the PASS/FAIL list).
-- **Local-only mode uses it too.** With Wispr configured, switching **Local-only** on in the Privacy Center moves speech to this machine at once on every device (the server broadcasts a `config.update`; a listening microphone drops its Wispr connection, aborts whatever it was streaming and reconnects to the on-device engine, without re-opening the mic). Not one more packet, token or warm-up goes to Wispr; switching it off moves back. Local-only used to cut off only the cloud model; now nothing leaves the machine.
-- **Optional automatic fallback** (`STT_FALLBACK=1`, off by default): when Wispr rejects the key or cannot be reached, the same token request is answered by the on-device engine and the app says why. It is off by default because it is the only case in which, with Wispr configured, audio reaches this server.
-- **How it is built:** the server exposes `/local-stt/client_ws` and `/local-stt/client_api`, which speak Wispr's own client protocol, so the browser's streamer (VAD, packetizer, standby sockets, REST fallback, kill switch) is used unchanged and only the token it is handed points at this machine. The endpoints refuse audio unless the on-device engine is in use; audio lives in memory for one utterance, is transcribed one at a time, and is zero-filled afterwards; nothing is written to disk (`no-audio.test.ts` audits that, and confines it to two modules).
-- **What it costs:** Whisper always reads a 30 s window, so a transcript takes about **0.6 to 1.2 s** after the pause whatever the length (Wispr is faster; the card then appears 0.2 to 0.3 s later). English only with the default model; `STT_MODEL=Xenova/whisper-base.en` is more accurate and about 40 % slower (measured on clean synthetic speech; real accents and rooms are untested).
+## Powered by Wispr Flow
 
-### Phone ("Pocket mode")
-Phones need HTTPS for the microphone. In PowerShell: `$env:HTTPS=1; pnpm dev:web`, open `https://<laptop-ip>:5173/pocket`, accept the self-signed certificate warning once, and enter the **6-digit pairing code** printed in the server console (a paired phone stays paired across restarts). Capture is foreground-only (iOS/Android suspend web audio in the background), so Pocket keeps the screen awake.
+[Wispr Flow](https://wisprflow.ai) is the fastest way to talk to Synapse at your desk. Click the Inbox box (“Type, or hold your Wispr Flow key and talk”), hold your Wispr Flow key and ramble: Wispr types your words in, Enter sends them, and they go through the same pipeline as a phone recording. Synapse can also stream the live microphone straight to the Wispr Flow API (`WISPR_MODE=client` with `WISPR_API_KEY`); see [docs/ENGINEERING.md](docs/ENGINEERING.md).
 
-*Phone can't connect?* Allow Node.js through the Windows firewall on **private** networks (ports 5173 and 8787), put the phone and laptop on the same Wi-Fi (venue Wi-Fi often isolates clients: use a phone hotspot), and use the laptop's LAN address, not `localhost`. Browsers on public websites cannot reach the API: only local/private-network origins are accepted.
+## Privacy
 
-## Commands
+- Audio is never written to the server's disk. A clip is transcribed in memory and wiped; on the phone, a clip waiting for network is stored encrypted and deleted once it's sent.
+- Everything Synapse keeps (thoughts, drafts, your profile, your GitHub token) is encrypted with AES-256-GCM on your Mac. Working memory forgets after 72 hours unless something is worth keeping.
+- API keys stay on your Mac. The browser never sees them.
+- Remote access needs your passcode. Through the tunnel nothing is trusted by default, and only that one public address may talk to the server.
+- Local-only mode (Settings) keeps everything on the Mac: on-device speech and the offline model. Say “pause memory” or “forget what I said about X” at any time.
+
+## Roadmap
+
+- **Mac quick-capture** with a global hotkey that knows the repo open in your editor (the capture API already accepts `context.repo`).
+- **iPhone Shortcut** using the capture-only token from Settings.
+- **Sending from Synapse** to Slack and WhatsApp, still behind one tap.
+- **A webhook output** so any tool can receive the cards.
+
+## More
+
+[Engineering notes](docs/ENGINEERING.md) · [V1 report](docs/V1_REPORT.md) · [2-minute demo](docs/DEMO_V1.md) · [Product spec](docs/PRD.md) · [Technical spec](docs/TRD.md) · [Privacy whitepaper](docs/PRIVACY_WHITEPAPER.md)
 
 | | |
 |---|---|
-| `pnpm dev` | server + web together |
-| `pnpm test` / `pnpm typecheck` | all tests / all type checks |
-| `pnpm replay scripts/replay/s1_bug.json [--speed 4] [--local]` | play a scripted ramble into the running server (watch the UI), or in-process with the offline cortex |
-| `pnpm wispr:check [--rest] [--idle 60]` | the first thing to run once a Wispr key exists: speaks a synthetic sentence through the real token path and streamer and reports the Wispr wire assumptions as PASS / FAIL / UNKNOWN |
-| `apps/web/scripts/voice-smoke/` | the whole browser voice path with no key and no microphone: a synthetic voice is played into the page as the mic (real VAD, packetizer and streamer) against the strict fake Wispr; see its README |
-| `pnpm seed [--reset]` | write ~8 backdated sessions (development aid, always the offline cortex; **the live demo should use real dogfooded sessions**) |
-| `pnpm eval [--live] [--limit N] [--out file]` | score intent, control phrases, reference resolution, recall, nonsense robustness → `docs/EVAL.md`. `--live` uses the configured provider and says so in the report header (`cortex: live groq/<model>`); `--limit N` samples N items per section (a free tier's quota is small); a Groq run writes `docs/EVAL.groq.md` so the committed offline report is never overwritten |
-| `pnpm bench [--live] [--limit N] [--out file]` | per-stage latency benchmark → `docs/LATENCY.md`, `docs/latency.csv` (a Groq run writes `docs/LATENCY.groq.md`) |
-
-## What is verified, and what is not
-
-**Verified here** (900+ automated tests, `pnpm test`; the browser UI and the offline pipeline were also exercised end to end, see `docs/STATUS.md`): the cortex pipeline end to end on the problem statement's own examples (stitching, self-repair, asides, retraction, recurring-concern suggestion, cross-session reference, recall); AES-256-GCM encryption, per-day-key crypto-shredding, cascade deletion, TTL expiry; pause/forget/purge and the hash-chained audit; device pairing and the origin guard over real WebSockets; the Claude backend against a faithful Messages-API streaming fake (partial cards, cache usage, redaction round-trip, auth/rate-limit/refusal/timeout degradation, strict-schema fallback); the Groq backend against a faithful chat-completions fake that enforces Groq's real admission rule (one-chunk and token-by-token answers, repair retry, every degrade path, pacing per model, redaction round trip, local-only blocking every path, the key never leaving the server) and, measured on a free key, `docs/EVAL.groq.md`; the Wispr streamer against a fake WebSocket.
-
-**Not verifiable without credentials/devices, and therefore labelled unverified:** the real Claude API behaviour and latency (`pnpm eval --live`, `pnpm bench --live` with an Anthropic key; with only a Groq key they produce the clearly labelled `*.groq.md` reports instead), the real Wispr WebSocket (assumptions listed in `apps/web/src/audio/README.md`), microphone/VAD behaviour on real whispers, phone background behaviour, real battery deltas.
-
-**Designed but not built:** on-device keyword spotting for an instant local pause, owner-only speaker verification, Google Calendar/Gmail adapters, Wispr `proxy` mode.
-
-## Layout
-
-```
-apps/server     Fastify + WebSocket brain: gate · cortex · memory · recall · proactive · privacy · integrations
-apps/web        React 19 + Vite UI and the browser audio pipeline (VAD, Wispr streaming, sensors)
-packages/shared zod protocol + domain schemas (also the model's structured-output contract)
-eval/           golden corpora (held-out novel phrasings reported separately from the dev set)
-scripts/replay  scripted rambles from the problem statement
-docs/           PRD · TRD · architecture · privacy · failure modes · eval · latency · demo · pitch
-```
+| `pnpm start` | build and serve on :8787 (add `TUNNEL=1` for the phone) |
+| `pnpm dev` | development: API on :8787, web on :5173 |
+| `pnpm run doctor` | what is missing and how to fix it |
+| `pnpm test` · `pnpm typecheck` | tests · type checks |

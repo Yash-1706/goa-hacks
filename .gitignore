@@ -20,6 +20,8 @@ certs/
 *.pcm
 *.webm
 *.ogg
+# except the demo rehearsal's screen recordings (Playwright video: no audio track)
+!docs/screenshots/v1/demo-rehearsal*.webm
 
 .DS_Store
 Thumbs.db
