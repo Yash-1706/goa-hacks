@@ -1,0 +1,21 @@
+{
+  "signedIn": true,
+  "serviceWorker": true,
+  "secondsFromStopToCards": 0.5,
+  "phoneLine": "Made 3 things: GitHub issue · Email · Note",
+  "deskSeesCards": true,
+  "offlineShowsWaiting": true,
+  "serverCapturesWhileOffline": 0,
+  "serverCapturesAfterOnline": 1,
+  "manifest": {
+    "start_url": "/capture",
+    "shortcut": "/capture?autostart=1",
+    "share_target": {
+      "action": "/capture/share",
+      "method": "POST",
+      "files": "audio"
+    },
+    "display": "standalone",
+    "icons": 4
+  }
+}

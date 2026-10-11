@@ -31,7 +31,7 @@ export default defineConfig(async () => {
         { src: nm("onnxruntime-web/dist/ort-wasm-simd-threaded.mjs"), dest: "vad", rename: { stripBase: true } },
       ],
     }),
-    // PWA: Pocket mode is installable. The big VAD assets (/vad/*.wasm, *.onnx) are deliberately NOT precached.
+    // PWA: the phone app (/capture) is installable. The big VAD assets (/vad/*.wasm, *.onnx) are deliberately NOT precached.
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "icon.svg", "apple-touch-icon.png"],
@@ -43,7 +43,7 @@ export default defineConfig(async () => {
         background_color: "#0c0c0d",
         display: "standalone",
         orientation: "portrait",
-        start_url: "/pocket",
+        start_url: "/capture",
         scope: "/",
         categories: ["productivity", "utilities"],
         icons: [
@@ -53,15 +53,24 @@ export default defineConfig(async () => {
           { src: "/icon.svg", sizes: "any", type: "image/svg+xml" },
         ],
         shortcuts: [
-          { name: "Pocket", url: "/pocket", description: "Glanceable listening orb" },
-          { name: "Privacy Center", url: "/privacy" },
+          { name: "Capture", short_name: "Capture", url: "/capture?autostart=1", description: "Record a thought (one tap to start)", icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png" }] },
+          { name: "Inbox", url: "/" },
         ],
+        // "Share → Synapse" from a voice recorder or any app: handled by public/share-target.js inside the service worker
+        share_target: {
+          action: "/capture/share",
+          method: "POST",
+          enctype: "multipart/form-data",
+          params: { title: "title", text: "text", url: "url", files: [{ name: "audio", accept: ["audio/*", ".m4a", ".mp3", ".wav", ".ogg", ".opus", ".webm", ".aac", ".amr"] }] },
+        },
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,webmanifest}"],
         globIgnores: ["vad/**", "**/*.wasm", "**/*.onnx"],
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//, /^\/ws/, /^\/vad\//, /^\/local-stt\//],
+        // the share-target handler runs before Workbox's routes (it answers the share POST itself)
+        importScripts: ["share-target.js"],
         cleanupOutdatedCaches: true,
       },
       devOptions: { enabled: false },

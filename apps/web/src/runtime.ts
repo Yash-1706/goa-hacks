@@ -65,7 +65,8 @@ export function startRuntime(): void {
   started = true;
   useConnection.getState().set({ deviceId: getDeviceId(), deviceKind: currentKind() });
   socket.start();
-  controller.preload();
+  // the phone app records with MediaRecorder: it never needs the live-microphone engine (VAD + ONNX, megabytes over 4G)
+  if (!window.location.pathname.startsWith("/capture")) controller.preload();
   controller.initBattery();
 
   const prune = setInterval(() => useStream.getState().prune(Date.now()), 1000);

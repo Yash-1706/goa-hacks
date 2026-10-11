@@ -6,7 +6,7 @@ import { useSettings } from "@/state/settings";
 
 const ITEMS = [
   { to: "/", label: "Desk", Icon: LayoutDashboard, end: true },
-  { to: "/pocket", label: "Pocket", Icon: Smartphone, end: false },
+  { to: "/capture", label: "Capture", Icon: Smartphone, end: false },
   { to: "/recall", label: "Recall", Icon: Search, end: false },
   { to: "/graph", label: "Graph", Icon: Network, end: false },
   { to: "/privacy", label: "Privacy", Icon: ShieldCheck, end: false },

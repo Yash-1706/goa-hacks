@@ -1,0 +1,240 @@
+/* ==========================================================================
+   /capture: the phone app. One big button, the status of each clip, what it made.
+   Uses the shared tokens (graphite surfaces, one orange accent). Works from 320 px up.
+   ========================================================================== */
+
+.cap {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: calc(0.9rem + var(--safe-t)) 1rem calc(1rem + var(--safe-b));
+  max-width: 560px;
+  margin: 0 auto;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.cap__top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.cap__word {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.cap__net {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--dim);
+  text-align: right;
+}
+.cap__net--off {
+  color: var(--warn);
+}
+
+.cap__stage {
+  display: grid;
+  justify-items: center;
+  gap: 0.8rem;
+  padding: 1.6rem 0 0.4rem;
+}
+
+.cap-btn {
+  width: min(56vw, 220px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--violet);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    transform 0.15s var(--ease),
+    background 0.2s var(--ease);
+}
+.cap-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.cap-btn:disabled {
+  color: var(--dim);
+  cursor: progress;
+}
+.cap-btn--rec {
+  background: var(--violet);
+  border-color: transparent;
+  color: #160a05;
+}
+.cap-btn--invite {
+  outline: 2px solid var(--violet);
+  outline-offset: 6px;
+}
+.cap-btn:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 6px;
+}
+
+.cap__hint {
+  margin: 0;
+  color: var(--dim);
+  font-size: 0.95rem;
+  text-align: center;
+}
+.cap__timer {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-size: 1.15rem;
+  margin-right: 0.4rem;
+}
+.cap__keep {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--faint);
+}
+.cap__error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.cap__type {
+  display: flex;
+  gap: 0.5rem;
+}
+.cap__type .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.cap__list {
+  display: grid;
+  gap: 0.6rem;
+}
+.cap__empty {
+  margin: 0;
+  color: var(--faint);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.cap-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.cap-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.85rem;
+  display: grid;
+  gap: 0.45rem;
+}
+.cap-row__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.cap-row__time {
+  font-size: 0.78rem;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.cap-row__discard {
+  margin-left: auto;
+}
+.cap-row__made {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 550;
+}
+.cap-row__error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--danger);
+}
+
+.cap-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.76rem;
+  color: var(--dim);
+  padding: 0.12rem 0.45rem;
+  border-radius: 6px;
+  background: var(--inset);
+  border: 1px solid var(--line);
+}
+.cap-badge--wait {
+  color: var(--warn);
+}
+.cap-badge--ok {
+  color: var(--ok);
+}
+.cap-badge--bad {
+  color: var(--danger);
+}
+
+.cap-things {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.cap-thing {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  background: var(--inset);
+  font-size: 0.86rem;
+}
+.cap-thing svg {
+  color: var(--violet);
+}
+.cap-thing__label {
+  color: var(--dim);
+  white-space: nowrap;
+}
+.cap-thing__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.cap__foot {
+  margin-top: auto;
+  text-align: center;
+  font-size: 0.82rem;
+}
+.cap__foot a {
+  color: var(--dim);
+}
+
+.spin {
+  animation: cap-spin 0.9s linear infinite;
+}
+@keyframes cap-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

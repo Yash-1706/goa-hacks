@@ -1,15 +1,17 @@
 import { Suspense, lazy, useEffect, useState } from "react";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { MotionConfig } from "motion/react";
+import { LoginScreen } from "@/components/LoginScreen";
 import { Nav } from "@/components/Nav";
 import { PairingScreen } from "@/components/PairingScreen";
 import { RecallSpeaker } from "@/components/RecallSpeaker";
 import { Toasts } from "@/components/Toasts";
 import { TopBar } from "@/components/TopBar";
+import { captureQueue } from "@/capture/runtime";
 import Desk from "@/screens/Desk";
-import Pocket from "@/screens/Pocket";
 import Recall from "@/screens/Recall";
-import { startRuntime } from "@/runtime";
+import { socket, startRuntime } from "@/runtime";
+import { useAuth } from "@/state/auth";
 import { useConnection } from "@/state/connection";
 import { usePrivacy } from "@/state/privacy";
 import { useSettings } from "@/state/settings";
@@ -19,10 +21,11 @@ const Graph = lazy(() => import("@/screens/Graph"));
 const Lab = lazy(() => import("@/screens/Lab"));
 const Privacy = lazy(() => import("@/screens/Privacy"));
 const Outbox = lazy(() => import("@/screens/Outbox"));
+const Capture = lazy(() => import("@/screens/Capture"));
 
 const TITLES: Record<string, string> = {
   "/": "Desk",
-  "/pocket": "Pocket",
+  "/capture": "Capture",
   "/recall": "Recall",
   "/graph": "Graph",
   "/privacy": "Privacy Center",
@@ -89,7 +92,7 @@ function Shell() {
           <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/" element={<Desk />} />
-              <Route path="/pocket" element={<Pocket />} />
+              <Route path="/pocket" element={<Navigate to="/capture" replace />} />
               <Route path="/recall" element={<Recall />} />
               <Route path="/graph" element={<Graph />} />
               <Route path="/privacy" element={<Privacy />} />
@@ -107,11 +110,50 @@ function Shell() {
   );
 }
 
+/** The phone app: no navigation, no top bar; the socket still runs so cards arrive live. */
+function CaptureShell() {
+  useEffect(() => {
+    startRuntime();
+    document.title = "Synapse";
+  }, []);
+  return (
+    <main id="main">
+      <Suspense fallback={<RouteFallback />}>
+        <Capture />
+      </Suspense>
+      <Toasts />
+    </main>
+  );
+}
+
+/**
+ * Sign-in first when the server asks for it (always through the tunnel). An unreachable server is not a reason to block:
+ * the phone app opens offline and records into its queue.
+ */
+function AuthGate() {
+  const status = useAuth((s) => s.status);
+  const loc = useLocation();
+  useEffect(() => {
+    void useAuth.getState().check();
+  }, []);
+  if (status === "checking") return <RouteFallback />;
+  if (status === "needed")
+    return (
+      <LoginScreen
+        onSignedIn={() => {
+          socket.retryNow();
+          void captureQueue().flush();
+        }}
+      />
+    );
+  return loc.pathname.startsWith("/capture") ? <CaptureShell /> : <Shell />;
+}
+
 export default function App() {
   return (
     <MotionConfig reducedMotion="user">
       <BrowserRouter>
-        <Shell />
+        <AuthGate />
       </BrowserRouter>
     </MotionConfig>
   );

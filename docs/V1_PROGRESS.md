@@ -3,7 +3,7 @@
 Plan: [docs/V1_PLAN.md](V1_PLAN.md). Branch `v1` (cut from `main` at 961283c).
 
 ## Current
-Phase 2 (Android capture app `/capture`).
+Phase 3 (context profile, ask-cards, usable outputs).
 
 ## Pre-flight state at start (2026-10-11)
 - Branch `v1` created by the run.
@@ -49,6 +49,19 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 ### Phase 1 evidence (through a real cloudflared quick tunnel, fake Sarvam, mock cortex)
 `node scripts/e2e/phase1.mjs https://guards-saving-intro-flip.trycloudflare.com <synthetic ramble WAV>`: no cookie → **401**; with session → **200 in 326 ms**; transcript = the ramble; cards: bug/github_issue, communication/email_draft, scheduling/note (aside dropped); all three **appeared live in a second signed-in desktop tab** (`docs/screenshots/v1/phase1-desk-live.png`).
 
+### Phase 2
+- `/capture` (`screens/Capture.tsx`, `styles/capture.css`): one big round button, timer, "Keep the screen on while recording", an "Or type it" box, "Your last captures" rows ("Made 3 things: GitHub issue · Email · Note") with per-clip status (Waiting for network / Sending… / Sent / Could not send + discard). No nav, no top bar; the socket still runs so cards arrive live. `/pocket` redirects to `/capture` (Pocket code kept); nav item renamed Capture.
+- Recording: `capture/recorder.ts` (getUserMedia + MediaRecorder, screen wake lock) → `decodeAudioData` → OfflineAudioContext resample to 16 kHz mono (linear fallback) → WAV (`capture/wav.ts`, tested).
+- Offline queue `capture/queue.ts`: clips sealed with AES-GCM under a non-extractable WebCrypto key into IndexedDB, uploaded when online, backoff 2/5/15/30/60 s, flush on `online`, visibility and app open; 401 pauses the queue and shows the sign-in; 400/413 are final; deleted from the phone once acknowledged. Tested (exactly-once under concurrent flushes, restore on reopen, ciphertext only).
+- `capture/upload.ts`: multipart to `/api/capture` with clientId, capturedAt, context.source (android / ios / web from the UA).
+- Manifest: `start_url /capture`, shortcut "Capture" → `/capture?autostart=1`, Web Share Target (`POST /capture/share`, audio files + text) handled by `public/share-target.js` imported into the Workbox service worker; shared files stay in worker memory only, the page decodes them to WAV and queues them.
+- Passcode sign-in screen (`components/LoginScreen.tsx`, `state/auth.ts`) gating the app; an unreachable server does not block (the phone records into its queue offline).
+- The live-mic engine is no longer preloaded on `/capture`.
+- Audit test for the capture path (storage only in the queue and only sealed; audio sent only by upload.ts to `/api/capture`; share target memory-only).
+
+### Phase 2 evidence (Playwright Chromium, Pixel 7 emulation at 390×844, fake mic playing the synthetic ramble WAV, through a real tunnel)
+`node scripts/e2e/phase2.mjs <tunnel> <wav> docs/screenshots/v1` → signed in with the passcode; service worker active; record 13.5 s → stop → **"Made 3 things: GitHub issue · Email · Note" 0.5 s after stop** (fake Sarvam + mock cortex); the **desktop tab showed the same cards**; offline recording showed **"Waiting for network"**, server had **0** captures for its clientId while offline and **exactly 1** after going online; manifest `start_url /capture`, shortcut `/capture?autostart=1`, share target `POST /capture/share` (files: audio). Screenshots: `docs/screenshots/v1/capture-*-390.png`.
+
 ## Decisions
 - Ruling: no `.env` is created by the run. The app's no-`.env` default is mock mode; settings the checks need are passed as process environment. Sayed explicitly declined the `.env` copy — cost if wrong: one `cp` for Sayed, listed in MANUAL_STEPS.
 - Ruling: commit messages carry no AI attribution — Sayed's global CLAUDE.md forbids it and outranks the session default — cost if wrong: none.
@@ -63,6 +76,10 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 - Ruling: the audio audit (`no-audio.test.ts`) now allows `capture/wav.ts` and `capture/service.ts` to handle samples, under the same stricter rules as the on-device engine (no fs, no network of their own, must zero-fill) — the plan requires this path.
 - Ruling: Playwright 1.64's own Chromium could not be downloaded (`cdn.playwright.dev` unresolvable from this sandbox); the e2e scripts fall back to the newest Chromium already in `~/Library/Caches/ms-playwright` (`PW_CHROMIUM` overrides).
 
+- Ruling: the offline queue keeps pending clips in IndexedDB as AES-GCM ciphertext under a non-extractable key and deletes them once acknowledged. The plan asks for IndexedDB, the non-negotiables say audio never touches disk; this keeps the offline queue working after the app is closed while never storing audio in the clear or after it is sent — cost if wrong: switch the queue to the in-memory store (one line in `capture/runtime.ts`), losing clips when the app is closed offline.
+- Ruling: shared audio (Web Share Target) is held in service-worker memory, never in Cache Storage or IndexedDB, until the page takes it — cost if wrong: a share is lost if the browser kills the worker in the second between the share and the page opening.
+- Ruling: `/capture` has an "Or type it" box as well as the mic button — typed and dictated text use the same queue — cost if wrong: one input to remove.
+
 ## Blocked
 - On-device Whisper model download (`Xenova/whisper-tiny.en`) fails here: Hugging Face is unreachable from the run's sandbox (`fetch failed`). The embedding model was already cached. E2E audio runs use the fake Sarvam instead. On Sayed's normal shell this downloads once (MANUAL_STEPS).
 
@@ -72,7 +89,10 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 | baseline | clean | 969 / 970 (1 timing failure) |
 | 0 | clean | 978 / 978 |
 | 1 | clean | 1021 / 1021 (web 683, server 338) |
+| 2 | clean | 1041 / 1041 (web 703, server 338) |
 
 ## Commits
 | Phase | hash |
 |---|---|
+| 0 | 522f703 |
+| 1 | afdf10c |
