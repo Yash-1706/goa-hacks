@@ -6,7 +6,7 @@ Ramble out loud on your phone or laptop, and Synapse turns it into finished thin
 
 [![Synapse launch video: thoughts said on a treadmill, at the coffee kiosk and over a burger become a GitHub issue, a reminder and an email draft](docs/media/synapse-launch-landscape.jpg)](docs/media/synapse-launch-landscape.mp4)
 
-▶ **[Watch the launch video (22 s)](docs/media/synapse-launch-landscape.mp4)** · [vertical cut for Reels / Shorts / Status](docs/media/synapse-launch-vertical.mp4) · Music: “Happy Beats / Business Moves Vol. 1” by [ende.app](https://ende.app/en) (royalty-free)
+▶ **[Watch the launch video (24 s)](docs/media/synapse-launch-landscape.mp4)** · [vertical cut for Reels / Shorts / Status](docs/media/synapse-launch-vertical.mp4) · Music: “Happy Beats / Business Moves Vol. 12” by [ende.app](https://ende.app/en) (royalty-free)
 
 <p>
   <img src="docs/screenshots/v1/capture-cards-390.png" alt="The phone app: one ramble made a GitHub issue, an email draft and a reminder" width="260">
