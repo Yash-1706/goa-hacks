@@ -27,6 +27,7 @@ if (cfg.remote.tunnel || cfg.remote.publicUrl) {
     try {
       tunnel = await startTunnel({ port: cfg.port, onExit: (code) => log.warn("tunnel", "cloudflared exited", { code }) });
       ctx.auth.setPublicUrl(tunnel.url);
+      ctx.hub.broadcast({ type: "config.update", config: ctx.clientConfig() }); // the first-run QR code shows it
       announce(tunnel.url);
     } catch (err) {
       console.error(`\n  ✖ Tunnel: ${(err as Error).message}\n`);

@@ -1,17 +1,13 @@
 import { NavLink } from "react-router-dom";
 import { motion } from "motion/react";
-import { FlaskConical, Inbox, LayoutDashboard, Network, Search, ShieldCheck, Smartphone, Type } from "lucide-react";
+import { Inbox, Search, Settings, Type } from "lucide-react";
 import { useRecall } from "@/state/recall";
 import { useSettings } from "@/state/settings";
 
 const ITEMS = [
-  { to: "/", label: "Desk", Icon: LayoutDashboard, end: true },
-  { to: "/capture", label: "Capture", Icon: Smartphone, end: false },
-  { to: "/recall", label: "Recall", Icon: Search, end: false },
-  { to: "/graph", label: "Graph", Icon: Network, end: false },
-  { to: "/privacy", label: "Privacy", Icon: ShieldCheck, end: false },
-  { to: "/lab", label: "Lab", Icon: FlaskConical, end: false },
-  { to: "/outbox", label: "Outbox", Icon: Inbox, end: false },
+  { to: "/", label: "Inbox", Icon: Inbox, end: true },
+  { to: "/ask", label: "Ask", Icon: Search, end: false },
+  { to: "/settings", label: "Settings", Icon: Settings, end: false },
 ] as const;
 
 export function Nav() {
@@ -33,7 +29,7 @@ export function Nav() {
                 {isActive ? <motion.span layoutId="nav-pill" className="nav__pill" transition={{ type: "spring", stiffness: 520, damping: 38 }} /> : null}
                 <Icon size={20} strokeWidth={isActive ? 2.2 : 1.8} />
                 <span>{label}</span>
-                {label === "Recall" && unseenVoice > 0 ? <span className="nav__badge" aria-label="new spoken recall" /> : null}
+                {label === "Ask" && unseenVoice > 0 ? <span className="nav__badge" aria-label="new spoken recall" /> : null}
               </>
             )}
           </NavLink>

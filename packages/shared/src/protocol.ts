@@ -264,6 +264,10 @@ export interface ClientConfig {
   dev: boolean;
   /** which integrations are really connected (otherwise simulated) */
   integrations: { github: boolean; jira: boolean };
+  /** V1: the public URL phones reach this server on (tunnel / PUBLIC_URL), for the "put it on your phone" QR code */
+  publicUrl?: string;
+  /** V1: the server has a passcode set (remote access possible) */
+  passcodeSet?: boolean;
 }
 
 export interface StateSnapshot {

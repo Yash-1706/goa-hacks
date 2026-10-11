@@ -322,6 +322,8 @@ export async function createApp(cfg: Config, opts: AppOptions = {}): Promise<{ c
     threadCloseMs: cfg.memory.threadCloseMs,
     dev: cfg.dev,
     integrations: { github: outbox.githubReady(), jira: outbox.jiraReady() },
+    ...(auth.publicOrigin ? { publicUrl: auth.publicOrigin } : {}),
+    passcodeSet: auth.enabled,
   });
 
   Object.assign(services, {

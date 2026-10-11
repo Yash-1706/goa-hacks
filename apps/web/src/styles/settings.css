@@ -1,0 +1,276 @@
+/* ==========================================================================
+   Settings and first-run setup (V1). Shared tokens; 320 px and up.
+   ========================================================================== */
+
+.settings {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 1rem 1rem 3rem;
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  min-width: 0;
+}
+.settings__title {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.settings__tabs {
+  display: flex;
+  gap: 0.3rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+  scrollbar-width: none;
+}
+.settings__tab {
+  flex: none;
+  padding: 0.45rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  text-decoration: none;
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+.settings__tab.is-active,
+.settings__tab.active {
+  color: var(--ink);
+  background: var(--surface-2);
+  border-color: var(--line-2);
+}
+.settings__body {
+  min-width: 0;
+}
+
+.set-cards {
+  display: grid;
+  gap: 0.8rem;
+}
+.set-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.set-card__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 620;
+}
+.set-dev summary {
+  cursor: pointer;
+  color: var(--dim);
+}
+.set-big {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.set-dim {
+  margin: 0;
+  color: var(--dim);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.set-dim a {
+  color: var(--cyan);
+}
+.set-h {
+  margin: 0.3rem 0 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.set-stack {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.set-grow {
+  flex: 1;
+  min-width: 12rem;
+}
+.set-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+.set-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  background: var(--inset);
+  min-width: 0;
+  font-size: 0.86rem;
+}
+.set-item .set-dim {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.set-item > .icon-btn {
+  margin-left: auto;
+}
+.set-item__name {
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.set-check,
+.set-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.86rem;
+}
+.set-check {
+  flex: 1;
+}
+.set-radio {
+  color: var(--dim);
+  font-size: 0.8rem;
+}
+.set-grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 0.6rem;
+}
+.set-field {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--dim);
+}
+
+/* ---- first-run setup ---- */
+.onb {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(8, 8, 9, 0.82);
+}
+.onb__card {
+  width: min(640px, 100%);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 16px;
+  padding: 1.3rem 1.3rem 1rem;
+  display: grid;
+  gap: 0.8rem;
+}
+.onb__progress {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.3rem;
+}
+.onb__progress span {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line-2);
+}
+.onb__progress span.is-on {
+  background: var(--violet);
+}
+.onb__eyebrow {
+  margin: 0;
+  color: var(--faint);
+  font-size: 0.78rem;
+}
+.onb__title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+}
+.onb-body {
+  display: grid;
+  gap: 0.7rem;
+  line-height: 1.5;
+}
+.onb-body p {
+  margin: 0;
+}
+.onb-quote {
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  background: var(--inset);
+  color: var(--ink);
+  font-style: italic;
+}
+.onb-code {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  background: var(--inset);
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+}
+.onb-phone {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+.onb-qr {
+  width: 168px;
+  height: 168px;
+  padding: 0.5rem;
+  border-radius: 12px;
+  background: #ffffff;
+}
+.onb-qr svg {
+  width: 100%;
+  height: 100%;
+}
+.onb-steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.3rem;
+}
+.onb-url {
+  grid-column: 1 / -1;
+  word-break: break-all;
+}
+.onb__foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+}
+.onb__spacer {
+  flex: 1;
+}
+@media (max-width: 520px) {
+  .onb-phone {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+}

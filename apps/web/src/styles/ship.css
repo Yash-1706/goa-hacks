@@ -170,3 +170,77 @@
   display: inline-flex;
   gap: 0.15rem;
 }
+
+.ship-menu {
+  position: relative;
+}
+.ship-menu__list {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 20;
+  min-width: 10rem;
+  display: grid;
+  padding: 0.25rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.ship-menu__item {
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+.ship-menu__item:hover,
+.ship-menu__item:focus-visible {
+  background: var(--inset);
+}
+.ship-edit {
+  display: grid;
+  gap: 0.5rem;
+}
+.ship-edit__field {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+.ship-edit__row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+.ship-why {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  background: var(--inset);
+  font-size: 0.84rem;
+}
+.ship-why h4 {
+  margin: 0.2rem 0 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.ship-why ul {
+  margin: 0;
+  padding-left: 1rem;
+}
+.ship-why p {
+  margin: 0;
+}
+.ship-why__kept {
+  color: var(--faint);
+}

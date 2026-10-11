@@ -3,7 +3,7 @@
 Plan: [docs/V1_PLAN.md](V1_PLAN.md). Branch `v1` (cut from `main` at 961283c).
 
 ## Current
-Phase 4 (laptop UI: Inbox, Ask, Settings, first-run).
+Phase 5 (README, demo script, rehearsal, final verification).
 
 ## Pre-flight state at start (2026-10-11)
 - Branch `v1` created by the run.
@@ -78,6 +78,18 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 - No live issue was created: `GITHUB_SANDBOX_REPO` is not configured (→ MANUAL_STEPS).
 - Offline eval: dev set 100% (69 threads); held-out 87.3% macro-F1, **identical to `main`** on this machine (checked in a temporary worktree; the committed EVAL.md is older).
 
+### Phase 4
+- Navigation: **Inbox** (`/`) · **Ask** (`/ask`) · **Settings** (`/settings/:tab`). Redirects: `/recall`→`/ask`, `/privacy`→`/settings/privacy`, `/graph`→`/settings/memory`, `/outbox`→`/settings/outbox`, `/lab`→`/settings/developer`, `/pocket`→`/capture`. Desk, Pocket, rail and stream code kept (unrouted).
+- Inbox (`screens/Inbox.tsx`): capture bar ("Type, or hold your Wispr Flow key and talk", Enter → `/api/capture`) + live-mic button; one dismissible suggestion banner (draft-ready suggestions skipped: they repeat a card); session line "Captured 3 things · 3 need you" once the newest session is quiet; Needs you / Done / Saved (`lib/inbox.ts`, tested: newest capture first, spoken order inside a capture).
+- Cards: `ShipCard` everywhere: icon + plain label, title, 1–2 lines, destination, ask block, ONE primary action, overflow menu Edit · Copy · Download .ics · Why? · Forget. "Why?" = "What I heard" (the fragments) + "Why I made this" (classifier phrasing rewritten in plain words) + why it was kept. No ids, timings, mock chips, score rings or autonomy levels on the face.
+- Settings tabs: Profile & connections (GitHub connect: saved / .env / "Found your GitHub account @x. Use it?" / paste a token; import repos + teammates with ticks and a default; contact picker (feature-detected); paste a list → confirm; people, repos, default, email app, timezone; sign out), Voice engine, AI model (both with the local-only switch), Privacy, Memory map, Outbox history, Developer (Lab, collapsed).
+- First-run setup (`components/Onboarding.tsx`), shown once, every step skippable: Welcome · GitHub · People · Your phone (QR of the public URL + Add to Home screen steps, or how to start the tunnel) · Try it ("Remind me to drink water at 4" → the card appears). `ClientConfig.publicUrl` added.
+- Top bar: one status pill (Listening / Paused / Offline / Not connected / Ready).
+- Ask: citations and sources numbered 1, 2, 3 (never T-n); timings removed.
+
+### Phase 4 evidence
+`node scripts/e2e/phase4.mjs <tunnel> docs/screenshots/v1` → **34 screenshots** (Inbox empty and with cards, Why?, Ask, 7 Settings tabs, 5 first-run steps, /capture; each at 1440 and 390), **0 violations**: no internal ids, ms timings, autonomy labels or "mock" on Inbox, Ask, Settings (default tab) and /capture; no horizontal overflow on any screen at either width; no page errors. Reviewed by eye; fixed after the first pass: an inverted QR code (some scanners fail), a banner duplicating the email card, cards of one capture shown in reverse, "Recall"/"Desk" copy on Ask.
+
 ## Decisions
 - Ruling: no `.env` is created by the run. The app's no-`.env` default is mock mode; settings the checks need are passed as process environment. Sayed explicitly declined the `.env` copy — cost if wrong: one `cp` for Sayed, listed in MANUAL_STEPS.
 - Ruling: commit messages carry no AI attribution — Sayed's global CLAUDE.md forbids it and outranks the session default — cost if wrong: none.
@@ -104,6 +116,10 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 - Ruling: the old integration test that wanted the thought code (T-n) in the issue body was changed to assert the opposite (plan: no internal ids in anything other people read).
 - Ruling: the Mac's idle sleep (1 min) froze the test run twice for ~4 min; the run now keeps it awake with `caffeinate -i -s` (pre-flight step 4 was not done).
 
+- Ruling: the status pill has a fifth state, "Ready" (connected, mic off) — the plan's four states leave the normal idle state unnamed.
+- Ruling: the "no internal ids" check runs in Playwright against the real UI (not a DOM-less unit test), on the screens a user lands on: Inbox, Ask, Settings' default tab, /capture. The Developer tab (Lab) still shows latencies by design.
+- Ruling: engine and model are chosen in `.env` (as before); the Voice engine and AI model tabs explain the current choice and offer the local-only switch rather than editing `.env` from the browser.
+
 ## Blocked
 - On-device Whisper model download (`Xenova/whisper-tiny.en`) fails here: Hugging Face is unreachable from the run's sandbox (`fetch failed`). The embedding model was already cached. E2E audio runs use the fake Sarvam instead. On Sayed's normal shell this downloads once (MANUAL_STEPS).
 
@@ -115,6 +131,7 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 | 1 | clean | 1021 / 1021 (web 683, server 338) |
 | 2 | clean | 1041 / 1041 (web 703, server 338) |
 | 3 | clean | 1091 / 1091 (web 710, server 381) |
+| 4 | clean | 1095 / 1095 (web 714, server 381) |
 
 ## Commits
 | Phase | hash |
@@ -122,3 +139,4 @@ All cards `source: mock` (no live model available). **Wrong results for Phase 3 
 | 0 | 522f703 |
 | 1 | afdf10c |
 | 2 | d8034ea |
+| 3 | eb421bd |

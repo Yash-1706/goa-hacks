@@ -1,0 +1,182 @@
+/* ==========================================================================
+   Inbox (V1): capture bar, one suggestion banner, Needs you / Done / Saved. Shared tokens; 320 px and up.
+   ========================================================================== */
+
+.inbox {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 1rem 1rem 3rem;
+  display: grid;
+  gap: 1.1rem;
+  align-content: start;
+}
+
+.inbox-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.inbox-bar__input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  min-height: 42px;
+  line-height: 1.4;
+}
+.inbox-bar__mic {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+}
+.inbox-bar__mic.is-live {
+  background: var(--violet);
+  color: #160a05;
+  border-color: transparent;
+}
+
+.inbox-line {
+  margin: 0;
+  color: var(--dim);
+  font-size: 0.88rem;
+}
+
+.inbox-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid rgba(255, 106, 61, 0.3);
+  color: var(--ink);
+}
+.inbox-banner > svg {
+  color: var(--violet);
+  flex: none;
+}
+.inbox-banner__text {
+  display: grid;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.86rem;
+}
+.inbox-banner__text span {
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-sec {
+  display: grid;
+  gap: 0.6rem;
+}
+.inbox-sec .section__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+.inbox-sec__n {
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+  letter-spacing: 0;
+}
+.inbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
+  gap: 0.7rem;
+  align-items: start;
+}
+.inbox-empty {
+  margin: 0;
+  color: var(--faint);
+  font-size: 0.88rem;
+}
+
+.inbox-hello {
+  display: grid;
+  gap: 0.6rem;
+  padding: 2.2rem 1.2rem;
+  text-align: center;
+  justify-items: center;
+}
+.inbox-hello__lead {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.inbox-hello__eg {
+  margin: 0;
+  max-width: 44rem;
+  color: var(--dim);
+  line-height: 1.5;
+}
+.inbox-hello__out {
+  margin: 0;
+  color: var(--faint);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 600px) {
+  .inbox {
+    padding: 0.75rem 0.75rem 2rem;
+  }
+  .inbox-banner {
+    flex-wrap: wrap;
+  }
+}
+
+/* ---- the V1 top bar: a name and one status pill ---- */
+.topbar--v1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.topbar__name {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+.status-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.status-pill--ok .status-pill__dot {
+  background: var(--ok);
+}
+.status-pill--live .status-pill__dot {
+  background: var(--violet);
+}
+.status-pill--warn .status-pill__dot {
+  background: var(--warn);
+}
+.status-pill--bad .status-pill__dot {
+  background: var(--danger);
+}

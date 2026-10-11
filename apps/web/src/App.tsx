@@ -8,7 +8,8 @@ import { RecallSpeaker } from "@/components/RecallSpeaker";
 import { Toasts } from "@/components/Toasts";
 import { TopBar } from "@/components/TopBar";
 import { captureQueue } from "@/capture/runtime";
-import Desk from "@/screens/Desk";
+import { Onboarding } from "@/components/Onboarding";
+import Inbox from "@/screens/Inbox";
 import Recall from "@/screens/Recall";
 import { socket, startRuntime } from "@/runtime";
 import { useAuth } from "@/state/auth";
@@ -17,20 +18,14 @@ import { usePrivacy } from "@/state/privacy";
 import { useSettings } from "@/state/settings";
 
 // heavy or rarely-opened screens are code-split (the graph pulls in a canvas force-layout engine)
-const Graph = lazy(() => import("@/screens/Graph"));
-const Lab = lazy(() => import("@/screens/Lab"));
-const Privacy = lazy(() => import("@/screens/Privacy"));
-const Outbox = lazy(() => import("@/screens/Outbox"));
+const Settings = lazy(() => import("@/screens/Settings"));
 const Capture = lazy(() => import("@/screens/Capture"));
 
 const TITLES: Record<string, string> = {
-  "/": "Desk",
+  "/": "Inbox",
   "/capture": "Capture",
-  "/recall": "Recall",
-  "/graph": "Graph",
-  "/privacy": "Privacy Center",
-  "/lab": "Lab",
-  "/outbox": "Outbox",
+  "/ask": "Ask",
+  "/settings": "Settings",
 };
 
 function RouteFallback() {
@@ -91,20 +86,25 @@ function Shell() {
           ) : null}
           <Suspense fallback={<RouteFallback />}>
             <Routes>
-              <Route path="/" element={<Desk />} />
+              <Route path="/" element={<Inbox />} />
+              <Route path="/ask" element={<Recall />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/settings/:tab" element={<Settings />} />
+              {/* V1: the old screens live in Settings now; their URLs keep working */}
               <Route path="/pocket" element={<Navigate to="/capture" replace />} />
-              <Route path="/recall" element={<Recall />} />
-              <Route path="/graph" element={<Graph />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/lab" element={<Lab />} />
-              <Route path="/outbox" element={<Outbox />} />
-              <Route path="*" element={<Desk />} />
+              <Route path="/recall" element={<Navigate to="/ask" replace />} />
+              <Route path="/privacy" element={<Navigate to="/settings/privacy" replace />} />
+              <Route path="/graph" element={<Navigate to="/settings/memory" replace />} />
+              <Route path="/outbox" element={<Navigate to="/settings/outbox" replace />} />
+              <Route path="/lab" element={<Navigate to="/settings/developer" replace />} />
+              <Route path="*" element={<Inbox />} />
             </Routes>
           </Suspense>
         </main>
       </div>
       <Toasts />
       <RecallSpeaker />
+      <Onboarding />
       {status === "auth" ? <PairingScreen /> : null}
     </div>
   );

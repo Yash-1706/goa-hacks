@@ -1,4 +1,4 @@
-import type { ArtifactView, GithubStatus, ImportSuggestions, Profile, ProfilePerson, ProfileRepo } from "@synapse/shared";
+import type { ArtifactView, CaptureResponse, GithubStatus, ImportSuggestions, Profile, ProfilePerson, ProfileRepo } from "@synapse/shared";
 import { getDeviceId, getToken } from "./device";
 import type {
   AuditResponse,
@@ -89,7 +89,8 @@ export const api = {
   latency: (signal?: AbortSignal) => json<LatencyResponse>("/api/metrics/latency", "GET", undefined, signal),
   battery: (signal?: AbortSignal) => json<BatteryResponse>("/api/metrics/battery", "GET", undefined, signal),
   calendar: (signal?: AbortSignal) => json<CalendarResponse>("/api/calendar", "GET", undefined, signal),
-  // ---- V1: ask-cards, handoffs, profile, GitHub
+  // ---- V1: capture, ask-cards, handoffs, profile, GitHub
+  capture: (text: string) => json<CaptureResponse>("/api/capture", "POST", { text, context: { source: "web" } }),
   answer: (id: string, field: string, value: string) => json<ArtifactView>(`/api/artifacts/${encodeURIComponent(id)}/answer`, "POST", { field, value }),
   shipped: (id: string, via: string) => json<ArtifactView>(`/api/artifacts/${encodeURIComponent(id)}/shipped`, "POST", { via }),
   profile: (signal?: AbortSignal) => json<Profile>("/api/profile", "GET", undefined, signal),
