@@ -51,7 +51,14 @@ export interface BatchDrafterOpts {
   timeoutMs?: number;
   pseudonymNames?: () => string[];
   onCloudCall?: (info: { model: string; redactions: number }) => void;
+  /** injected clock and sleep (tests) */
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 }
+
+/** answer tokens per capture call. A smaller allowance sized to the transcript was tried live and truncated answers (the model's
+ *  reasoning counts against it: Groq's json_validate_failed), so it stays at the ceiling. */
+const ALLOWANCE = 1600;
 
 export interface BatchDraft {
   items: BatchItem[];
@@ -59,6 +66,9 @@ export interface BatchDraft {
   ms: number;
   calls: number;
   redactions: number;
+  /** answer tokens asked for, and what the calls really used (counters only) */
+  allowance: number;
+  usage: { prompt: number; completion: number };
 }
 
 export class BatchDrafter {
@@ -67,8 +77,13 @@ export class BatchDrafter {
   /** null: no usable answer (the caller falls back). Never throws. */
   async draft(input: BatchPromptInput): Promise<BatchDraft | null> {
     const { client, model } = this.o;
-    if (client.disabledReasonFor(model)) return null;
+    const now = this.o.now ?? Date.now;
+    const sleep = this.o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    // a 429 cool-down is worth waiting out (below); an auth or network failure is not
+    const off = client.disabledReasonFor(model);
+    if (off && off !== "rate_limit") return null;
     const t0 = performance.now();
+    const deadline = now() + this.o.maxWaitMs;
     const rd = createRedactor({ pseudonymizeNames: this.o.pseudonymNames?.() ?? [] });
     const safe: BatchPromptInput = {
       ...input,
@@ -80,20 +95,40 @@ export class BatchDrafter {
       { role: "system", content: batchSystemPrompt() },
       { role: "user", content: renderBatchUserMessage(safe) },
     ];
+    const allowance = ALLOWANCE;
+    const usage = { prompt: 0, completion: 0 };
     let calls = 0;
+    let waited = false;
     for (let attempt = 0; attempt < 2; attempt++) {
       let text: string;
       try {
-        calls++;
         const res = await client.chat(
-          { model, messages, maxCompletionTokens: 1600, temperature: 0.2, reasoningEffort: model.startsWith("openai/") ? "low" : undefined, responseFormat: { type: "json_object" } },
-          { stream: false, timeoutMs: this.o.timeoutMs ?? 25_000, maxWaitMs: this.o.maxWaitMs, onSend: () => this.o.onCloudCall?.({ model, redactions: rd.count }) },
+          { model, messages, maxCompletionTokens: allowance, temperature: 0.2, reasoningEffort: model.startsWith("openai/") ? "low" : undefined, responseFormat: { type: "json_object" } },
+          { stream: false, timeoutMs: this.o.timeoutMs ?? 25_000, maxWaitMs: Math.max(0, deadline - now()), onSend: () => this.o.onCloudCall?.({ model, redactions: rd.count }) },
         );
+        calls++;
+        usage.prompt += res.usage.promptTokens ?? 0;
+        usage.completion += res.usage.completionTokens ?? 0;
         text = res.text;
       } catch (err) {
         const kind = err instanceof GroqError ? err.kind : "network";
+        if (err instanceof GroqError && err.status !== undefined) calls++; // the server answered (a local refusal sent nothing)
+        // Groq said "try again in N s" (or this model is still cooling from that): wait once, if the capture can afford it
+        const retryAfter = err instanceof GroqError && kind === "rate_limit" ? (err.retryAfterMs ?? 0) : 0;
+        if (!waited && retryAfter > 0 && now() + retryAfter + 250 <= deadline) {
+          waited = true;
+          log.info("batch", "rate limited: waiting, then the same call again", { waitMs: retryAfter + 250, attempt });
+          await sleep(retryAfter + 250);
+          attempt--;
+          continue;
+        }
+        // Groq refused the answer as invalid JSON (usually cut off): the second attempt asks again, like an answer that did not validate
+        if (kind === "bad_output" && attempt === 0) {
+          log.warn("batch", "capture draft was not valid JSON: asking again", { attempt });
+          continue;
+        }
         log.warn("batch", "capture draft call failed", { kind, attempt });
-        return null; // paced / rate-limited / network: the per-thought path (and the re-draft queue) take over
+        return null; // paced / rate-limited past the capture's patience / network: the per-thought path takes over
       }
       let json: unknown;
       try {
@@ -104,10 +139,11 @@ export class BatchDrafter {
       const parsed = BatchResultSchema.safeParse(json);
       if (parsed.success && parsed.data.items.length) {
         const items = rehydrate(parsed.data.items, rd.map);
-        return { items, model, ms: Math.round(performance.now() - t0), calls, redactions: rd.count };
+        return { items, model, ms: Math.round(performance.now() - t0), calls, redactions: rd.count, allowance, usage };
       }
       const issues = parsed.success ? "items: empty" : parsed.error.issues.slice(0, 8).map((i) => `${i.path.join(".")}: ${i.code}`).join("; ");
-      log.warn("batch", "capture draft did not validate", { attempt, issues: issues.length });
+      // schema paths and zod codes only ("items.1.artifact.kind: invalid_union"), never the answer's text
+      log.warn("batch", "capture draft did not validate", { attempt, issues });
       messages = [...messages, { role: "assistant", content: text.slice(0, 6000) }, { role: "user", content: `That did not validate (${issues}). Reply with the corrected JSON only.` }];
     }
     return null;

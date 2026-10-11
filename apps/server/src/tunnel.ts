@@ -21,8 +21,13 @@ export const nodeExec: ExecFn = (cmd, args, timeoutMs = 20_000) =>
   );
 
 export type TunnelKind = "tailscale" | "ngrok" | "cloudflared";
-/** the node capability Tailscale grants once Funnel is approved for this device */
-export const FUNNEL_CAP = "https://tailscale.com/cap/funnel";
+/**
+ * Funnel is approved for this device: `tailscale status --json` lists it in Self.CapMap, as a plain "funnel" key (Tailscale
+ * 1.102, seen live) or as "https://tailscale.com/cap/funnel" / "…/cap/funnel-ports?ports=…".
+ */
+export function hasFunnel(capMap: Record<string, unknown> | undefined): boolean {
+  return Object.keys(capMap ?? {}).some((k) => k === "funnel" || /^https:\/\/tailscale\.com\/cap\/funnel(-ports|\?|$)/.test(k));
+}
 export type TunnelSetting = "off" | "auto" | TunnelKind;
 
 /** TUNNEL in .env: 0/empty = off, 1/auto = the best available, or a provider by name */
@@ -47,7 +52,7 @@ export async function chooseTunnels(setting: Exclude<TunnelSetting, "off">, o: {
   try {
     const j = JSON.parse(ts.stdout) as { BackendState?: string; Self?: { CapMap?: Record<string, unknown> } };
     // Funnel must be approved for this node: otherwise `tailscale funnel` stops and waits for a browser approval
-    if (ts.ok && j.BackendState === "Running" && FUNNEL_CAP in (j.Self?.CapMap ?? {})) out.push("tailscale");
+    if (ts.ok && j.BackendState === "Running" && hasFunnel(j.Self?.CapMap)) out.push("tailscale");
   } catch {
     /* not JSON: not usable */
   }

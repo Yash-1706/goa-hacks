@@ -2,7 +2,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { ArtifactOf } from "@synapse/shared";
 import { batchSystemPrompt, renderBatchUserMessage } from "../src/cortex/prompts-batch";
 import { EXAMPLE_OUTPUTS } from "../src/cortex/prompts";
-import { estimatePromptTokens } from "../src/llm/groq-client";
+import { BatchDrafter } from "../src/llm/batch";
+import { estimatePromptTokens, GroqClient } from "../src/llm/groq-client";
 import { makeApp, type TestApp } from "./app-helper";
 import { startFakeGroq, type FakeGroq } from "./fake-groq";
 
@@ -112,3 +113,47 @@ describe("one call per capture", () => {
     expect(cards(res.thoughtIds).map((m) => m.a?.kind)).toEqual(["github_issue", "email_draft", "reminder"]);
   });
 });
+
+describe("V1.1 live findings: Groq asks us to wait", () => {
+  const input = { now: Date.parse(NOW), timezone: "Asia/Kolkata", user: { name: "Rio", team: ["Sarah", "Dev"] }, recent: [], transcript: RAMBLE };
+  const rig = () => {
+    let t = Date.parse(NOW);
+    const now = () => t;
+    const sleep = async (ms: number) => {
+      t += ms;
+    };
+    const client = new GroqClient({ apiKey: KEY, baseUrl: fake.url, now, sleep, tpm: 1_000_000 });
+    return { client, now, sleep, waited: () => t - Date.parse(NOW) };
+  };
+  const tooMany = (s: string) => ({ kind: "status" as const, status: 429, code: "rate_limit_exceeded", message: `Rate limit reached for model on tokens per minute (TPM). Please try again in ${s}s.`, retryAfter: s });
+
+  it("a 429 with a short retry-after: waits it out and retries the ONE batch call (live: R5 fell back to 7 per-thought calls)", async () => {
+    fake.reset(tooMany("9"), { kind: "ok", json: items });
+    const r = rig();
+    const d = new BatchDrafter({ client: r.client, model: "qwen/qwen3.8-27b", maxWaitMs: 25_000, now: r.now, sleep: r.sleep });
+    const out = await d.draft(input);
+    expect(out?.items).toHaveLength(4);
+    expect(out?.calls).toBe(2);
+    expect(fake.requests).toHaveLength(2);
+    expect(r.waited()).toBeGreaterThanOrEqual(9000);
+  });
+
+  it("a retry-after longer than the capture's patience: no second call; null so the caller falls back", async () => {
+    fake.reset(tooMany("40"), { kind: "ok", json: items });
+    const r = rig();
+    const d = new BatchDrafter({ client: r.client, model: "qwen/qwen3.8-27b", maxWaitMs: 25_000, now: r.now, sleep: r.sleep });
+    expect(await d.draft(input)).toBeNull();
+    expect(fake.requests).toHaveLength(1);
+  });
+
+  it("Groq refuses the answer as invalid JSON (json_validate_failed, live R2): asked again once, not the per-thought path", async () => {
+    fake.reset({ kind: "status", status: 400, code: "json_validate_failed", message: "Failed to generate JSON. Please adjust your prompt." }, { kind: "ok", json: items });
+    const r = rig();
+    const d = new BatchDrafter({ client: r.client, model: "qwen/qwen3.8-27b", maxWaitMs: 25_000, now: r.now, sleep: r.sleep });
+    const out = await d.draft(input);
+    expect(out?.items).toHaveLength(4);
+    expect(out?.calls).toBe(2);
+    expect(fake.requests[1]!.body).toMatchObject({ max_completion_tokens: 1600 });
+  });
+});
+

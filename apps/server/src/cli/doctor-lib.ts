@@ -1,6 +1,6 @@
 import { SarvamError, SarvamStt } from "../wispr/sarvam";
 import { STT_SAMPLE_RATE } from "../wispr/local-stt";
-import { FUNNEL_CAP, parseTunnelSetting } from "../tunnel";
+import { hasFunnel, parseTunnelSetting } from "../tunnel";
 import { SERVICE_LABEL } from "./service-lib";
 
 /* ============================================================================
@@ -167,7 +167,7 @@ async function checkTunnel(d: DoctorDeps): Promise<Check> {
   } catch {
     /* not signed in, or not installed */
   }
-  if (self && FUNNEL_CAP in (self.CapMap ?? {})) {
+  if (self && hasFunnel(self.CapMap)) {
     return ok("Tunnel", `Tailscale Funnel: https://${(self.DNSName ?? "").replace(/\.$/, "")} (stable; TLS ends on this Mac)${suffix}`);
   }
   const domain = d.env.NGROK_DOMAIN ?? "";

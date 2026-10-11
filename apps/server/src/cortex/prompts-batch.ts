@@ -39,7 +39,7 @@ Artifacts:
  note {kind,body,tags[]}
  none {kind}
 
-Example. <now>Tue 2026-10-06 10:00 Asia/Kolkata</now> <user>Rio</user>
+Example (illustration only: always draft the items of the real <transcript>, even when it repeats this example word for word; items is never empty when anything was said). <now>Tue 2026-10-06 10:00 Asia/Kolkata</now> <user>Rio</user>
 <transcript>That bug from yesterday, the null pointer in cart service, probably the discount code, oh, and email the team that the launch moves to Friday. Remind me to call the landlord tomorrow at 6. Wait, was that my phone? Actually make it 7.</transcript>
 {"items":[
 {"said":"That bug from yesterday, the null pointer in cart service, probably the discount code","category":"bug","title":"NPE in cart-service discount code","intent":"The cart service throws a null pointer, probably in the discount code.","confidence":0.9,"artifact":{"kind":"github_issue","title":"NPE in cart-service discount code","body_markdown":"**Summary**\\nA null pointer in the cart service.\\n\\n**Observed**\\nNull pointer in cart-service.\\n\\n**Suspected cause**\\nThe discount code (unconfirmed).","labels":["bug","cart-service"],"hypotheses":["discount code"]},"repairs":[],"entities":[{"name":"cart-service","type":"component"}],"corrects":null},

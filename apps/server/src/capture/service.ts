@@ -249,7 +249,7 @@ export class CaptureService {
       log.info("capture", "drafting one call per capture failed: per-thought path", { id: captureId });
       return null;
     }
-    log.info("capture", "drafted in one call", { id: captureId, items: d.items.length, calls: d.calls, ms: d.ms });
+    log.info("capture", "drafted in one call", { id: captureId, items: d.items.length, calls: d.calls, ms: d.ms, allowance: d.allowance, promptTokens: d.usage.prompt, completionTokens: d.usage.completion });
     return d.items.filter((it) => it.said.trim()).map((it) => ({ text: it.said.trim(), output: itemToOutput(it, d) }));
   }
 

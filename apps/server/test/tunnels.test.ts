@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { chooseTunnels, parseTunnelSetting, startNgrok, startTailscaleFunnel, type ExecFn, type SpawnFn } from "../src/tunnel";
+import { chooseTunnels, hasFunnel, parseTunnelSetting, startNgrok, startTailscaleFunnel, type ExecFn, type SpawnFn } from "../src/tunnel";
 
 /**
  * V1.1: a permanent free URL. Tailscale Funnel first (stable https://<mac>.<tailnet>.ts.net, TLS ends on the Mac), then ngrok's
@@ -46,6 +46,11 @@ describe("which tunnel", () => {
     expect(await chooseTunnels("ngrok", { exec: execRig().exec, ngrokDomain: "" })).toEqual(["ngrok"]);
     // signed in but Funnel never approved: skipped in auto (`tailscale funnel` would wait for a browser approval)
     expect(await chooseTunnels("auto", { exec: execRig({ tailscale: "no-funnel" }).exec, ngrokDomain: "" })).toEqual(["cloudflared"]);
+    // what Tailscale 1.102 really reports once Funnel is approved: plain "funnel" + "funnel-ports?ports=…" keys
+    expect(hasFunnel({ funnel: null, https: null, "https://tailscale.com/cap/funnel-ports?ports=443,8443,10000": null })).toBe(true);
+    expect(hasFunnel({ "https://tailscale.com/cap/funnel": [] })).toBe(true);
+    expect(hasFunnel({ "https://tailscale.com/cap/ssh": [], "https://tailscale.com/cap/is-owner": [] })).toBe(false);
+    expect(hasFunnel(undefined)).toBe(false);
   });
 });
 
